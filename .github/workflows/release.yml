@@ -1,0 +1,145 @@
+# -----------------------------------------------------------------------------
+# Project:     HUDnopy — Elite Dangerous Telemetry HUD & Copilot
+# File:        .github/workflows/release.yml
+# Author:      AlonsoLP
+# Copyright:   Copyright (c) 2026 AlonsoLP
+# License:     GPL-3.0-only (see LICENSE file in the repository root)
+# Description: Automated Windows x64 build, Inno Setup installer, portable ZIP,
+#              SHA-256 checksums, and GitHub Release workflow.
+# -----------------------------------------------------------------------------
+
+name: Build and Release HUDnopy
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0-alpha)'
+        required: true
+        default: 'v0.1.0-alpha'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve version metadata
+        id: meta
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ github.event.inputs.tag }}"
+          } else {
+            $tag = "${{ github.ref_name }}"
+          }
+          $version = $tag.TrimStart('v')
+          $isPrerelease = ($version -match '-').ToString().ToLowerInvariant()
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "prerelease=$isPrerelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Building HUDnopy tag=$tag version=$version prerelease=$isPrerelease"
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish self-contained Windows x64 binary
+        shell: pwsh
+        run: |
+          dotnet publish HUDnopy.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishReadyToRun=true `
+            -p:Version=${{ steps.meta.outputs.version }} `
+            -p:InformationalVersion=${{ steps.meta.outputs.version }} `
+            -o publish/win-x64
+
+      - name: Package portable ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $zipPath = "dist/HUDnopy-${{ steps.meta.outputs.tag }}-win-x64-portable.zip"
+          Compress-Archive -Path "publish/win-x64/*" -DestinationPath $zipPath -Force
+
+      - name: Ensure Inno Setup 6 is available and build installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc `
+            "/DMyAppVersion=${{ steps.meta.outputs.version }}" `
+            "/DMyAppTag=${{ steps.meta.outputs.tag }}" `
+            "/DPublishDir=..\publish\win-x64" `
+            "installer\HUDnopy.iss"
+          Copy-Item "installer\Output\HUDnopy-${{ steps.meta.outputs.tag }}-Setup.exe" "dist\" -Force
+
+      - name: Generate SHA-256 checksums
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem "dist\*" -File | Sort-Object Name
+          $lines = foreach ($f in $files) {
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($f.Name)"
+          }
+          $lines | Out-File -FilePath "dist/SHA256SUMS.txt" -Encoding ascii
+
+      - name: Prepare release notes
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.meta.outputs.tag }}"
+          $prereleaseBanner = ""
+          if ("${{ steps.meta.outputs.prerelease }}" -eq "true") {
+            $prereleaseBanner = @'
+          > [!WARNING]
+          > **Pre-release Notice:** This is an early testing build (`__TAG__`) under active development and is **not yet a final stable release**. Features, configuration formats, and UI layouts may change in upcoming updates. Bug reports and feedback are greatly appreciated!
+
+          '@
+          }
+
+          $notes = @'
+          ## HUDnopy __TAG__
+
+          __BANNER__### Highlights
+          - **Live Desktop Telemetry HUD & Mini-HUD:** Real-time parsing of Elite Dangerous `Status.json`, Journal logs, Cargo, Market, Outfitting, Shipyard, NavRoute, Modules, ShipLocker, Backpack, and Fleet Carrier Bartender markets.
+          - **Exploration & Exobiology:** FSS/DSS body table with Universal Cartographics payout estimates, Odyssey exobiology genus predictions, 3-sample genetic diversity tracker, and unsold credit accounting.
+          - **Fleet Carrier & Tritium Calculator:** Live carrier overview, cargo hold (via Frontier cAPI), and mass-aware tritium calculator including depot fuel and step-by-step burn.
+          - **Spansh & GalNet Integration:** Built-in Neutron, Road to Riches, Exomastery, and Fleet Carrier route plotters (with CSV import and auto-copy next jump), Trade plotter, Pristine Mining Rings, Nearest Services, Ship/Module finder (Li Yong-Rui -15%), Colonisation supplier finder, and multi-language GalNet reader.
+          - **COVAS AI Copilot & Piper Neural TTS:** Supports Ollama/LM Studio, Google Gemini, and OpenAI-compatible providers with Push-to-Talk, Hands-Free VAD, dynamic event commentary, and offline Piper Neural TTS (11 curated voices across 6 languages) + Windows SAPI fallback.
+          - **Frontier cAPI & Community Sync:** Official Frontier Companion API (OAuth 2.0 + PKCE + DPAPI encrypted tokens) plus opt-in EDDN, EDSM, and Inara sync.
+          - **Secure HTTPS Web HUD & `.binds` Control Deck:** Embedded Kestrel HTTPS/WebSocket MFD with QR pairing, session codes, VPN binding, and auto-context Ship/SRV/On-Foot/DSS/SLF control deck.
+          - **6 Languages:** Spanish (`es-ES`), English (`en-GB`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`).
+
+          ### Downloads
+          - **Windows Installer (`HUDnopy-__TAG__-Setup.exe`):** Per-user installer (no admin prompt required) with Start Menu and optional Desktop shortcuts.
+          - **Portable Archive (`HUDnopy-__TAG__-win-x64-portable.zip`):** Self-contained archive; extract anywhere and run `HUDnopy.exe` (no separate .NET runtime required).
+          - **Checksums (`SHA256SUMS.txt`):** SHA-256 verification hashes for all release binaries.
+
+          > **Windows SmartScreen Note:** As this is an unsigned open-source release, Windows SmartScreen may show a warning on first launch (*More info → Run anyway*).
+          '@
+
+          $notes = $notes.Replace('__BANNER__', $prereleaseBanner).Replace('__TAG__', $tag)
+          $notes | Out-File -FilePath "release-notes.md" -Encoding utf8
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: HUDnopy ${{ steps.meta.outputs.tag }}
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          body_path: release-notes.md
+          files: |
+            dist/HUDnopy-${{ steps.meta.outputs.tag }}-Setup.exe
+            dist/HUDnopy-${{ steps.meta.outputs.tag }}-win-x64-portable.zip
+            dist/SHA256SUMS.txt
