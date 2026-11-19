@@ -1,0 +1,206 @@
+{
+  "sampleRate": 22050,
+  "gapMilliseconds": 50,
+  "profiles": [
+    {
+      "id": "Auto",
+      "name": "Automático",
+      "automaticRules": {
+        "jump-arrival": "Ping",
+        "mission-activity": "Chime",
+        "bounty-reward": "Chime",
+        "exploration-activity": "ExplorationScan",
+        "docking": "TransportDocking",
+        "carrier-activity": "TransportCarrier",
+        "shields-down": "Warning",
+        "cargo-activity": "TransportCargo",
+        "fuel-low": "Warning",
+        "interdiction": "CombatLock",
+        "crime-committed": "Warning",
+        "fuel-critical": "Alarm",
+        "overheating": "Alarm",
+        "hull-critical": "CombatImpact",
+        "danger": "CombatRedAlert",
+        "cockpit-breach": "CombatRedAlert",
+        "copilot-safety": "Warning"
+      },
+      "severityDefaults": {
+        "Information": "Ping",
+        "Warning": "Warning",
+        "Critical": "Alarm"
+      }
+    },
+    {
+      "id": "Ping",
+      "name": "Pulso",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.18,
+      "notes": [{ "frequency": 980, "durationMilliseconds": 180 }]
+    },
+    {
+      "id": "Sonar",
+      "name": "Sonar",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.18,
+      "notes": [
+        { "frequency": 620, "durationMilliseconds": 150 },
+        { "frequency": 460, "durationMilliseconds": 220 }
+      ]
+    },
+    {
+      "id": "Chime",
+      "name": "Acorde",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.18,
+      "notes": [
+        { "frequency": 660, "durationMilliseconds": 130 },
+        { "frequency": 880, "durationMilliseconds": 150 },
+        { "frequency": 1100, "durationMilliseconds": 230 }
+      ]
+    },
+    {
+      "id": "Warning",
+      "name": "Aviso clásico",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.18,
+      "notes": [
+        { "frequency": 820, "durationMilliseconds": 130 },
+        { "frequency": 820, "durationMilliseconds": 130 },
+        { "frequency": 620, "durationMilliseconds": 240 }
+      ]
+    },
+    {
+      "id": "Alarm",
+      "name": "Alarma clásica",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.18,
+      "notes": [
+        { "frequency": 900, "durationMilliseconds": 150 },
+        { "frequency": 620, "durationMilliseconds": 170 },
+        { "frequency": 900, "durationMilliseconds": 150 },
+        { "frequency": 620, "durationMilliseconds": 230 }
+      ]
+    },
+    {
+      "id": "CombatLock",
+      "name": "Adquisición",
+      "waveform": "Saturated",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.24,
+      "notes": [
+        { "frequency": 420, "durationMilliseconds": 70 },
+        { "frequency": 560, "durationMilliseconds": 70 },
+        { "frequency": 760, "durationMilliseconds": 90 },
+        { "frequency": 1040, "durationMilliseconds": 110 }
+      ]
+    },
+    {
+      "id": "CombatImpact",
+      "name": "Impacto",
+      "waveform": "Saturated",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.24,
+      "notes": [
+        { "frequency": 150, "durationMilliseconds": 100 },
+        { "frequency": 95, "durationMilliseconds": 160 },
+        { "frequency": 240, "durationMilliseconds": 110 }
+      ]
+    },
+    {
+      "id": "CombatRedAlert",
+      "name": "Alerta de combate",
+      "waveform": "Saturated",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.24,
+      "notes": [
+        { "frequency": 760, "durationMilliseconds": 110 },
+        { "frequency": 520, "durationMilliseconds": 110 },
+        { "frequency": 760, "durationMilliseconds": 110 },
+        { "frequency": 520, "durationMilliseconds": 160 }
+      ]
+    },
+    {
+      "id": "TransportDocking",
+      "name": "Atraque",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.18,
+      "modulationFrequency": 4,
+      "modulationDepth": 0.15,
+      "notes": [
+        { "frequency": 440, "durationMilliseconds": 130 },
+        { "frequency": 550, "durationMilliseconds": 170 },
+        { "frequency": 660, "durationMilliseconds": 230 }
+      ]
+    },
+    {
+      "id": "TransportCargo",
+      "name": "Carga",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.18,
+      "modulationFrequency": 4,
+      "modulationDepth": 0.15,
+      "notes": [
+        { "frequency": 700, "durationMilliseconds": 75 },
+        { "frequency": 920, "durationMilliseconds": 85 },
+        { "frequency": 1180, "durationMilliseconds": 130 }
+      ]
+    },
+    {
+      "id": "TransportCarrier",
+      "name": "Portanaves",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.18,
+      "modulationFrequency": 4,
+      "modulationDepth": 0.15,
+      "notes": [
+        { "frequency": 180, "durationMilliseconds": 260 },
+        { "frequency": 220, "durationMilliseconds": 260 },
+        { "frequency": 280, "durationMilliseconds": 320 }
+      ]
+    },
+    {
+      "id": "ExplorationDiscovery",
+      "name": "Descubrimiento",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.32,
+      "notes": [
+        { "frequency": 520, "durationMilliseconds": 180 },
+        { "frequency": 780, "durationMilliseconds": 220 },
+        { "frequency": 1040, "durationMilliseconds": 300 }
+      ]
+    },
+    {
+      "id": "ExplorationScan",
+      "name": "Escaneo",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.32,
+      "notes": [
+        { "frequency": 360, "durationMilliseconds": 100 },
+        { "frequency": 540, "durationMilliseconds": 100 },
+        { "frequency": 810, "durationMilliseconds": 150 }
+      ]
+    },
+    {
+      "id": "ExplorationSignal",
+      "name": "Señal",
+      "waveform": "Sine",
+      "amplitude": 0.38,
+      "harmonicRatio": 0.32,
+      "notes": [
+        { "frequency": 900, "durationMilliseconds": 90 },
+        { "frequency": 640, "durationMilliseconds": 140 },
+        { "frequency": 900, "durationMilliseconds": 90 }
+      ]
+    }
+  ]
+}

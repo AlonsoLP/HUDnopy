@@ -1,0 +1,17 @@
+# Build outputs
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.log
+*.tmp
+*.part
+
+# Local runtime configuration, secrets, and user certificates
+config.json
+web-certificate.dat
+frontier_capi.dat
+
+# Local development notes
+copilot.txt

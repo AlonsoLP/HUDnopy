@@ -1,0 +1,661 @@
+// -----------------------------------------------------------------------------
+// Project:     HUDnopy — Elite Dangerous Telemetry HUD & Copilot
+// File:        Services/Telemetry/EliteFileWatcherService.Snapshots.cs
+// Author:      AlonsoLP
+// Copyright:   Copyright (c) 2026 AlonsoLP
+// License:     GPL-3.0-only (see LICENSE file in the repository root)
+// Description: Readers for Status.json, Cargo.json, Market.json, NavRoute.json, and related snapshot files.
+// -----------------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Timers;
+using HUDnopy.Models;
+using HUDnopy.Localization;
+
+namespace HUDnopy.Services;
+
+/// <summary>
+/// Readers for Status.json, Cargo.json, Market.json, NavRoute.json, and related snapshot files.
+/// </summary>
+public partial class EliteFileWatcherService
+{
+    private void ReadStatusJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            var root = doc.RootElement;
+            bool hasFlagsNumber = root.TryGetProperty("Flags", out var flagsProp) &&
+                flagsProp.ValueKind == JsonValueKind.Number;
+
+            if (hasFlagsNumber)
+                _state.RawFlags = flagsProp.GetUInt32();
+            else
+                _state.RawFlags = 0;
+
+            if (root.TryGetProperty("Flags2", out var flags2Prop) && flags2Prop.ValueKind == JsonValueKind.Number)
+                _state.RawFlags2 = flags2Prop.GetUInt32();
+            else
+                _state.RawFlags2 = 0;
+
+            // En el menú principal o pantalla de carga (nave girando), Elite escribe Flags=0 y Flags2=0 sin telemetría real
+            _state.HasStatusTelemetry = hasFlagsNumber && (_state.RawFlags != 0 || _state.RawFlags2 != 0);
+            if (_state.HasStatusTelemetry)
+                _state.HasShieldTelemetry = true;
+
+            _state.Oxygen = TryGetStatusDouble(root, "Oxygen");
+            _state.Health = TryGetStatusDouble(root, "Health");
+            _state.TemperatureKelvin = TryGetStatusDouble(root, "Temperature");
+            _state.Gravity = TryGetStatusDouble(root, "Gravity");
+            _state.SelectedWeapon = root.TryGetProperty("SelectedWeapon", out var weaponProp) &&
+                weaponProp.ValueKind == JsonValueKind.String ? weaponProp.GetString() ?? "" : "";
+            _state.HasOnFootTelemetry = _state.Oxygen.HasValue || _state.Health.HasValue ||
+                _state.TemperatureKelvin.HasValue || _state.Gravity.HasValue ||
+                !string.IsNullOrWhiteSpace(_state.SelectedWeapon);
+
+            if (root.TryGetProperty("Pips", out var pipsProp) &&
+                pipsProp.ValueKind == JsonValueKind.Array &&
+                pipsProp.GetArrayLength() >= 3)
+            {
+                _state.PipsSys = pipsProp[0].GetInt32() / 2.0;
+                _state.PipsEng = pipsProp[1].GetInt32() / 2.0;
+                _state.PipsWep = pipsProp[2].GetInt32() / 2.0;
+            }
+
+            if (root.TryGetProperty("FireGroup", out var fgProp))
+                _state.FireGroup = fgProp.GetInt32();
+
+            if (root.TryGetProperty("GuiFocus", out var gfProp))
+                _state.GuiFocus = gfProp.GetInt32();
+
+            if (root.TryGetProperty("Fuel", out var fuelProp) && fuelProp.ValueKind == JsonValueKind.Object)
+            {
+                bool hasMain = false;
+                if (fuelProp.TryGetProperty("FuelMain", out var fm) && fm.ValueKind == JsonValueKind.Number)
+                {
+                    _state.FuelMain = Math.Round(fm.GetDouble(), 2);
+                    hasMain = true;
+                }
+                if (fuelProp.TryGetProperty("FuelReservoir", out var fr) && fr.ValueKind == JsonValueKind.Number)
+                    _state.FuelReservoir = Math.Round(fr.GetDouble(), 2);
+                _state.HasFuelTelemetry = hasMain;
+            }
+            else
+            {
+                _state.HasFuelTelemetry = false;
+            }
+
+            if (root.TryGetProperty("Cargo", out var cargoProp))
+                _state.CargoUsed = (int)Math.Round(cargoProp.GetDouble());
+
+            if (root.TryGetProperty("LegalState", out var legalProp))
+                _state.LegalState = legalProp.GetString() ?? "Clean";
+
+            if (root.TryGetProperty("Balance", out var balProp))
+                _state.Credits = balProp.GetInt64();
+
+            if (root.TryGetProperty("BodyName", out var bodyProp))
+                _state.BodyName = bodyProp.GetString() ?? "";
+
+            if (root.TryGetProperty("Latitude", out var latProp))
+                _state.Latitude = Math.Round(latProp.GetDouble(), 4);
+
+            if (root.TryGetProperty("Longitude", out var lonProp))
+                _state.Longitude = Math.Round(lonProp.GetDouble(), 4);
+
+            if (root.TryGetProperty("Altitude", out var altProp))
+                _state.Altitude = Math.Round(altProp.GetDouble(), 1);
+
+            if (root.TryGetProperty("Heading", out var headProp))
+                _state.Heading = Math.Round(headProp.GetDouble(), 0);
+            if (root.TryGetProperty("PlanetRadius", out var radiusProp) &&
+                radiusProp.ValueKind == JsonValueKind.Number &&
+                radiusProp.TryGetDouble(out double planetRadius))
+                _state.PlanetRadius = planetRadius;
+
+            if (root.TryGetProperty("Destination", out var destProp) &&
+                destProp.ValueKind == JsonValueKind.Object)
+            {
+                _state.DestinationName = ReadJsonString(destProp, "Name");
+                _state.DestinationSystem = ReadJsonString(destProp, "System");
+                _state.DestinationBody = ReadJsonString(destProp, "Body");
+            }
+
+            if (_state.Gravity.HasValue && _state.Gravity.Value > 0)
+                _state.ApproachBodyGravityG = Math.Round(_state.Gravity.Value, 2);
+
+            if (_state.ExobiologyTracker is { SamplesCollected: > 0 and < 3 } tracker &&
+                _activeExoSampleCoords.Count > 0 &&
+                _state.HasLatLong &&
+                _state.PlanetRadius > 0)
+            {
+                double minDist = _activeExoSampleCoords.Min(coord =>
+                    ExobiologyPredictor.CalculateSurfaceDistanceMeters(
+                        coord.Lat, coord.Lon, _state.Latitude, _state.Longitude, _state.PlanetRadius));
+                var nextTracker = tracker.Snapshot();
+                nextTracker.CurrentDistanceMeters = Math.Round(minDist, 0);
+                _state.ExobiologyTracker = nextTracker;
+            }
+
+            MarkSnapshotFileRead(path);
+        }
+        catch
+        {
+            // El juego puede estar escribiendo en ese instante
+        }
+    }
+
+
+    private void ReadNavRouteJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("Route", out var routeProp) || routeProp.ValueKind != JsonValueKind.Array)
+                return;
+
+            var list = new List<RouteWaypoint>();
+            double startX = 0, startY = 0, startZ = 0;
+            double prevX = 0, prevY = 0, prevZ = 0;
+            int idx = 1;
+
+            foreach (var item in routeProp.EnumerateArray())
+            {
+                string sys = item.TryGetProperty("StarSystem", out var s) ? (s.GetString() ?? "") : "";
+                string starClass = item.TryGetProperty("StarClass", out var sc) ? (sc.GetString() ?? "") : "";
+                double x = 0, y = 0, z = 0;
+                if (item.TryGetProperty("StarPos", out var pos) &&
+                    pos.ValueKind == JsonValueKind.Array &&
+                    pos.GetArrayLength() >= 3)
+                {
+                    x = pos[0].GetDouble();
+                    y = pos[1].GetDouble();
+                    z = pos[2].GetDouble();
+                }
+
+                if (idx == 1)
+                {
+                    startX = prevX = x;
+                    startY = prevY = y;
+                    startZ = prevZ = z;
+                }
+
+                double dxTotal = x - startX, dyTotal = y - startY, dzTotal = z - startZ;
+                double dxStep = x - prevX, dyStep = y - prevY, dzStep = z - prevZ;
+                double distTotal = Math.Sqrt(dxTotal * dxTotal + dyTotal * dyTotal + dzTotal * dzTotal);
+                double distStep = Math.Sqrt(dxStep * dxStep + dyStep * dyStep + dzStep * dzStep);
+                prevX = x; prevY = y; prevZ = z;
+
+                list.Add(new RouteWaypoint
+                {
+                    Index = idx++,
+                    StarSystem = sys,
+                    StarClass = starClass,
+                    DistanceFromStartLy = Math.Round(distTotal, 1),
+                    StepDistanceLy = Math.Round(distStep, 1),
+                    IsCurrentSystem = string.Equals(sys, _state.CurrentSystem, StringComparison.OrdinalIgnoreCase)
+                });
+            }
+
+            _state.NavRoute = list;
+            UpdateRouteFuelAnalysis();
+            bool hadStamp = _snapshotFileStamps.ContainsKey(path);
+            MarkSnapshotFileRead(path);
+            if (_hasCompletedInitialJournalLoad && hadStamp)
+                SnapshotFileUpdated?.Invoke("NavRoute", doc.RootElement.Clone());
+        }
+        catch
+        {
+            // Ignorar lectura concurrente
+        }
+    }
+
+    private void ReadCargoJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("Inventory", out var invProp) || invProp.ValueKind != JsonValueKind.Array)
+                return;
+
+            var list = new List<CargoItem>();
+            string vessel = ReadJsonString(root, "Vessel");
+            foreach (var item in invProp.EnumerateArray())
+            {
+                string name = item.TryGetProperty("Name", out var n) ? (n.GetString() ?? "") : "";
+                string loc = item.TryGetProperty("Name_Localised", out var nl) ? (nl.GetString() ?? name) : name;
+                int count = item.TryGetProperty("Count", out var c) ? c.GetInt32() : 0;
+                int stolen = item.TryGetProperty("Stolen", out var st) ? st.GetInt32() : 0;
+
+                list.Add(new CargoItem
+                {
+                    Name = name,
+                    DisplayName = loc,
+                    Count = count,
+                    Stolen = stolen,
+                    Vessel = vessel,
+                    MissionId = ReadJsonIdentifier(item, "MissionID")
+                });
+            }
+
+            _state.CargoInventory = list;
+            _state.LimpetCount = list.Where(static item => item.Name.Equals("drones", StringComparison.OrdinalIgnoreCase)).Sum(static item => item.Count);
+            _state.CargoVessel = vessel;
+            _state.CargoTimestamp = ReadJsonTimestamp(root, "timestamp") ?? DateTimeOffset.UtcNow;
+            MarkSnapshotFileRead(path);
+        }
+        catch
+        {
+            // Ignorar lectura concurrente
+        }
+    }
+
+    private void ReadMarketJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            var root = doc.RootElement;
+            var snapshot = new MarketSnapshot
+            {
+                Timestamp = ReadJsonTimestamp(root, "timestamp") ?? DateTimeOffset.UtcNow,
+                MarketId = ReadJsonInt64(root, "marketId"),
+                StationName = ReadJsonString(root, "stationName"),
+                StarSystem = ReadJsonString(root, "StarSystem")
+            };
+
+            if (root.TryGetProperty("Items", out var items) && items.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in items.EnumerateArray())
+                {
+                    snapshot.Items.Add(new MarketCommodityItem
+                    {
+                        Name = ReadJsonString(item, "Name"),
+                        DisplayName = ReadJsonString(item, "Name_Localised", ReadJsonString(item, "Name")),
+                        Category = ReadJsonString(item, "Category"),
+                        DisplayCategory = ReadJsonString(item, "Category_Localised", ReadJsonString(item, "Category")),
+                        BuyPrice = ReadJsonInt64(item, "BuyPrice") ?? 0,
+                        SellPrice = ReadJsonInt64(item, "SellPrice") ?? 0,
+                        MeanPrice = ReadJsonInt64(item, "MeanPrice") ?? 0,
+                        Stock = ReadJsonInt64(item, "Stock") ?? 0,
+                        Demand = ReadJsonInt64(item, "Demand") ?? 0,
+                        StockBracket = (int)(ReadJsonInt64(item, "StockBracket") ?? 0),
+                        DemandBracket = (int)(ReadJsonInt64(item, "DemandBracket") ?? 0),
+                        Consumer = ReadJsonBool(item, "Consumer"),
+                        Producer = ReadJsonBool(item, "Producer"),
+                        Rare = ReadJsonBool(item, "Rare")
+                    });
+                }
+            }
+
+            _state.Market = snapshot;
+            bool hadStamp = _snapshotFileStamps.ContainsKey(path);
+            MarkSnapshotFileRead(path);
+            if (_hasCompletedInitialJournalLoad && hadStamp)
+                SnapshotFileUpdated?.Invoke("Market", root.Clone());
+        }
+        catch
+        {
+            // El juego puede estar escribiendo el archivo en ese instante.
+        }
+    }
+
+    private void ReadOutfittingJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            var root = doc.RootElement;
+            var snapshot = new OutfittingSnapshot
+            {
+                Timestamp = ReadJsonTimestamp(root, "timestamp") ?? DateTimeOffset.UtcNow,
+                MarketId = ReadJsonInt64(root, "marketId"),
+                StationName = ReadJsonString(root, "stationName"),
+                StarSystem = ReadJsonString(root, "StarSystem"),
+                Horizons = ReadJsonNullableBool(root, "Horizons")
+            };
+
+            if (root.TryGetProperty("Items", out var items) && items.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in items.EnumerateArray())
+                {
+                    string name = ReadJsonString(item, "Name");
+                    snapshot.Items.Add(new OutfittingItem
+                    {
+                        Id = ReadJsonIdentifier(item, "id"),
+                        Name = name,
+                        DisplayName = ReadJsonString(item, "Name_Localised", name),
+                        BuyPrice = ReadJsonInt64(item, "BuyPrice") ?? 0
+                    });
+                }
+            }
+
+            _state.Outfitting = snapshot;
+            bool hadStamp = _snapshotFileStamps.ContainsKey(path);
+            MarkSnapshotFileRead(path);
+            if (_hasCompletedInitialJournalLoad && hadStamp)
+                SnapshotFileUpdated?.Invoke("Outfitting", root.Clone());
+        }
+        catch
+        {
+            // El juego puede estar escribiendo el archivo en ese instante.
+        }
+    }
+
+    private void ReadShipyardJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            var root = doc.RootElement;
+            var snapshot = new ShipyardSnapshot
+            {
+                Timestamp = ReadJsonTimestamp(root, "timestamp") ?? DateTimeOffset.UtcNow,
+                MarketId = ReadJsonInt64(root, "marketId"),
+                StationName = ReadJsonString(root, "stationName"),
+                StarSystem = ReadJsonString(root, "StarSystem"),
+                Horizons = ReadJsonNullableBool(root, "Horizons"),
+                AllowCobraMkIv = ReadJsonNullableBool(root, "allowCobraMkIV")
+            };
+
+            if (root.TryGetProperty("PriceList", out var items) && items.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in items.EnumerateArray())
+                {
+                    string shipType = ReadJsonString(item, "ShipType");
+                    snapshot.Items.Add(new ShipyardItem
+                    {
+                        ShipType = shipType,
+                        DisplayName = ReadJsonString(item, "ShipType_Localised", shipType),
+                        ShipPrice = ReadJsonInt64(item, "ShipPrice") ?? 0
+                    });
+                }
+            }
+
+            _state.Shipyard = snapshot;
+            bool hadStamp = _snapshotFileStamps.ContainsKey(path);
+            MarkSnapshotFileRead(path);
+            if (_hasCompletedInitialJournalLoad && hadStamp)
+                SnapshotFileUpdated?.Invoke("Shipyard", root.Clone());
+        }
+        catch
+        {
+            // El juego puede estar escribiendo el archivo en ese instante.
+        }
+    }
+
+    private bool ShouldReadSnapshotFile(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists)
+            {
+                _snapshotFileStamps.Remove(path);
+                return false;
+            }
+
+            return !_snapshotFileStamps.TryGetValue(path, out var stamp) ||
+                stamp.Length != info.Length ||
+                stamp.LastWriteUtcTicks != info.LastWriteTimeUtc.Ticks;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private void MarkSnapshotFileRead(string path)
+    {
+        var info = new FileInfo(path);
+        if (info.Exists)
+            _snapshotFileStamps[path] = (info.Length, info.LastWriteTimeUtc.Ticks);
+    }
+
+    private static string ReadJsonString(JsonElement data, string propertyName, string fallback = "") =>
+        data.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? fallback
+            : fallback;
+
+    private static string ReadJsonIdentifier(JsonElement data, string propertyName) =>
+        data.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind is JsonValueKind.String or JsonValueKind.Number
+            ? value.ToString()
+            : "";
+
+    private static long? ReadJsonInt64(JsonElement data, string propertyName) =>
+        data.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind == JsonValueKind.Number &&
+        value.TryGetInt64(out long number)
+            ? number
+            : null;
+
+    private static bool ReadJsonBool(JsonElement data, string propertyName) =>
+        ReadJsonNullableBool(data, propertyName) ?? false;
+
+    private static bool? ReadJsonNullableBool(JsonElement data, string propertyName) =>
+        data.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? value.GetBoolean()
+            : null;
+
+    private static DateTimeOffset? ReadJsonTimestamp(JsonElement data, string propertyName) =>
+        data.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind == JsonValueKind.String &&
+        DateTimeOffset.TryParse(value.GetString(), out var timestamp)
+            ? timestamp
+            : null;
+
+    private static double? TryGetStatusDouble(JsonElement data, string propertyName) =>
+        data.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind == JsonValueKind.Number &&
+        value.TryGetDouble(out double number) &&
+        double.IsFinite(number)
+            ? number
+            : null;
+
+
+    private static bool IsHandledSnapshotFileName(string fileName) =>
+        fileName.Equals("Status.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("NavRoute.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("Cargo.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("Market.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("Outfitting.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("Shipyard.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("ModulesInfo.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("ShipLocker.json", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("FCMaterials.json", StringComparison.OrdinalIgnoreCase);
+
+    private void ReadModulesInfoJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("Modules", out var modulesProp) || modulesProp.ValueKind != JsonValueKind.Array)
+                return;
+
+            foreach (var module in modulesProp.EnumerateArray())
+            {
+                string slot = ReadJsonString(module, "Slot");
+                string item = ReadJsonString(module, "Item");
+                if (string.IsNullOrWhiteSpace(slot) || string.IsNullOrWhiteSpace(item))
+                    continue;
+
+                if (!_shipModulesBySlot.TryGetValue(slot, out var existing))
+                {
+                    existing = new ShipModuleItem
+                    {
+                        Slot = slot,
+                        Item = item,
+                        DisplayName = FormatModuleDisplayName(item)
+                    };
+                    _shipModulesBySlot[slot] = existing;
+                }
+
+                if (TryGetJournalDouble(module, "Power", out double power))
+                    existing.PowerDrawMw = Math.Round(power, 2);
+                if (TryGetJournalInt(module, "Priority", out int prio))
+                    existing.Priority = prio + 1;
+            }
+
+            SyncShipModulesToState();
+            MarkSnapshotFileRead(path);
+        }
+        catch
+        {
+            // Ignorar lectura concurrente
+        }
+    }
+
+    private void ReadShipLockerJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            ParseShipLockerElement(doc.RootElement);
+            MarkSnapshotFileRead(path);
+        }
+        catch
+        {
+            // Ignorar lectura concurrente
+        }
+    }
+
+    private void ParseShipLockerElement(JsonElement data)
+    {
+        var items = new List<BackpackItem>();
+        foreach (string category in new[] { "Items", "Components", "Consumables", "Data" })
+            AppendBackpackItems(items, data, category);
+        if (items.Count > 0 ||
+            data.TryGetProperty("Items", out _) ||
+            data.TryGetProperty("Components", out _) ||
+            data.TryGetProperty("Consumables", out _) ||
+            data.TryGetProperty("Data", out _))
+        {
+            _state.ShipLockerInventory = items
+                .Where(static i => i.Count > 0)
+                .OrderBy(static i => i.Type, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(static i => i.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+        }
+    }
+
+
+    private void ReadCarrierMaterialsJson(string path)
+    {
+        if (!ShouldReadSnapshotFile(path)) return;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var doc = JsonDocument.Parse(fs);
+            var root = doc.RootElement;
+            string station = ReadJsonString(root, "CarrierName");
+            if (string.IsNullOrWhiteSpace(station))
+                station = ReadJsonString(root, "CarrierID");
+
+            var items = new List<CarrierMaterialItem>();
+            if (root.TryGetProperty("Items", out var itemsProp) && itemsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in itemsProp.EnumerateArray())
+                {
+                    string raw = ReadJsonString(entry, "Name");
+                    string display = GetJournalText(entry, "Name_Localised", "Name") ?? raw;
+                    if (string.IsNullOrWhiteSpace(display))
+                        continue;
+                    long price = TryGetJournalLong(entry, "Price", out long p) ? p : 0;
+                    int stock = TryGetJournalInt(entry, "Stock", out int st) ? st : 0;
+                    int demand = TryGetJournalInt(entry, "Demand", out int dm) ? dm : 0;
+                    items.Add(new CarrierMaterialItem
+                    {
+                        Name = raw,
+                        DisplayName = display,
+                        Price = price,
+                        Stock = stock,
+                        Demand = demand
+                    });
+                }
+            }
+
+            _state.CarrierMaterialsStation = station;
+            _state.CarrierMaterials = items
+                .OrderByDescending(static i => i.Stock > 0 || i.Demand > 0)
+                .ThenBy(static i => i.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+            bool hadStamp = _snapshotFileStamps.ContainsKey(path);
+            MarkSnapshotFileRead(path);
+            if (_hasCompletedInitialJournalLoad && hadStamp)
+                SnapshotFileUpdated?.Invoke("FCMaterials", root.Clone());
+        }
+        catch
+        {
+            // Ignorar JSON en escritura
+        }
+    }
+
+    private void SyncMarketColonisationNeeds()
+    {
+        if (_state.Market.Items.Count == 0)
+            return;
+
+        var neededByKey = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        foreach (var res in _state.Colonisation.Resources)
+        {
+            long remaining = Math.Max(0, res.RequiredAmount - res.ProvidedAmount);
+            if (remaining <= 0)
+                continue;
+            if (!string.IsNullOrWhiteSpace(res.Name))
+                neededByKey[NormalizeCommodityKey(res.Name)] = remaining;
+            if (!string.IsNullOrWhiteSpace(res.DisplayName))
+                neededByKey[NormalizeCommodityKey(res.DisplayName)] = remaining;
+        }
+
+        foreach (var item in _state.Market.Items)
+        {
+            long needed = 0;
+            if (neededByKey.TryGetValue(NormalizeCommodityKey(item.Name), out long n1))
+                needed = n1;
+            else if (neededByKey.TryGetValue(NormalizeCommodityKey(item.DisplayName), out long n2))
+                needed = n2;
+            item.ColonisationNeeded = needed;
+        }
+    }
+
+    private static string NormalizeCommodityKey(string raw) =>
+        raw.Trim()
+            .Replace("$", "", StringComparison.Ordinal)
+            .Replace("_name;", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("_", "", StringComparison.Ordinal)
+            .Replace(" ", "", StringComparison.Ordinal)
+            .ToLowerInvariant();
+
+}

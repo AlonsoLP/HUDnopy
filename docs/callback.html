@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!--
+  Project:     HUDnopy — Elite Dangerous Telemetry HUD & Copilot
+  File:        docs/callback.html
+  Author:      AlonsoLP
+  Copyright:   Copyright (c) 2026 AlonsoLP
+  License:     GPL-3.0-only (see LICENSE file in the repository root)
+  Description: Static HTTPS OAuth 2.0 callback relay for GitHub Pages forwarding
+               Frontier cAPI authorization codes to HUDnopy's local loopback listener.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>HUDnopy — Frontier cAPI</title>
+  <style>
+    body { background:#080a0e; color:#d8dee9; font-family:Segoe UI, sans-serif; padding:40px; }
+    h2 { color:#ff7100; margin-top:0; }
+    a { color:#ff9a40; }
+    .err { color:#ff5555; }
+    code { background:#131922; padding:2px 6px; border-radius:3px; }
+  </style>
+</head>
+<body>
+  <h2 id="title">HUDnopy — Frontier Companion API</h2>
+  <p id="msg">Returning authorization to HUDnopy on your PC…</p>
+  <p id="fallback" style="display:none">
+    <span id="fallbackPrefix">If HUDnopy does not receive the response automatically, </span><a id="link" href="#">click here</a><span id="fallbackSuffix">.</span>
+  </p>
+  <script>
+    (function () {
+      var i18n = {
+        es: {
+          htmlLang: "es",
+          title: "HUDnopy — Frontier Companion API",
+          redirecting: "Devolviendo la autorización a HUDnopy en tu PC…",
+          fallbackPrefix: "Si HUDnopy no recibe la respuesta automáticamente, ",
+          fallbackLink: "pulsa aquí",
+          fallbackSuffix: ".",
+          missingCode: "No se ha recibido ningún código de autorización de Frontier. Vuelve a HUDnopy y pulsa «Conectar con Frontier»."
+        },
+        en: {
+          htmlLang: "en",
+          title: "HUDnopy — Frontier Companion API",
+          redirecting: "Returning authorization to HUDnopy on your PC…",
+          fallbackPrefix: "If HUDnopy does not receive the response automatically, ",
+          fallbackLink: "click here",
+          fallbackSuffix: ".",
+          missingCode: "No authorization code was received from Frontier. Return to HUDnopy and click \"Connect to Frontier\"."
+        },
+        fr: {
+          htmlLang: "fr",
+          title: "HUDnopy — Frontier Companion API",
+          redirecting: "Renvoi de l’autorisation vers HUDnopy sur votre PC…",
+          fallbackPrefix: "Si HUDnopy ne reçoit pas la réponse automatiquement, ",
+          fallbackLink: "cliquez ici",
+          fallbackSuffix: ".",
+          missingCode: "Aucun code d’autorisation n’a été reçu de Frontier. Revenez dans HUDnopy et cliquez sur « Connecter à Frontier »."
+        },
+        de: {
+          htmlLang: "de",
+          title: "HUDnopy — Frontier Companion API",
+          redirecting: "Autorisierung wird an HUDnopy auf deinem PC zurückgeleitet…",
+          fallbackPrefix: "Falls HUDnopy die Antwort nicht automatisch erhält, ",
+          fallbackLink: "klicke hier",
+          fallbackSuffix: ".",
+          missingCode: "Es wurde kein Autorisierungscode von Frontier empfangen. Kehre zu HUDnopy zurück und klicke auf „Mit Frontier verbinden“."
+        },
+        ru: {
+          htmlLang: "ru",
+          title: "HUDnopy — Frontier Companion API",
+          redirecting: "Передача авторизации в HUDnopy на вашем ПК…",
+          fallbackPrefix: "Если HUDnopy не получил ответ автоматически, ",
+          fallbackLink: "нажмите здесь",
+          fallbackSuffix: ".",
+          missingCode: "Код авторизации от Frontier не получен. Вернитесь в HUDnopy и нажмите «Подключить Frontier»."
+        },
+        pt: {
+          htmlLang: "pt-BR",
+          title: "HUDnopy — Frontier Companion API",
+          redirecting: "Devolvendo a autorização para o HUDnopy no seu PC…",
+          fallbackPrefix: "Se o HUDnopy não receber a resposta automaticamente, ",
+          fallbackLink: "clique aqui",
+          fallbackSuffix: ".",
+          missingCode: "Nenhum código de autorização foi recebido da Frontier. Volte ao HUDnopy e clique em «Conectar à Frontier»."
+        }
+      };
+
+      function detectLang() {
+        var langs = (navigator.languages && navigator.languages.length)
+          ? navigator.languages
+          : [navigator.language || navigator.userLanguage || "en"];
+        for (var i = 0; i < langs.length; i++) {
+          var code = String(langs[i] || "").toLowerCase().split(/[-_]/)[0];
+          if (i18n[code]) return code;
+        }
+        return "en";
+      }
+
+      var t = i18n[detectLang()];
+      document.documentElement.lang = t.htmlLang;
+      document.title = t.title;
+      document.getElementById("title").textContent = t.title;
+
+      var msg = document.getElementById("msg");
+      msg.textContent = t.redirecting;
+
+      var params = new URLSearchParams(window.location.search);
+      var state = params.get("state") || "";
+      var port = 5055;
+      var dot = state.indexOf(".");
+      if (dot > 0) {
+        var p = parseInt(state.substring(0, dot), 10);
+        if (p >= 1024 && p <= 65535) port = p;
+      }
+
+      if (!params.get("code") && !params.get("error")) {
+        msg.className = "err";
+        msg.textContent = t.missingCode;
+        return;
+      }
+
+      var target = "http://127.0.0.1:" + port + "/callback" + window.location.search;
+      document.getElementById("fallbackPrefix").textContent = t.fallbackPrefix;
+      var link = document.getElementById("link");
+      link.textContent = t.fallbackLink;
+      link.href = target;
+      document.getElementById("fallbackSuffix").textContent = t.fallbackSuffix;
+      document.getElementById("fallback").style.display = "block";
+      window.location.replace(target);
+    })();
+  </script>
+</body>
+</html>
