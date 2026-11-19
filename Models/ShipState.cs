@@ -107,6 +107,9 @@ public class ShipState
     public string Allegiance { get; set; } = "---";
     public bool AllegianceIsFallback { get; set; }
     public string StationName { get; set; } = "";
+    public int? AssignedLandingPad { get; set; }
+    public string AssignedLandingStation { get; set; } = "";
+    public string AssignedLandingStationType { get; set; } = "";
     public string BodyName { get; set; } = "";
     public string DestinationName { get; set; } = "";
     public string DestinationSystem { get; set; } = "";
@@ -292,6 +295,7 @@ public class ShipState
 
     // Módulos instalados, taquilla Odyssey e ingenieros (Categorías C y D)
     public List<ShipModuleItem> ShipModules { get; set; } = new();
+    public string LastLoadoutJson { get; set; } = "";
     public List<BackpackItem> ShipLockerInventory { get; set; } = new();
     public List<EngineerProgressItem> Engineers { get; set; } = new();
 

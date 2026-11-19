@@ -87,7 +87,7 @@
     "materials": "Materials",
     "missions": "Missions",
     "passengers": "Passengers",
-    "backpack": "Backpack",
+    "backpack": "Odyssey (Backpack & Locker)",
     "market": "Market",
     "outfitting": "Outfitting",
     "shipyard": "Shipyard",
@@ -97,7 +97,7 @@
     "colonisation": "Colonisation",
     "interface": "Appearance and window",
     "paths": "Game, files and controls",
-    "web-server": "Connectivity and integrations",
+    "web-server": "Web Server",
     "alerts": "Alerts",
     "diagnostics": "Diagnostics",
     "ship-modules": "Modules & vehicles",
@@ -107,7 +107,11 @@
     "mining": "Mining",
     "combat": "Combat & Massacres",
     "galnet": "GalNet",
-    "ai-copilot": "AI Copilot"
+    "ai-copilot": "AI Copilot",
+    "spansh-services": "Spansh Services",
+    "integrations": "Integrations",
+    "ai-settings": "AI Copilot",
+    "voice-audio": "Voice & Audio"
   },
   "carrier": {
     "identityTitle": "Identification",
@@ -186,6 +190,11 @@
       "label": "SETTINGS",
       "accessibleName": "Settings",
       "tooltip": "Application preferences"
+    },
+    "inventory": {
+      "label": "INVENTORY",
+      "accessibleName": "Inventory & Station",
+      "tooltip": "Cargo, materials, engineers, and station services"
     }
   },
   "dashboard": {
@@ -760,7 +769,19 @@
     "spanshRouteCalculating": "Calculating route on Spansh...",
     "spanshRouteLoaded": "Route loaded ({0} waypoints). Double-click to copy any system.",
     "spanshRouteNextCopied": "Next jump copied to clipboard: {0}",
-    "carrierCargoTitle": "Fleet Carrier cargo hold (Frontier cAPI)"
+    "carrierCargoTitle": "Fleet Carrier cargo hold (Frontier cAPI)",
+    "exportEdsy": "🔗 Open in EDSY",
+    "exportCoriolis": "🔗 Open in Coriolis",
+    "galaxyServerStatus": "Elite Servers: {0} · Last BGS Tick: {1}",
+    "bgsTickInfo": "Last galaxy BGS tick: {0} UTC ({1} local · {2} ago)",
+    "bgsTickUnavailable": "Last galaxy BGS tick: checking…",
+    "loadoutExportUnavailable": "No Loadout event has been detected in the Journal yet.",
+    "targetLastExo": "🎯 Last Exo sample",
+    "noExoSampleCoords": "No active exobiology sample coordinates available.",
+    "carrierUpkeepRunway": "Estimated upkeep runway: ~{0} wks (5M/wk base) · ~{1} wks / {2} mos (15M/wk typical)",
+    "carrierJumpVoice10m": "Fleet Carrier: ten minutes until jump.",
+    "carrierJumpVoiceLockdown": "Fleet Carrier: landing pad lockdown imminent. Three minutes until jump.",
+    "carrierJumpVoice1m": "Fleet Carrier: one minute until jump."
   },
   "spansh": {
     "title": "SPANSH DATA — CURRENT SYSTEM",
@@ -1013,7 +1034,14 @@
     "frontierSyncBtn": "🔄 Sync cAPI",
     "frontierDisconnectBtn": "🔌 Disconnect",
     "frontierConnected": "Connected to Frontier cAPI (DPAPI encrypted tokens)",
-    "frontierDisconnected": "Disconnected from Frontier cAPI"
+    "frontierDisconnected": "Disconnected from Frontier cAPI",
+    "aiVerbosityLabel": "Verbosity:",
+    "aiCustomPersonalityLabel": "Custom role / personality prompt:",
+    "aiWakeWordToggle": "Require wake word in Hands-Free mode:",
+    "aiClearMemoryBtn": "🧹 Clear AI memory",
+    "aiMemoryCleared": "COVAS persistent memory cleared.",
+    "aiArrivalBriefingToggle": "Express system arrival briefing (personal note, carrier presence, anarchy)",
+    "aiGlobalPttToggle": "Global Push-to-Talk hotkey (works in fullscreen / VR):"
   },
   "operations": {
     "marketSearch": "Search commodities by name",
@@ -1136,7 +1164,22 @@
     "aiHandsFreeSpeaking": "🔴 Capturing voice...",
     "aiHandsFreeStatusOn": "Hands-free mode active: speak naturally and pause to send automatically.",
     "storedShipsTitle": "Stored ship fleet (Frontier cAPI)",
-    "communityGoalsTitle": "Active Community Goals (Frontier cAPI)"
+    "communityGoalsTitle": "Active Community Goals (Frontier cAPI)",
+    "missionsBySystem": "By system: {0}",
+    "missionsMissingCargo": "⚠ Missing mission cargo in hold: {0}",
+    "wishlistPlannerTitle": "Engineering Shopping List (Wishlist)",
+    "wishlistAddBtn": "➕ Add blueprint",
+    "wishlistClearBtn": "🗑 Clear",
+    "wishlistFindTraderBtn": "🔍 Material Trader (Spansh)",
+    "wishlistEmpty": "Add one or more blueprints to calculate missing materials in real time.",
+    "wishlistProgress": "Active blueprints: {0} · Ready materials: {1}/{2} · Missing: {3}",
+    "cargoMarketSummary": "Sell value here: {0} CR (est. profit vs mean: +{1} CR{2})",
+    "cargoColonisationMatches": "★ Colonisation cargo in hold: {0}",
+    "expeditionAnalyzeBtn": "📊 Historical stats",
+    "expeditionExportMdBtn": "📝 Export MD",
+    "expeditionSummary": "Journals: {0} · Jumps: {1} ({2} LY) · Unique systems: {3} · ELW: {4} / WW: {5} / AW: {6} · Exobiology: {7} · Missions: {8} · Recorded earnings: {9} CR",
+    "aiPreFlightBtn": "✈ Pre-flight check",
+    "aiExportChatBtn": "📝 Export chat"
   },
   "deck": {
     "title": "GAME CONTROLS AND BUTTON PANEL (.BINDS)",

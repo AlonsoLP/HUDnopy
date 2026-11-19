@@ -23,6 +23,8 @@ internal static partial class DictionaryTranslationCatalog
     [GeneratedRegex(@"\{\d+\}")]
     private static partial Regex PlaceholderRegex();
 
+    private static readonly object[] DummyFormatArgs = Enumerable.Range(0, 16).Cast<object>().ToArray();
+
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Load(string section)
     {
         var catalog = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
@@ -52,7 +54,7 @@ internal static partial class DictionaryTranslationCatalog
                 var actual = PlaceholderRegex().Matches(value).Select(m => m.Value).Order();
                 if (!expected.SequenceEqual(actual))
                     throw new InvalidDataException($"Los parámetros de {section} no coinciden: {language}/{key}.");
-                _ = string.Format(CultureInfo.InvariantCulture, value, 0, 1, 2, 3, 4);
+                _ = string.Format(CultureInfo.InvariantCulture, value, DummyFormatArgs);
             }
             catalog.Add(language, new ReadOnlyDictionary<string, string>(text));
         }

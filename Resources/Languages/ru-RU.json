@@ -87,7 +87,7 @@
     "materials": "Материалы",
     "missions": "Задания",
     "passengers": "Пассажиры",
-    "backpack": "Рюкзак",
+    "backpack": "Odyssey (Рюкзак и Хранилище)",
     "market": "Рынок",
     "outfitting": "Оснащение",
     "shipyard": "Верфь",
@@ -97,7 +97,7 @@
     "colonisation": "Колонизация",
     "interface": "Оформление и окно",
     "paths": "Игра, файлы и управление",
-    "web-server": "Подключение и интеграции",
+    "web-server": "Веб-сервер",
     "alerts": "Оповещения",
     "diagnostics": "Диагностика",
     "ship-modules": "Модули и техника",
@@ -107,7 +107,11 @@
     "mining": "Добыча",
     "combat": "Бой и зачистка",
     "galnet": "GalNet",
-    "ai-copilot": "ИИ-Пилот"
+    "ai-copilot": "ИИ-Пилот",
+    "spansh-services": "Сервисы Spansh",
+    "integrations": "Интеграции",
+    "ai-settings": "ИИ-пилот",
+    "voice-audio": "Голос и звук"
   },
   "carrier": {
     "identityTitle": "Идентификация",
@@ -186,6 +190,11 @@
       "label": "НАСТРОЙКИ",
       "accessibleName": "Настройки",
       "tooltip": "Настройки приложения"
+    },
+    "inventory": {
+      "label": "ИНВЕНТАРЬ",
+      "accessibleName": "Инвентарь и станция",
+      "tooltip": "Груз, материалы, инженеры и станция"
     }
   },
   "dashboard": {
@@ -760,7 +769,19 @@
     "spanshRouteCalculating": "Расчёт маршрута в Spansh...",
     "spanshRouteLoaded": "Маршрут загружен ({0} точек). Двойной клик копирует систему.",
     "spanshRouteNextCopied": "Следующий прыжок скопирован: {0}",
-    "carrierCargoTitle": "Трюм флотоносца (Frontier cAPI)"
+    "carrierCargoTitle": "Трюм флотоносца (Frontier cAPI)",
+    "exportEdsy": "🔗 Открыть в EDSY",
+    "exportCoriolis": "🔗 Открыть в Coriolis",
+    "galaxyServerStatus": "Серверы Elite: {0} · Последний тик BGS: {1}",
+    "bgsTickInfo": "Последний галактический тик BGS: {0} UTC ({1} местн. · {2} назад)",
+    "bgsTickUnavailable": "Последний галактический тик BGS: проверка…",
+    "loadoutExportUnavailable": "Событие Loadout ещё не обнаружено в журнале.",
+    "targetLastExo": "🎯 Последний образец экзо",
+    "noExoSampleCoords": "Нет координат активного образца экзобиологии.",
+    "carrierUpkeepRunway": "Запас содержания: ~{0} нед. (база 5M/нед) · ~{1} нед. / {2} мес. (обычно 15M/нед)",
+    "carrierJumpVoice10m": "Флотоносец: десять минут до прыжка.",
+    "carrierJumpVoiceLockdown": "Флотоносец: блокировка площадок. Три минуты до прыжка.",
+    "carrierJumpVoice1m": "Флотоносец: одна минута до прыжка."
   },
   "spansh": {
     "title": "ДАННЫЕ SPANSH — ТЕКУЩАЯ СИСТЕМА",
@@ -1013,7 +1034,14 @@
     "frontierSyncBtn": "🔄 Синхронизировать cAPI",
     "frontierDisconnectBtn": "🔌 Отключить",
     "frontierConnected": "Подключено к Frontier cAPI (токены зашифрованы DPAPI)",
-    "frontierDisconnected": "Отключено от Frontier cAPI"
+    "frontierDisconnected": "Отключено от Frontier cAPI",
+    "aiVerbosityLabel": "Длина:",
+    "aiCustomPersonalityLabel": "Своя роль / личность:",
+    "aiWakeWordToggle": "Требовать ключевое слово в режиме «Свободные руки»:",
+    "aiClearMemoryBtn": "🧹 Очистить память ИИ",
+    "aiMemoryCleared": "Постоянная память COVAS очищена.",
+    "aiArrivalBriefingToggle": "Экспресс-брифинг по прибытии в систему (заметка, флотоносец, анархия)",
+    "aiGlobalPttToggle": "Глобальная клавиша Push-to-Talk (работает в полном экране / VR):"
   },
   "operations": {
     "marketSearch": "Поиск товара по названию",
@@ -1136,7 +1164,22 @@
     "aiHandsFreeSpeaking": "🔴 Запись речи...",
     "aiHandsFreeStatusOn": "Режим свободных рук активен: говорите, после паузы команда отправится сама.",
     "storedShipsTitle": "Флот сохранённых кораблей (Frontier cAPI)",
-    "communityGoalsTitle": "Активные цели сообщества (Frontier cAPI)"
+    "communityGoalsTitle": "Активные цели сообщества (Frontier cAPI)",
+    "missionsBySystem": "По системам: {0}",
+    "missionsMissingCargo": "⚠ Недостающий груз для миссий в трюме: {0}",
+    "wishlistPlannerTitle": "Список покупок инженерии (Wishlist)",
+    "wishlistAddBtn": "➕ Добавить чертёж",
+    "wishlistClearBtn": "🗑 Очистить",
+    "wishlistFindTraderBtn": "🔍 Торговец материалами (Spansh)",
+    "wishlistEmpty": "Добавьте один или несколько чертежей для расчёта недостающих материалов.",
+    "wishlistProgress": "Активные чертежи: {0} · Готово материалов: {1}/{2} · Не хватает: {3}",
+    "cargoMarketSummary": "Продажа на этой станции: {0} CR (прибыль к средней: +{1} CR{2})",
+    "cargoColonisationMatches": "★ Груз колонизации в трюме: {0}",
+    "expeditionAnalyzeBtn": "📊 История экспедиций",
+    "expeditionExportMdBtn": "📝 Отчёт MD",
+    "expeditionSummary": "Журналы: {0} · Прыжки: {1} ({2} с.л.) · Системы: {3} · ELW: {4} / WW: {5} / AW: {6} · Экзобиология: {7} · Миссии: {8} · Доход: {9} CR",
+    "aiPreFlightBtn": "✈ Предполётная проверка",
+    "aiExportChatBtn": "📝 Экспорт чата"
   },
   "deck": {
     "title": "УПРАВЛЕНИЕ И ПАНЕЛЬ КНОПОК ИГРЫ (.BINDS)",

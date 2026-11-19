@@ -48,6 +48,7 @@ public partial class MainWindow : Window
     private readonly SpanshSystemDataService _spanshSystemDataService;
     private readonly CommunitySyncService _communitySync;
     private readonly FrontierCapiService _frontierCapi;
+    private readonly GalaxyStatusService _galaxyStatus;
     private readonly GalnetService _galnetService;
     private readonly AiCopilotService _aiCopilot;
     private readonly WebServerService _webServer;
@@ -132,6 +133,7 @@ public partial class MainWindow : Window
         _spanshSystemDataService = services.SpanshSystemData;
         _communitySync = services.CommunitySync;
         _frontierCapi = services.FrontierCapi;
+        _galaxyStatus = services.GalaxyStatus;
         _galnetService = services.Galnet;
         _aiCopilot = services.AiCopilot;
         _webServer = services.WebServer;
@@ -151,8 +153,25 @@ public partial class MainWindow : Window
         _communitySync.SyncStatusChanged += () => Dispatcher.BeginInvoke(RefreshCommunitySyncStatus);
         _communitySync.EdsmSystemIntelUpdated += intel => Dispatcher.BeginInvoke(() => ApplyEdsmSystemIntel(intel));
         _frontierCapi.StatusChanged += () => Dispatcher.BeginInvoke(RefreshFrontierCapiUi);
+        _galaxyStatus.StatusUpdated += snap => Dispatcher.BeginInvoke(() => UpdateGalaxyStatusUi(snap));
         _galnetService.ArticlesUpdated += () => Dispatcher.BeginInvoke(RefreshGalnetUi);
         _aiCopilot.CopilotMessageAdded += (speaker, msg) => Dispatcher.BeginInvoke(() => AppendAiChatLine(speaker, msg));
+        _aiCopilot.SpanshRouteRequested += (mode, dest) => Dispatcher.BeginInvoke(() => ExecuteSpanshRouteFromAi(mode, dest));
+        _aiCopilot.SpanshServiceRequested += svc => Dispatcher.BeginInvoke(() => ExecuteSpanshServiceFromAi(svc));
+        _aiCopilot.CopySystemRequested += sys => Dispatcher.BeginInvoke(() => CopySystemToClipboard(sys));
+        _aiCopilot.SurfaceBookmarkSaveRequested += label => Dispatcher.BeginInvoke(() => HandleAiSurfaceBookmarkSave(label));
+        _aiCopilot.SurfaceNavigateRequested += target => Dispatcher.BeginInvoke(() => HandleAiSurfaceNavigate(target));
+        _aiCopilot.SpanshItemRequested += (query, lyr) => Dispatcher.BeginInvoke(() => HandleAiSpanshItemSearch(query, lyr));
+        _aiCopilot.ExportShipRequested += target => Dispatcher.BeginInvoke(() => HandleAiExportShip(target));
+        _aiCopilot.UiNavigationRequested += target => Dispatcher.BeginInvoke(() => HandleAiUiNavigation(target));
+        _aiCopilot.SpanshTradeRequested += () => Dispatcher.BeginInvoke(() => BtnPlotSpanshTrade_Click(this, new RoutedEventArgs()));
+        _aiCopilot.SpanshMiningRequested += mineral => Dispatcher.BeginInvoke(() => HandleAiSpanshMining(mineral));
+        _aiCopilot.ColonisationSupplierRequested += () => Dispatcher.BeginInvoke(() => BtnFindColonisationSupplier_Click(this, new RoutedEventArgs()));
+        _aiCopilot.WishlistAddRequested += bpId => Dispatcher.BeginInvoke(() => HandleAiWishlistAdd(bpId));
+        _aiCopilot.TritiumCalcRequested += ly => Dispatcher.BeginInvoke(() => HandleAiTritiumCalc(ly));
+        _aiCopilot.VoiceRateAdjustRequested += delta => Dispatcher.BeginInvoke(() => HandleAiVoiceRateAdjust(delta));
+        _aiCopilot.MemoryChanged += () => Dispatcher.BeginInvoke(RefreshAiMemoryPreview);
+        SourceInitialized += (_, _) => RegisterGlobalPttHotkey();
         LoadConfigToUi();
         RefreshJournalHistoryList();
         ApplyNavigationLabels();
@@ -328,10 +347,13 @@ public partial class MainWindow : Window
             _spanshSystemDataService.Dispose();
             _communitySync.Dispose();
             _frontierCapi.Dispose();
+            _galaxyStatus.Dispose();
             _galnetService.Dispose();
             StopAiHandsFree();
             CleanupAiVoiceRecorder();
+            UnregisterGlobalPttHotkey();
             _aiCopilot.Dispose();
+            _alertSpeechService.StopSpeaking();
             _piperTts.Dispose();
             _fileWatcher.Dispose();
             await _webServer.StopAsync();
@@ -387,6 +409,12 @@ public partial class MainWindow : Window
         TxtFrontierClientId.Text = Guid.TryParse(cfg.FrontierCapiClientId?.Trim(), out _) ? cfg.FrontierCapiClientId.Trim() : "";
         TxtFrontierCallbackPort.Text = Math.Clamp(cfg.FrontierCapiCallbackPort, 1024, 65535).ToString();
         RefreshFrontierCapiUi();
+        if (CmbEngineeringBlueprint is not null)
+        {
+            CmbEngineeringBlueprint.ItemsSource = EngineeringWishlistService.Catalog;
+            if (CmbEngineeringBlueprint.SelectedIndex < 0)
+                CmbEngineeringBlueprint.SelectedIndex = 0;
+        }
         ChkEnableAiCopilot.IsChecked = cfg.EnableAiCopilot;
         CmbAiActiveProvider.SelectedValue = string.IsNullOrWhiteSpace(cfg.AiActiveProvider) ? "ollama" : cfg.AiActiveProvider;
         CmbAiPersonality.SelectedValue = string.IsNullOrWhiteSpace(cfg.AiPersonality) ? "covas" : cfg.AiPersonality;
@@ -400,6 +428,14 @@ public partial class MainWindow : Window
         ChkAiSpeakReplies.IsChecked = cfg.AiSpeakReplies;
         ChkAiAllowActions.IsChecked = cfg.AiAllowActions;
         ChkAiDynamicEvents.IsChecked = cfg.AiDynamicEvents;
+        CmbAiVerbosity.SelectedValue = string.IsNullOrWhiteSpace(cfg.AiVerbosity) ? "normal" : cfg.AiVerbosity;
+        TxtAiCustomPersonality.Text = cfg.AiCustomPersonality ?? "";
+        ChkAiRequireWakeWord.IsChecked = cfg.AiRequireWakeWord;
+        TxtAiWakeWord.Text = string.IsNullOrWhiteSpace(cfg.AiWakeWord) ? "COVAS" : cfg.AiWakeWord;
+        ChkAiArrivalBriefing.IsChecked = cfg.AiSystemArrivalBriefing;
+        ChkAiGlobalPttHotkey.IsChecked = cfg.AiGlobalPttHotkeyEnabled;
+        CmbAiGlobalPttHotkey.SelectedValue = string.IsNullOrWhiteSpace(cfg.AiGlobalPttHotkey) ? "Ctrl+Alt+V" : cfg.AiGlobalPttHotkey;
+        RefreshAiMemoryPreview();
         UpdateAiConfigVisibility();
         CmbSpeechEngine.SelectedValue = string.IsNullOrWhiteSpace(cfg.SpeechEngine) ? "sapi" : cfg.SpeechEngine;
         RefreshPiperVoicesUi();
@@ -468,7 +504,7 @@ public partial class MainWindow : Window
         (System.Windows.Controls.RadioButton Button, string Key)[] buttons =
         {
             (NavDashboard, "dashboard"), (NavCockpit, "flight"), (NavNavigation, "navigation"),
-            (NavOperations, "operations"), (NavActivity, "activity"), (NavControls, "controls"),
+            (NavOperations, "operations"), (NavInventory, "inventory"), (NavActivity, "activity"), (NavControls, "controls"),
             (NavConfig, "settings")
         };
         foreach (var (button, key) in buttons)
@@ -566,6 +602,7 @@ public partial class MainWindow : Window
         NavCockpit.BorderThickness = thickness;
         NavNavigation.BorderThickness = thickness;
         NavOperations.BorderThickness = thickness;
+        NavInventory.BorderThickness = thickness;
         NavActivity.BorderThickness = thickness;
         NavControls.BorderThickness = thickness;
         NavConfig.BorderThickness = thickness;
@@ -868,6 +905,12 @@ public partial class MainWindow : Window
         UpdateTargetAndCombatUi(s);
         ApplyAutoContextDeck(s);
         UpdateCarrierAdvancedUi(s);
+        UpdateLandingPadUi(s);
+        UpdateMiniHudContextUi(s);
+        UpdateCarrierCountdownAndRunway(s);
+        UpdateMissionsGroupedSummary(s);
+        UpdateCargoTradeProfitUi(s);
+        UpdateEngineeringWishlistUi(s);
         UpdateFrontierCapiDataUi(s);
         UpdateBgsAndSystemNoteUi(s);
         UpdateSessionStatsUi(s);

@@ -250,6 +250,8 @@ public sealed class ExobiologyTrackerState
     public int SamplesCollected { get; set; }
     public int RequiredDistanceMeters { get; set; } = 500;
     public double CurrentDistanceMeters { get; set; }
+    public double? LastSampleLatitude { get; set; }
+    public double? LastSampleLongitude { get; set; }
     public bool CanSampleNext => SamplesCollected is > 0 and < 3 && CurrentDistanceMeters >= RequiredDistanceMeters;
 
     internal ExobiologyTrackerState Snapshot() => (ExobiologyTrackerState)MemberwiseClone();

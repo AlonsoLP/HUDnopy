@@ -71,6 +71,7 @@ public class AppConfig
     public bool EnableFrontierCapi { get; set; }
     public string FrontierCapiClientId { get; set; } = "";
     public int FrontierCapiCallbackPort { get; set; } = 5055;
+    public List<string> EngineeringWishlistBlueprints { get; set; } = new();
     public bool EnableAiCopilot { get; set; }
     public string AiActiveProvider { get; set; } = "ollama"; // "ollama" | "gemini" | "openai"
     public string AiOllamaEndpoint { get; set; } = "http://localhost:11434/v1";
@@ -85,6 +86,14 @@ public class AppConfig
     public bool AiAllowActions { get; set; } = true;
     public bool AiDynamicEvents { get; set; }
     public int AiDynamicEventCooldownSeconds { get; set; } = 45;
+    public bool AiRequireWakeWord { get; set; }
+    public string AiWakeWord { get; set; } = "COVAS";
+    public string AiCustomPersonality { get; set; } = "";
+    public string AiVerbosity { get; set; } = "normal";
+    public bool AiSystemArrivalBriefing { get; set; }
+    public bool AiGlobalPttHotkeyEnabled { get; set; }
+    public string AiGlobalPttHotkey { get; set; } = "Ctrl+Alt+V";
+    public List<string> AiCommanderMemory { get; set; } = new();
     public Dictionary<string, AlertChannelPreferences> AlertPreferences { get; set; } =
         AlertDefinitions.CreateDefaultPreferences();
 

@@ -87,7 +87,7 @@
     "materials": "Matériaux",
     "missions": "Missions",
     "passengers": "Passagers",
-    "backpack": "Sac à dos",
+    "backpack": "Odyssey (Sac et Casier)",
     "market": "Marché",
     "outfitting": "Équipement",
     "shipyard": "Chantier naval",
@@ -97,7 +97,7 @@
     "colonisation": "Colonisation",
     "interface": "Apparence et fenêtre",
     "paths": "Jeu, fichiers et commandes",
-    "web-server": "Connectivité et intégrations",
+    "web-server": "Serveur Web",
     "alerts": "Alertes",
     "diagnostics": "Diagnostic",
     "ship-modules": "Modules et véhicules",
@@ -107,7 +107,11 @@
     "mining": "Minage",
     "combat": "Combat et massacres",
     "galnet": "GalNet",
-    "ai-copilot": "Copilote IA"
+    "ai-copilot": "Copilote IA",
+    "spansh-services": "Services Spansh",
+    "integrations": "Intégrations",
+    "ai-settings": "Copilote IA",
+    "voice-audio": "Voix et Audio"
   },
   "carrier": {
     "identityTitle": "Identification",
@@ -186,6 +190,11 @@
       "label": "PARAMÈTRES",
       "accessibleName": "Paramètres",
       "tooltip": "Préférences de l'application"
+    },
+    "inventory": {
+      "label": "INVENTAIRE",
+      "accessibleName": "Inventaire et station",
+      "tooltip": "Cargaison, matériaux, ingénieurs et station"
     }
   },
   "dashboard": {
@@ -760,7 +769,19 @@
     "spanshRouteCalculating": "Calcul de l’itinéraire sur Spansh...",
     "spanshRouteLoaded": "Route chargée ({0} étapes). Double-clic pour copier un système.",
     "spanshRouteNextCopied": "Prochain saut copié : {0}",
-    "carrierCargoTitle": "Soute du porte-vaisseaux (Frontier cAPI)"
+    "carrierCargoTitle": "Soute du porte-vaisseaux (Frontier cAPI)",
+    "exportEdsy": "🔗 Ouvrir dans EDSY",
+    "exportCoriolis": "🔗 Ouvrir dans Coriolis",
+    "galaxyServerStatus": "Serveurs Elite : {0} · Dernier tick BGS : {1}",
+    "bgsTickInfo": "Dernier tick BGS galactique : {0} UTC ({1} local · il y a {2})",
+    "bgsTickUnavailable": "Dernier tick BGS galactique : vérification…",
+    "loadoutExportUnavailable": "Aucun événement Loadout n’a encore été détecté dans le Journal.",
+    "targetLastExo": "🎯 Dernier échantillon Exo",
+    "noExoSampleCoords": "Aucune coordonnée d’échantillon exobiologique active.",
+    "carrierUpkeepRunway": "Autonomie financière estimée : ~{0} sem. (base 5M/sem) · ~{1} sem. / {2} mois (typique 15M/sem)",
+    "carrierJumpVoice10m": "Porte-vaisseaux : dix minutes avant le saut.",
+    "carrierJumpVoiceLockdown": "Porte-vaisseaux : verrouillage des plateformes. Trois minutes avant le saut.",
+    "carrierJumpVoice1m": "Porte-vaisseaux : une minute avant le saut."
   },
   "spansh": {
     "title": "DONNÉES SPANSH — SYSTÈME ACTUEL",
@@ -1013,7 +1034,14 @@
     "frontierSyncBtn": "🔄 Synchroniser cAPI",
     "frontierDisconnectBtn": "🔌 Déconnecter",
     "frontierConnected": "Connecté à Frontier cAPI (jetons chiffrés DPAPI)",
-    "frontierDisconnected": "Déconnecté de Frontier cAPI"
+    "frontierDisconnected": "Déconnecté de Frontier cAPI",
+    "aiVerbosityLabel": "Longueur :",
+    "aiCustomPersonalityLabel": "Rôle / personnalité personnalisée :",
+    "aiWakeWordToggle": "Exiger un mot-clé en mode Mains Libres :",
+    "aiClearMemoryBtn": "🧹 Effacer mémoire IA",
+    "aiMemoryCleared": "Mémoire persistante de COVAS effacée.",
+    "aiArrivalBriefingToggle": "Briefing express à l’arrivée système (note personnelle, porte-vaisseaux, anarchie)",
+    "aiGlobalPttToggle": "Raccourci global Push-to-Talk (fonctionne en plein écran / VR) :"
   },
   "operations": {
     "marketSearch": "Rechercher une marchandise par nom",
@@ -1136,7 +1164,22 @@
     "aiHandsFreeSpeaking": "🔴 Capture vocale...",
     "aiHandsFreeStatusOn": "Mode mains libres actif : parlez et faites une pause pour envoyer.",
     "storedShipsTitle": "Flotte de vaisseaux stockés (Frontier cAPI)",
-    "communityGoalsTitle": "Objectifs communautaires actifs (Frontier cAPI)"
+    "communityGoalsTitle": "Objectifs communautaires actifs (Frontier cAPI)",
+    "missionsBySystem": "Par système : {0}",
+    "missionsMissingCargo": "⚠ Cargaison de mission manquante en soute : {0}",
+    "wishlistPlannerTitle": "Liste de courses d’ingénierie (Wishlist)",
+    "wishlistAddBtn": "➕ Ajouter plan",
+    "wishlistClearBtn": "🗑 Vider",
+    "wishlistFindTraderBtn": "🔍 Marchand de matériaux (Spansh)",
+    "wishlistEmpty": "Ajoutez un ou plusieurs plans pour calculer les matériaux manquants en temps réel.",
+    "wishlistProgress": "Plans actifs : {0} · Matériaux prêts : {1}/{2} · Manquants : {3}",
+    "cargoMarketSummary": "Vente dans cette station : {0} CR (profit est. vs moyenne : +{1} CR{2})",
+    "cargoColonisationMatches": "★ Colonisation en soute : {0}",
+    "expeditionAnalyzeBtn": "📊 Statistiques historiques",
+    "expeditionExportMdBtn": "📝 Rapport MD",
+    "expeditionSummary": "Journaux : {0} · Sauts : {1} ({2} AL) · Systèmes uniques : {3} · ELW : {4} / WW : {5} / AW : {6} · Exobiologie : {7} · Missions : {8} · Gains : {9} CR",
+    "aiPreFlightBtn": "✈ Contrôle pré-vol",
+    "aiExportChatBtn": "📝 Exporter le chat"
   },
   "deck": {
     "title": "COMMANDES ET PANNEAU DE BOUTONS DU JEU (.BINDS)",

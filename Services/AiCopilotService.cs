@@ -34,14 +34,31 @@ public sealed class AiCopilotService : IDisposable
     private readonly SpanshSystemDataService _spanshService;
     private readonly CommunitySyncService _communitySync;
     private readonly GalnetService _galnetService;
+    private readonly GalaxyStatusService _galaxyStatus;
     private readonly AlertSpeechService _speechService;
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(45) };
     private readonly object _historyLock = new();
     private readonly List<(string Role, string Content)> _history = new();
     private DateTimeOffset _lastDynamicEventUtc = DateTimeOffset.MinValue;
     private int _dynamicEventBusy;
+    private readonly CancellationTokenSource _timerCts = new();
 
     public event Action<string, string>? CopilotMessageAdded;
+    public event Action<string, string>? SpanshRouteRequested;
+    public event Action<string>? SpanshServiceRequested;
+    public event Action<string>? CopySystemRequested;
+    public event Action<string>? SurfaceBookmarkSaveRequested;
+    public event Action<string>? SurfaceNavigateRequested;
+    public event Action<string, bool>? SpanshItemRequested;
+    public event Action<string>? ExportShipRequested;
+    public event Action<string>? UiNavigationRequested;
+    public event Action? SpanshTradeRequested;
+    public event Action<string>? SpanshMiningRequested;
+    public event Action? ColonisationSupplierRequested;
+    public event Action<string>? WishlistAddRequested;
+    public event Action<double>? TritiumCalcRequested;
+    public event Action<int>? VoiceRateAdjustRequested;
+    public event Action? MemoryChanged;
 
     public AiCopilotService(
         ConfigService configService,
@@ -50,6 +67,7 @@ public sealed class AiCopilotService : IDisposable
         SpanshSystemDataService spanshService,
         CommunitySyncService communitySync,
         GalnetService galnetService,
+        GalaxyStatusService galaxyStatus,
         AlertSpeechService speechService,
         GameEventHub gameEvents)
     {
@@ -59,6 +77,7 @@ public sealed class AiCopilotService : IDisposable
         _spanshService = spanshService;
         _communitySync = communitySync;
         _galnetService = galnetService;
+        _galaxyStatus = galaxyStatus;
         _speechService = speechService;
         gameEvents.JournalEventReceived += OnJournalEventReceived;
     }
@@ -69,7 +88,40 @@ public sealed class AiCopilotService : IDisposable
             return;
 
         var cfg = _configService.Current;
-        if (!cfg.EnableAiCopilot || !cfg.AiDynamicEvents)
+        if (!cfg.EnableAiCopilot)
+            return;
+
+        // Express System Arrival Briefing on FSDJump (personal note, carrier presence, or security)
+        if (cfg.AiSystemArrivalBriefing && gameEvent.EventType == "FSDJump")
+        {
+            string sys = gameEvent.Data.TryGetProperty("StarSystem", out var sp) && sp.ValueKind == JsonValueKind.String
+                ? sp.GetString() ?? ""
+                : "";
+            if (!string.IsNullOrWhiteSpace(sys))
+            {
+                var notes = new List<string>();
+                if (cfg.SystemNotes.TryGetValue(sys, out string? sysNote) && !string.IsNullOrWhiteSpace(sysNote))
+                    notes.Add($"Nota guardada: {sysNote}");
+                if (_fileWatcher.State.Carrier is { } fc && string.Equals(fc.System, sys, StringComparison.OrdinalIgnoreCase))
+                    notes.Add($"Tu portanaves {fc.Name} se encuentra en este sistema");
+                if (gameEvent.Data.TryGetProperty("SystemSecurity_Localised", out var secP) && secP.ValueKind == JsonValueKind.String)
+                {
+                    string sec = secP.GetString() ?? "";
+                    if (sec.Contains("Anarchy", StringComparison.OrdinalIgnoreCase) || sec.Contains("Anarqu", StringComparison.OrdinalIgnoreCase))
+                        notes.Add("Sistema sin ley (Anarquía)");
+                }
+
+                if (notes.Count > 0)
+                {
+                    string briefing = $"Llegada a {sys}. {string.Join(". ", notes)}.";
+                    CopilotMessageAdded?.Invoke("COVAS (Briefing)", briefing);
+                    if (cfg.AiSpeakReplies)
+                        _speechService.SpeakCustomText(NormalizeTextForSpeech(briefing, cfg.InterfaceLanguage));
+                }
+            }
+        }
+
+        if (!cfg.AiDynamicEvents)
             return;
 
         int cooldown = Math.Clamp(cfg.AiDynamicEventCooldownSeconds, 10, 600);
@@ -332,6 +384,47 @@ public sealed class AiCopilotService : IDisposable
         return (true, finalReply);
     }
 
+    /// <summary>
+    /// Runs a tactical pre-flight check inspecting fuel, limpets, FSD health, missing mission cargo,
+    /// hull/shields, and route fuel stars, then asks COVAS for a concise spoken briefing.
+    /// </summary>
+    public async Task<(bool Success, string Reply)> RunPreFlightCheckAsync()
+    {
+        var s = _fileWatcher.State;
+        var issues = new List<string>();
+        var okNotes = new List<string>();
+
+        if (s.FuelMax > 0)
+        {
+            double pct = (s.FuelMain / s.FuelMax) * 100.0;
+            if (pct < 50) issues.Add($"Combustible bajo ({pct:0}%)");
+            else okNotes.Add($"combustible al {pct:0}%");
+        }
+        if (s.HasLimpetController && s.LimpetCount == 0)
+            issues.Add("Tienes controlador de drones pero 0 drones en bodega");
+        if (s.FsdHealthPercent is < 85)
+            issues.Add($"Motor FSD desgastado al {s.FsdHealthPercent:0}%");
+        if (s.HullHealth is > 0 and < 90)
+            issues.Add($"Casco al {s.HullHealth:0}%");
+        if (s.RouteHasNoFuelStar && s.NavRoute.Count > 1)
+            issues.Add("La ruta activa no contiene estrellas repostables");
+
+        var missingCargo = s.ActiveMissions
+            .Where(static m => !string.IsNullOrWhiteSpace(m.Commodity) && m.Count is > 0 && m.PassengerMission != true)
+            .GroupBy(static m => m.Commodity.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Where(g => s.CargoInventory.Where(c => string.Equals(c.Name?.Trim(), g.Key, StringComparison.OrdinalIgnoreCase)).Sum(static c => c.Count) < g.Sum(static m => m.Count!.Value))
+            .Select(static g => g.Key)
+            .ToList();
+        if (missingCargo.Count > 0)
+            issues.Add($"Falta carga de misión en bodega: {string.Join(", ", missingCargo)}");
+
+        string prompt = issues.Count == 0
+            ? $"Realiza un chequeo pre-vuelo en 2 frases: todos los sistemas nominales ({string.Join(", ", okNotes)}). Da autorización de despegue."
+            : $"Realiza un chequeo pre-vuelo en 2 frases alertando de estos avisos antes de despegar: {string.Join("; ", issues)}.";
+
+        return await AskAsync(prompt);
+    }
+
     public async Task<(bool Success, string Reply)> SummarizeGalnetAsync()
     {
         var cfg = _configService.Current;
@@ -367,7 +460,7 @@ public sealed class AiCopilotService : IDisposable
         return await AskAsync("Redacta una entrada breve de Cuaderno de Bitácora (máximo 1 párrafo, estilo diario de comandante) resumiendo mi sesión actual con los datos de telemetría disponibles.");
     }
 
-    public async Task<(bool Success, string Transcript, string Reply)> AskWithAudioWavAsync(byte[] wavBytes)
+    public async Task<(bool Success, string Transcript, string Reply)> AskWithAudioWavAsync(byte[] wavBytes, bool isHandsFree = false)
     {
         var cfg = _configService.Current;
         if (!cfg.EnableAiCopilot)
@@ -375,12 +468,22 @@ public sealed class AiCopilotService : IDisposable
         if (wavBytes is null || wavBytes.Length <= 44)
             return (false, "", "No se detectó audio del micrófono.");
 
-        // 1. Gemini: envío multimodal directo del WAV sin necesidad de STT separado
+        string wakeWord = (cfg.AiWakeWord ?? "COVAS").Trim();
+        bool requireWake = isHandsFree && cfg.AiRequireWakeWord && !string.IsNullOrWhiteSpace(wakeWord);
+
+        // 1. Gemini: direct multimodal WAV audio
         if (cfg.AiActiveProvider == "gemini")
         {
-            var (ok, reply) = await SendGeminiAudioAsync(cfg, wavBytes);
+            var (ok, reply) = await SendGeminiAudioAsync(cfg, wavBytes, requireWake ? wakeWord : null);
             if (!ok)
                 return (false, "🎤 [Voz]", reply);
+            if (reply.Contains("[[IGNORE]]", StringComparison.OrdinalIgnoreCase))
+                return (true, "", "");
+            if (reply.Contains("[[SILENCE]]", StringComparison.OrdinalIgnoreCase))
+            {
+                _speechService.StopSpeaking();
+                return (true, "🔇", "");
+            }
 
             string finalReply = await ProcessEmbeddedActionsAsync(cfg, reply);
             if (cfg.AiSpeakReplies && !string.IsNullOrWhiteSpace(finalReply))
@@ -388,27 +491,39 @@ public sealed class AiCopilotService : IDisposable
             return (true, "🎤 [Comando de voz]", finalReply);
         }
 
-        // 2. OpenAI / Groq: transcripción Whisper + AskAsync
-        if (cfg.AiActiveProvider == "openai")
-        {
-            var (tOk, transcript) = await TranscribeWithWhisperAsync(cfg, wavBytes);
-            if (!tOk || string.IsNullOrWhiteSpace(transcript))
-                return (false, "", string.IsNullOrWhiteSpace(transcript) ? "No se pudo transcribir el audio." : transcript);
+        // 2. OpenAI / Groq (Whisper) or Local Ollama (Windows Speech)
+        var (tOk, transcript) = cfg.AiActiveProvider == "openai"
+            ? await TranscribeWithWhisperAsync(cfg, wavBytes)
+            : TranscribeWithWindowsSpeech(wavBytes, cfg.InterfaceLanguage);
 
-            var (ok, reply) = await AskAsync(transcript);
-            return (ok, transcript, reply);
+        if (!tOk || string.IsNullOrWhiteSpace(transcript))
+            return (false, "", string.IsNullOrWhiteSpace(transcript) ? "No se pudo transcribir el audio." : transcript);
+
+        if (IsSilenceVoiceCommand(transcript))
+        {
+            _speechService.StopSpeaking();
+            return (true, "🔇", "");
         }
 
-        // 3. Local (Ollama): reconocimiento nativo de Windows (System.Speech.Recognition)
-        var (locOk, localText) = TranscribeWithWindowsSpeech(wavBytes, cfg.InterfaceLanguage);
-        if (!locOk || string.IsNullOrWhiteSpace(localText))
-            return (false, "", localText);
+        if (requireWake && !transcript.Contains(wakeWord, StringComparison.OrdinalIgnoreCase))
+            return (true, "", "");
 
-        var (aOk, aReply) = await AskAsync(localText);
-        return (aOk, localText, aReply);
+        var (chatOk, chatReply) = await AskAsync(transcript);
+        return (chatOk, transcript, chatReply);
     }
 
-    private async Task<(bool Success, string Reply)> SendGeminiAudioAsync(AppConfig cfg, byte[] wavBytes)
+    private static bool IsSilenceVoiceCommand(string text)
+    {
+        string lower = text.Trim().ToLowerInvariant();
+        return lower is "silencio" or "cállate" or "callate" or "para" or "detente" or "stop" or "silence" or "shut up" or "quiet"
+            || lower.EndsWith(" silencio", StringComparison.Ordinal)
+            || lower.EndsWith(" cállate", StringComparison.Ordinal)
+            || lower.EndsWith(" callate", StringComparison.Ordinal)
+            || lower.EndsWith(" stop", StringComparison.Ordinal)
+            || lower.EndsWith(" silence", StringComparison.Ordinal);
+    }
+
+    private async Task<(bool Success, string Reply)> SendGeminiAudioAsync(AppConfig cfg, byte[] wavBytes, string? requiredWakeWord = null)
     {
         if (string.IsNullOrWhiteSpace(cfg.AiGeminiApiKey) || string.IsNullOrWhiteSpace(cfg.AiGeminiModel))
             return (false, "Configura tu Gemini API Key y modelo en AJUSTES.");
@@ -416,6 +531,10 @@ public sealed class AiCopilotService : IDisposable
         string model = cfg.AiGeminiModel.Trim();
         string url = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model)}:generateContent?key={Uri.EscapeDataString(cfg.AiGeminiApiKey.Trim())}";
         string systemPrompt = BuildSystemPrompt(cfg, _fileWatcher.State);
+
+        string audioInstruction = string.IsNullOrWhiteSpace(requiredWakeWord)
+            ? "Escucha el mensaje de voz del comandante y responde directamente. Si solo pide silencio o parar de hablar, responde únicamente [[SILENCE]]."
+            : $"Escucha el audio adjunto. Si el hablante NO pronuncia la palabra de activación '{requiredWakeWord}', responde ÚNICAMENTE [[IGNORE]]. Si pide silencio o parar de hablar, responde ÚNICAMENTE [[SILENCE]]. En caso contrario, responde directamente.";
 
         var payload = new
         {
@@ -427,7 +546,7 @@ public sealed class AiCopilotService : IDisposable
                     role = "user",
                     parts = new object[]
                     {
-                        new { text = "Escucha el mensaje de voz del comandante y responde directamente." },
+                        new { text = audioInstruction },
                         new
                         {
                             inline_data = new
@@ -541,7 +660,15 @@ public sealed class AiCopilotService : IDisposable
             "tactical" => "Eres un oficial táctico militar conciso y directo a bordo de una nave de Elite Dangerous.",
             "scientist" => "Eres un oficial científico entusiasta especializado en astrofísica y exobiología en Elite Dangerous.",
             "sarcastic" => "Eres un copiloto veterano con humor seco y ligeramente sarcástico, pero siempre leal y útil.",
+            "custom" when !string.IsNullOrWhiteSpace(cfg.AiCustomPersonality) => cfg.AiCustomPersonality.Trim(),
             _ => "Eres COVAS, el ordenador de a bordo profesional, claro y conciso de Elite Dangerous."
+        };
+
+        string verbosityRule = (cfg.AiVerbosity ?? "normal").Trim().ToLowerInvariant() switch
+        {
+            "brief" => "Extremadamente breve: máximo 1 o 2 frases cortas, estilo radio militar de combate.",
+            "detailed" => "Detallado y explicativo, ofreciendo contexto útil de exploración o estrategia cuando aporte valor.",
+            _ => "Conciso (2 a 4 frases claras, ideal para escuchar mientras se pilota)."
         };
 
         string langName = cfg.InterfaceLanguage switch
@@ -555,7 +682,7 @@ public sealed class AiCopilotService : IDisposable
         };
 
         var sb = new StringBuilder();
-        sb.AppendLine($"{personality} Responde siempre en {langName}. Sé conciso (ideal para escuchar mientras se pilota).");
+        sb.AppendLine($"{personality} Responde siempre en {langName}. {verbosityRule}");
         sb.AppendLine("Estilo de locución: escribe texto natural sin formato Markdown (ni asteriscos, ni almohadillas, ni emojis). Escribe las unidades completas (créditos, toneladas, años luz, segundos luz, por ciento) en lugar de abreviaturas como CR, t, AL o LS.");
         sb.AppendLine();
         sb.AppendLine("=== TELEMETRÍA EN VIVO DE LA NAVE ===");
@@ -566,6 +693,78 @@ public sealed class AiCopilotService : IDisposable
 
         if (s.NavRoute.Count > 0)
             sb.AppendLine($"Ruta activa: {s.NavRoute.Count} saltos | Próxima estrella repostable en: {(s.RouteHasNoFuelStar ? "NINGUNA" : (s.JumpsToNextFuelStar?.ToString() ?? "?"))} saltos");
+        if (s.AssignedLandingPad is int padNum && padNum > 0)
+        {
+            var padInfo = LandingPadLocatorService.Resolve(padNum, s.AssignedLandingStationType);
+            sb.AppendLine($"Plataforma de aterrizaje asignada: {padInfo.FormatGuidance(cfg.InterfaceLanguage)} en {(string.IsNullOrWhiteSpace(s.AssignedLandingStation) ? s.CurrentSystem : s.AssignedLandingStation)}");
+        }
+        if (s.CargoInventory.Count > 0)
+        {
+            var topCargo = s.CargoInventory.OrderByDescending(static c => c.Count).Take(6).Select(static c => $"{c.Name} ({c.Count} t)");
+            string marketNote = "";
+            if (s.Market?.Items is { Count: > 0 })
+            {
+                long sellTotal = 0;
+                foreach (var c in s.CargoInventory)
+                {
+                    var m = s.Market.Items.FirstOrDefault(x =>
+                        string.Equals(x.DisplayName, c.Name, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(x.Name, c.Name, StringComparison.OrdinalIgnoreCase));
+                    if (m is not null && m.SellPrice > 0) sellTotal += m.SellPrice * c.Count;
+                }
+                if (sellTotal > 0) marketNote = $" | Valor venta aquí: {sellTotal:N0} CR";
+            }
+            sb.AppendLine($"Carga en bodega: {string.Join(", ", topCargo)}{marketNote}");
+        }
+        var damagedModules = s.ShipModules.Where(static m => m.HealthPercent is > 0 and < 85).OrderBy(static m => m.HealthPercent).Take(5).ToList();
+        if (damagedModules.Count > 0)
+            sb.AppendLine($"Módulos dañados (<85%): {string.Join(", ", damagedModules.Select(static m => $"{m.DisplayName} ({m.HealthPercent:0}%)"))}");
+        if (s.ExobiologyTracker is { } exo)
+            sb.AppendLine($"Exobiología activa: {exo.Species} en {exo.BodyName} ({exo.SamplesCollected}/3 muestras, distancia {exo.CurrentDistanceMeters:0}/{exo.RequiredDistanceMeters} m)");
+        var valuableBodies = s.ExplorationBodies.Where(static b => (b.EstimatedCredits ?? 0) >= 500_000 || b.BiologicalSignalCount > 0).OrderByDescending(static b => b.EstimatedCredits ?? 0).Take(5).ToList();
+        if (valuableBodies.Count > 0)
+            sb.AppendLine($"Cuerpos valiosos en sistema: {string.Join(", ", valuableBodies.Select(static b => $"{b.BodyName} ({b.BodyType}{(b.BiologicalSignalCount > 0 ? $", {b.BiologicalSignalCount} bio" : "")})"))}");
+        var unmappedTargets = s.ExplorationBodies
+            .Where(static b => b.WasMapped != true && ((b.EstimatedCredits ?? 0) >= 500_000 || b.IsVirginBioLandable))
+            .OrderByDescending(static b => b.EstimatedCredits ?? 0)
+            .Take(5)
+            .Select(static b => $"{b.BodyName} ({b.BodyType}, {(b.DistanceFromArrivalLs.HasValue ? $"{b.DistanceFromArrivalLs.Value:0} LS" : "? LS")}{(b.BiologicalSignalCount > 0 ? $", {b.BiologicalSignalCount} bio" : "")})")
+            .ToList();
+        if (unmappedTargets.Count > 0)
+            sb.AppendLine($"Cuerpos rentables SIN MAPEAR aún: {string.Join(" | ", unmappedTargets)}");
+        if (s.Market?.Items is { Count: > 0 })
+        {
+            var bargains = s.Market.Items
+                .Where(static m => m.Stock > 50 && m.BuyPrice > 0 && m.MeanPrice > m.BuyPrice)
+                .OrderByDescending(static m => m.MeanPrice - m.BuyPrice)
+                .Take(4)
+                .Select(static m => $"{m.DisplayName} (compra {m.BuyPrice:N0} vs media {m.MeanPrice:N0} CR, stock {m.Stock:N0})")
+                .ToList();
+            if (bargains.Count > 0)
+                sb.AppendLine($"Ofertas de compra en mercado local (bajo media galáctica): {string.Join(" | ", bargains)}");
+        }
+        if (!string.IsNullOrWhiteSpace(s.CurrentSystemNote))
+            sb.AppendLine($"Nota personal en {s.CurrentSystem}: {s.CurrentSystemNote}");
+        if (s.SystemFactions.Count > 0)
+        {
+            var topFactions = s.SystemFactions.OrderByDescending(static f => f.InfluencePercent).Take(3).Select(static f => $"{f.Name} ({f.InfluenceDisplay}, {f.FactionState})");
+            sb.AppendLine($"Facciones BGS principales: {string.Join(" | ", topFactions)}");
+        }
+        var gSnap = _galaxyStatus.Current;
+        if (!string.IsNullOrWhiteSpace(gSnap.ServerMessage) || gSnap.LastBgsTickUtc.HasValue)
+        {
+            string tickText = gSnap.LastBgsTickUtc.HasValue ? gSnap.LastBgsTickUtc.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : "desconocido";
+            sb.AppendLine($"Servidores Elite: {(string.IsNullOrWhiteSpace(gSnap.ServerMessage) ? "?" : gSnap.ServerMessage)} | Último BGS Tick: {tickText}");
+        }
+        if (cfg.EngineeringWishlistBlueprints is { Count: > 0 })
+        {
+            var missingMats = EngineeringWishlistService.Evaluate(cfg.EngineeringWishlistBlueprints, s)
+                .Where(static r => r.Missing > 0)
+                .Take(6)
+                .Select(static r => $"{r.MaterialName} (faltan {r.Missing})");
+            string wishText = missingMats.Any() ? string.Join(", ", missingMats) : "todos los materiales listos";
+            sb.AppendLine($"Wishlist ingeniería ({cfg.EngineeringWishlistBlueprints.Count} planos): {wishText}");
+        }
         if (!string.IsNullOrWhiteSpace(s.PowerplaySummary))
             sb.AppendLine($"Powerplay: {s.PowerplaySummary}");
         if (s.UnsoldCartographyCredits > 0 || s.UnsoldExobiologyCredits > 0)
@@ -573,7 +772,14 @@ public sealed class AiCopilotService : IDisposable
         if (s.CurrentTarget is { } t && !string.IsNullOrWhiteSpace(t.Ship))
             sb.AppendLine($"Objetivo fijado: {t.Ship} ({t.PilotName}, {t.PilotRank}) | Estado: {t.LegalStatus} | Recompensa: {t.Bounty:N0} CR | Escudo: {t.ShieldHealth}% Casco: {t.HullHealth}%");
         if (s.ActiveMissions.Count > 0)
-            sb.AppendLine($"Misiones activas: {s.ActiveMissions.Count} (Masacres apiladas: {s.MassacreStacks.Count})");
+        {
+            var topDest = s.ActiveMissions.Where(static m => !string.IsNullOrWhiteSpace(m.DestinationSystem))
+                .GroupBy(static m => m.DestinationSystem, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(static g => g.Count())
+                .Take(4)
+                .Select(g => $"{g.Key} ({g.Count()})");
+            sb.AppendLine($"Misiones activas: {s.ActiveMissions.Count} (Masacres apiladas: {s.MassacreStacks.Count}){(topDest.Any() ? " | Destinos: " + string.Join(", ", topDest) : "")}");
+        }
         if (s.CombatSession.TotalKills > 0)
             sb.AppendLine($"Combate sesión: {s.CombatSession.TotalKills} bajas | Pendiente cobro: {s.CombatSession.PendingCredits:N0} CR");
         if (s.MiningSession.TotalRefinedTons > 0)
@@ -596,7 +802,14 @@ public sealed class AiCopilotService : IDisposable
             string fcCall = string.IsNullOrWhiteSpace(fc.Callsign) ? "" : $" [{fc.Callsign}]";
             sb.AppendLine($"Nombre: {fcName}{fcCall} | Ubicación: {(string.IsNullOrWhiteSpace(fc.System) ? "Desconocida" : fc.System)}{(string.IsNullOrWhiteSpace(fc.Body) ? "" : $" ({fc.Body})")}");
             if (!string.IsNullOrWhiteSpace(fc.Destination))
-                sb.AppendLine($"Salto programado hacia: {fc.Destination} (Salida: {fc.DepartureTime?.ToLocalTime().ToString("dd/MM HH:mm") ?? "pendiente"})");
+            {
+                string countdown = fc.DepartureTime.HasValue && fc.DepartureTime.Value > DateTimeOffset.UtcNow
+                    ? $" — faltan {(int)(fc.DepartureTime.Value - DateTimeOffset.UtcNow).TotalMinutes} min"
+                    : "";
+                sb.AppendLine($"Salto programado hacia: {fc.Destination} (Salida: {fc.DepartureTime?.ToLocalTime().ToString("dd/MM HH:mm") ?? "pendiente"}{countdown})");
+            }
+            if (s.CarrierCargo.Count > 0)
+                sb.AppendLine($"Bodega del portanaves (cAPI): {string.Join(", ", s.CarrierCargo.OrderByDescending(static c => c.Quantity).Take(6).Select(static c => $"{c.Commodity} ({c.Quantity} t)"))}");
             sb.AppendLine($"Tritio en depósito: {(fc.Fuel.HasValue ? $"{fc.Fuel.Value} toneladas" : "desconocido")} | Salto máx.: {(fc.JumpRange.HasValue ? $"{fc.JumpRange.Value:0} AL" : "500 AL")}");
             if (fc.Capacity.HasValue || fc.FreeSpace.HasValue)
                 sb.AppendLine($"Espacio: libre {fc.FreeSpace?.ToString() ?? "?"} toneladas de {fc.Capacity?.ToString() ?? "?"} toneladas (carga: {fc.Cargo?.ToString() ?? "?"} toneladas)");
@@ -634,6 +847,14 @@ public sealed class AiCopilotService : IDisposable
             sb.AppendLine("Si el comandante pregunta por la última noticia de GalNet, responde OBLIGATORIAMENTE con la marcada como [#1 MÁS RECIENTE].");
         }
 
+        if (cfg.AiCommanderMemory is { Count: > 0 })
+        {
+            sb.AppendLine();
+            sb.AppendLine("=== MEMORIA PERSISTENTE DEL COMANDANTE ===");
+            foreach (string mem in cfg.AiCommanderMemory.TakeLast(15))
+                sb.AppendLine($"- {mem}");
+        }
+
         if (cfg.AiAllowActions)
         {
             sb.AppendLine();
@@ -641,8 +862,25 @@ public sealed class AiCopilotService : IDisposable
             sb.AppendLine("Si el comandante pide ejecutar una acción de nave, buscar un servicio cercano o guardar una nota, incluye al final una o más etiquetas exactas:");
             sb.AppendLine("- Control/Macro: [[ACTION:BIND|<ActionId>]] (ej: Macro:CombatStance, Macro:EscapeRun, Macro:LandingPrep, Macro:SilentHeatSink, LandingGearToggle, ShipSpotLightToggle, ToggleCargoScoop, DeployHardpointToggle, NightVisionToggle, DeployHeatSink, FireChaffLauncher, UseShieldCell, Supercruise, HyperSuperCombination, GalaxyMapOpen, SystemMapOpen)");
             sb.AppendLine("- Buscar servicio en Spansh: [[ACTION:SPANSH|<material_trader|tech_broker|interstellar_factors|tritium>]]");
+            sb.AppendLine("- Trazar ruta en Spansh: [[ACTION:SPANSH_ROUTE|<neutron|riches|exomastery|carrier>|<SistemaDestino>]]");
+            sb.AppendLine("- Buscar nave o módulo en Spansh: [[ACTION:SPANSH_ITEM|<NombreNaveOModulo>|<true|false para descuento Li Yong-Rui>]]");
+            sb.AppendLine("- Planificar ruta comercial en Spansh: [[ACTION:SPANSH_TRADE|now]]");
+            sb.AppendLine("- Buscar anillos prístinos de minería en Spansh: [[ACTION:SPANSH_MINING|<Mineral ej: Platinum>]]");
+            sb.AppendLine("- Buscar proveedor de colonización cercano: [[ACTION:COLONISATION_SUPPLIER|now]]");
+            sb.AppendLine("- Añadir plano a la Wishlist de ingeniería: [[ACTION:WISHLIST_ADD|<fsd_range_g5|fsd_mass_manager|thrusters_dirty_g5|pp_armoured_g5|pp_overcharged_g5|pd_charge_g5|shield_thermal_g5|mc_overcharged_g5|hull_heavy_g5|odyssey_suit_g5|odyssey_weapon_g5>]]");
+            sb.AppendLine("- Guardar dato en memoria persistente del comandante: [[ACTION:REMEMBER|<dato breve>]]");
+            sb.AppendLine("- Olvidar dato concreto de memoria persistente: [[ACTION:FORGET|<palabra o frase a olvidar>]]");
+            sb.AppendLine("- Programar temporizador/recordatorio por voz: [[ACTION:TIMER|<minutos>|<motivo>]]");
+            sb.AppendLine("- Calcular tritio de portanaves para una distancia: [[ACTION:TRITIUM_CALC|<años luz numéricos>]]");
+            sb.AppendLine("- Ajustar velocidad de voz (-5 a +5): [[ACTION:VOICE_RATE|<+1|-1|0>]]");
+            sb.AppendLine("- Pausa breve entre acciones encadenadas: [[ACTION:DELAY|<milisegundos 100..5000>]]");
             sb.AppendLine("- Guardar nota del sistema actual: [[ACTION:NOTE|<texto de la nota>]]");
-            sb.AppendLine("No inventes etiquetas fuera de estas tres.");
+            sb.AppendLine("- Copiar nombre de sistema al portapapeles: [[ACTION:COPY|<NombreSistema>]]");
+            sb.AppendLine("- Guardar marcador de superficie actual: [[ACTION:BOOKMARK|<Etiqueta>]]");
+            sb.AppendLine("- Guiar brújula de superficie a marcador o última muestra exo: [[ACTION:NAV_BOOKMARK|<Etiqueta o EXO>]]");
+            sb.AppendLine("- Exportar nave actual: [[ACTION:EXPORT_SHIP|<edsy|coriolis>]]");
+            sb.AppendLine("- Cambiar pestaña o Mini-HUD: [[ACTION:UI|<dashboard|flight|navigation|operations|inventory|activity|controls|minihud>]]");
+            sb.AppendLine("No inventes etiquetas fuera de estas.");
         }
 
         return sb.ToString();
@@ -653,7 +891,7 @@ public sealed class AiCopilotService : IDisposable
         if (!cfg.AiAllowActions || !rawReply.Contains("[[ACTION:", StringComparison.OrdinalIgnoreCase))
             return rawReply.Trim();
 
-        var matches = Regex.Matches(rawReply, @"\[\[ACTION:([A-Z]+)\|([^\]]+)\]\]", RegexOptions.IgnoreCase);
+        var matches = Regex.Matches(rawReply, @"\[\[ACTION:([A-Z_]+)\|([^\]]+)\]\]", RegexOptions.IgnoreCase);
         string cleanText = Regex.Replace(rawReply, @"\[\[ACTION:[^\]]+\]\]", "", RegexOptions.IgnoreCase).Trim();
         var actionLogs = new List<string>();
 
@@ -670,6 +908,7 @@ public sealed class AiCopilotService : IDisposable
                     break;
 
                 case "SPANSH":
+                    SpanshServiceRequested?.Invoke(param);
                     var state = _fileWatcher.State;
                     var (sOk, results, sMsg) = await _spanshService.SearchNearestServicesAsync(param, state.CurrentSystem, state.StarPos);
                     if (sOk && results.Count > 0)
@@ -681,6 +920,151 @@ public sealed class AiCopilotService : IDisposable
                     {
                         actionLogs.Add($"⚠ {sMsg}");
                     }
+                    break;
+
+                case "SPANSH_ROUTE":
+                    string[] parts = param.Split('|', 2, StringSplitOptions.TrimEntries);
+                    if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[1]))
+                    {
+                        SpanshRouteRequested?.Invoke(parts[0].ToLowerInvariant(), parts[1]);
+                        actionLogs.Add($"🧭 Ruta Spansh ({parts[0]}) → {parts[1]} solicitada.");
+                    }
+                    break;
+
+                case "SPANSH_ITEM":
+                    string[] itemParts = param.Split('|', 2, StringSplitOptions.TrimEntries);
+                    if (itemParts.Length >= 1 && !string.IsNullOrWhiteSpace(itemParts[0]))
+                    {
+                        bool lyr = itemParts.Length == 2 && bool.TryParse(itemParts[1], out bool b) && b;
+                        SpanshItemRequested?.Invoke(itemParts[0], lyr);
+                        actionLogs.Add($"🛰 Buscando {itemParts[0]}{(lyr ? " (Li Yong-Rui -15%)" : "")} en Spansh...");
+                    }
+                    break;
+
+                case "COPY":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        CopySystemRequested?.Invoke(param);
+                        actionLogs.Add($"📋 Copiado al portapapeles: {param}");
+                    }
+                    break;
+
+                case "BOOKMARK":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        SurfaceBookmarkSaveRequested?.Invoke(param);
+                        actionLogs.Add($"📍 Marcador de superficie solicitado: {param}");
+                    }
+                    break;
+
+                case "NAV_BOOKMARK":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        SurfaceNavigateRequested?.Invoke(param);
+                        actionLogs.Add($"🧭 Brújula de superficie dirigida a: {param}");
+                    }
+                    break;
+
+                case "EXPORT_SHIP":
+                    if (param.Equals("edsy", StringComparison.OrdinalIgnoreCase) || param.Equals("coriolis", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ExportShipRequested?.Invoke(param.ToLowerInvariant());
+                        actionLogs.Add($"🔗 Abriendo nave en {param.ToUpperInvariant()}...");
+                    }
+                    break;
+
+                case "UI":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        UiNavigationRequested?.Invoke(param.ToLowerInvariant());
+                        actionLogs.Add($"🖥 Vista HUD: {param}");
+                    }
+                    break;
+
+                case "SPANSH_TRADE":
+                    SpanshTradeRequested?.Invoke();
+                    actionLogs.Add("💰 Planificando ruta comercial en Spansh...");
+                    break;
+
+                case "SPANSH_MINING":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        SpanshMiningRequested?.Invoke(param);
+                        actionLogs.Add($"⛏ Buscando anillos prístinos de {param} en Spansh...");
+                    }
+                    break;
+
+                case "COLONISATION_SUPPLIER":
+                    ColonisationSupplierRequested?.Invoke();
+                    actionLogs.Add("🏗 Buscando proveedor cercano de colonización en Spansh...");
+                    break;
+
+                case "WISHLIST_ADD":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        WishlistAddRequested?.Invoke(param);
+                        actionLogs.Add($"★ Plano añadido a Wishlist: {param}");
+                    }
+                    break;
+
+                case "REMEMBER":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        cfg.AiCommanderMemory ??= new List<string>();
+                        if (!cfg.AiCommanderMemory.Contains(param, StringComparer.OrdinalIgnoreCase))
+                        {
+                            cfg.AiCommanderMemory.Add(param);
+                            if (cfg.AiCommanderMemory.Count > 20)
+                                cfg.AiCommanderMemory.RemoveAt(0);
+                            _configService.Save();
+                            MemoryChanged?.Invoke();
+                        }
+                        actionLogs.Add($"🧠 Recordado: {param}");
+                    }
+                    break;
+
+                case "FORGET":
+                    if (!string.IsNullOrWhiteSpace(param) && cfg.AiCommanderMemory is { Count: > 0 })
+                    {
+                        int removed = cfg.AiCommanderMemory.RemoveAll(m => m.Contains(param, StringComparison.OrdinalIgnoreCase));
+                        if (removed > 0)
+                        {
+                            _configService.Save();
+                            MemoryChanged?.Invoke();
+                            actionLogs.Add($"🧹 Olvidado ({removed}): {param}");
+                        }
+                    }
+                    break;
+
+                case "TIMER":
+                    string[] tParts = param.Split('|', 2, StringSplitOptions.TrimEntries);
+                    if (tParts.Length >= 1 && double.TryParse(tParts[0].Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double mins) && mins is > 0 and <= 180)
+                    {
+                        string reason = tParts.Length == 2 && !string.IsNullOrWhiteSpace(tParts[1]) ? tParts[1] : "Temporizador completado";
+                        ScheduleVoiceTimer(TimeSpan.FromMinutes(mins), reason, cfg.InterfaceLanguage);
+                        actionLogs.Add($"⏱ Temporizador programado: {mins:0.#} min — {reason}");
+                    }
+                    break;
+
+                case "TRITIUM_CALC":
+                    if (double.TryParse(param.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double ly) && ly > 0)
+                    {
+                        TritiumCalcRequested?.Invoke(ly);
+                        actionLogs.Add($"⛽ Calculadora de tritio actualizada: {ly:N0} AL");
+                    }
+                    break;
+
+                case "VOICE_RATE":
+                    if (int.TryParse(param, NumberStyles.Integer, CultureInfo.InvariantCulture, out int delta))
+                    {
+                        VoiceRateAdjustRequested?.Invoke(delta);
+                        actionLogs.Add($"🔊 Velocidad de voz ajustada ({(delta > 0 ? $"+{delta}" : delta.ToString())}).");
+                    }
+                    break;
+
+                case "DELAY":
+                    if (int.TryParse(param, NumberStyles.Integer, CultureInfo.InvariantCulture, out int ms))
+                        await Task.Delay(Math.Clamp(ms, 100, 5000));
                     break;
 
                 case "NOTE":
@@ -867,5 +1251,30 @@ public sealed class AiCopilotService : IDisposable
     private static string Truncate(string s, int max) =>
         string.IsNullOrWhiteSpace(s) ? "" : (s.Length <= max ? s : s[..max] + "...");
 
-    public void Dispose() => _httpClient.Dispose();
+    private void ScheduleVoiceTimer(TimeSpan delay, string reason, string language)
+    {
+        var token = _timerCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delay, token);
+                string alert = $"Temporizador completado: {reason}.";
+                CopilotMessageAdded?.Invoke("COVAS ⏱", alert);
+                if (_configService.Current.AiSpeakReplies)
+                    _speechService.SpeakCustomText(NormalizeTextForSpeech(alert, language));
+            }
+            catch (OperationCanceledException)
+            {
+                // Application shutting down.
+            }
+        }, token);
+    }
+
+    public void Dispose()
+    {
+        try { _timerCts.Cancel(); } catch { }
+        _timerCts.Dispose();
+        _httpClient.Dispose();
+    }
 }

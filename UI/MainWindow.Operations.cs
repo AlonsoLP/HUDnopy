@@ -86,13 +86,28 @@ public partial class MainWindow
     }
 
 
+    private List<BackpackItem>? _lastShipLockerSource;
+    private string _lastShipLockerQuery = "";
+    private string _lastShipLockerLang = "";
+
     private void UpdateShipLockerUi(ShipState s)
     {
         if (GridShipLocker is null || TxtShipLockerStatus is null)
             return;
 
-        var text = OperationsTranslations.ForLanguage(_uiLanguage);
         string query = TxtShipLockerSearch?.Text.Trim() ?? "";
+        if (ReferenceEquals(_lastShipLockerSource, s.ShipLockerInventory) &&
+            string.Equals(_lastShipLockerQuery, query, StringComparison.Ordinal) &&
+            string.Equals(_lastShipLockerLang, _uiLanguage, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastShipLockerSource = s.ShipLockerInventory;
+        _lastShipLockerQuery = query;
+        _lastShipLockerLang = _uiLanguage;
+
+        var text = OperationsTranslations.ForLanguage(_uiLanguage);
         var items = string.IsNullOrEmpty(query)
             ? s.ShipLockerInventory
             : s.ShipLockerInventory.Where(item =>
@@ -314,24 +329,270 @@ public partial class MainWindow
         if (!double.TryParse(TxtTargetLat.Text.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double targetLat) ||
             !double.TryParse(TxtTargetLon.Text.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double targetLon))
         {
+            if (TxtSurfaceCompassTape is not null)
+                TxtSurfaceCompassTape.Visibility = Visibility.Collapsed;
             TxtSurfaceGuidance.Text = flight["surfaceGuidancePrompt"];
             return;
         }
 
         if (!s.HasLatLong)
         {
+            if (TxtSurfaceCompassTape is not null)
+                TxtSurfaceCompassTape.Visibility = Visibility.Collapsed;
             TxtSurfaceGuidance.Text = flight["noSurface"];
             return;
         }
 
-        double bearing = ExobiologyPredictor.CalculateSurfaceBearingDegrees(s.Latitude, s.Longitude, targetLat, targetLon);
-        double distMeters = s.PlanetRadius > 0
-            ? ExobiologyPredictor.CalculateSurfaceDistanceMeters(s.Latitude, s.Longitude, targetLat, targetLon, s.PlanetRadius)
-            : 0;
-        string distDisplay = distMeters >= 1000
-            ? $"{(distMeters / 1000.0).ToString("0.00", culture)} km"
-            : $"{Math.Round(distMeters).ToString("N0", culture)} m";
-        TxtSurfaceGuidance.Text = string.Format(culture, flight["surfaceGuidanceResult"], bearing.ToString("0", culture), distDisplay);
+        var solution = SurfaceNavigationService.Compute(s.Latitude, s.Longitude, s.Heading, targetLat, targetLon, s.PlanetRadius);
+        if (TxtSurfaceCompassTape is not null)
+        {
+            TxtSurfaceCompassTape.Text = $"{solution.SteeringArrow}  {solution.CompassTape}";
+            TxtSurfaceCompassTape.Visibility = Visibility.Visible;
+        }
+
+        string distDisplay = SurfaceNavigationService.FormatDistance(solution.DistanceMeters);
+        TxtSurfaceGuidance.Text = $"{solution.SteeringArrow} " + string.Format(culture, flight["surfaceGuidanceResult"], solution.BearingDegrees.ToString("0", culture), distDisplay);
+    }
+
+    private void BtnTargetLastExoSample_Click(object sender, RoutedEventArgs e)
+    {
+        var tracker = _fileWatcher.State.ExobiologyTracker;
+        if (tracker?.LastSampleLatitude is double lat && tracker.LastSampleLongitude is double lon)
+        {
+            TxtTargetLat.Text = lat.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture);
+            TxtTargetLon.Text = lon.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture);
+            UpdateSurfaceGuidance(_fileWatcher.State);
+            return;
+        }
+        TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["noExoSampleCoords"];
+    }
+
+    /// <summary>
+    /// Displays active missions grouped by destination star system and warns about missing delivery cargo.
+    /// </summary>
+    private void UpdateMissionsGroupedSummary(ShipState s)
+    {
+        if (TxtMissionsGroupedSummary is null || TxtMissionsCargoWarning is null)
+            return;
+
+        if (s.ActiveMissions.Count == 0)
+        {
+            TxtMissionsGroupedSummary.Visibility = Visibility.Collapsed;
+            TxtMissionsCargoWarning.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+
+        var groups = s.ActiveMissions
+            .Where(static m => !string.IsNullOrWhiteSpace(m.DestinationSystem))
+            .GroupBy(static m => m.DestinationSystem, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(static g => g.Count())
+            .ThenByDescending(static g => g.Sum(static m => m.Reward ?? 0))
+            .Take(5)
+            .Select(g =>
+            {
+                long totalCr = g.Sum(static m => m.Reward ?? 0);
+                int tons = g.Where(static m => !string.IsNullOrWhiteSpace(m.Commodity) && m.Count.HasValue).Sum(static m => m.Count!.Value);
+                string crText = totalCr >= 1_000_000 ? $"{(totalCr / 1_000_000.0).ToString("0.0", culture)}M CR" : $"{totalCr.ToString("N0", culture)} CR";
+                return tons > 0 ? $"{g.Key} ({g.Count()} · {crText} · {tons} t)" : $"{g.Key} ({g.Count()} · {crText})";
+            })
+            .ToList();
+
+        if (groups.Count > 0)
+        {
+            TxtMissionsGroupedSummary.Text = string.Format(ops["missionsBySystem"], string.Join("  |  ", groups));
+            TxtMissionsGroupedSummary.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            TxtMissionsGroupedSummary.Visibility = Visibility.Collapsed;
+        }
+
+        // Check if active commodity haulage missions require more tons than currently carried.
+        var requiredByCommodity = s.ActiveMissions
+            .Where(static m => !string.IsNullOrWhiteSpace(m.Commodity) && m.Count is > 0 && m.PassengerMission != true)
+            .GroupBy(static m => m.Commodity.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Name: g.Key, Required: g.Sum(static m => m.Count!.Value)))
+            .ToList();
+
+        var missing = new List<string>();
+        foreach (var req in requiredByCommodity)
+        {
+            int carried = s.CargoInventory
+                .Where(c => string.Equals(c.Name?.Trim(), req.Name, StringComparison.OrdinalIgnoreCase))
+                .Sum(static c => c.Count);
+            if (carried < req.Required)
+                missing.Add($"{req.Name} ({carried}/{req.Required} t)");
+        }
+
+        if (missing.Count > 0)
+        {
+            TxtMissionsCargoWarning.Text = string.Format(ops["missionsMissingCargo"], string.Join(", ", missing.Take(4)));
+            TxtMissionsCargoWarning.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            TxtMissionsCargoWarning.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>
+    /// Cross-references carried cargo against the current station market, colonisation needs, and Fleet Carrier cargo.
+    /// </summary>
+    private void UpdateCargoTradeProfitUi(ShipState s)
+    {
+        if (TxtCargoTradeProfitSummary is null)
+            return;
+
+        if (s.CargoInventory.Count == 0)
+        {
+            TxtCargoTradeProfitSummary.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var notes = new List<string>();
+
+        if (s.Market?.Items is { Count: > 0 })
+        {
+            long totalSell = 0;
+            long totalEstProfit = 0;
+            var bestItems = new List<(string Name, long Profit)>();
+
+            foreach (var cargo in s.CargoInventory)
+            {
+                if (cargo.Count <= 0 || string.IsNullOrWhiteSpace(cargo.Name))
+                    continue;
+                var mkt = s.Market.Items.FirstOrDefault(m =>
+                    string.Equals(m.DisplayName, cargo.Name, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(m.Name, cargo.Name, StringComparison.OrdinalIgnoreCase));
+                if (mkt is null || mkt.SellPrice <= 0)
+                    continue;
+
+                long sellVal = mkt.SellPrice * cargo.Count;
+                totalSell += sellVal;
+                long unitProfit = mkt.MeanPrice > 0 ? mkt.SellPrice - mkt.MeanPrice : 0;
+                if (unitProfit > 0)
+                {
+                    long p = unitProfit * cargo.Count;
+                    totalEstProfit += p;
+                    bestItems.Add((cargo.Name, p));
+                }
+            }
+
+            if (totalSell > 0)
+            {
+                string bestStr = bestItems.Count > 0
+                    ? " · " + string.Join(", ", bestItems.OrderByDescending(static x => x.Profit).Take(3).Select(x => $"{x.Name} (+{x.Profit.ToString("N0", culture)} CR)"))
+                    : "";
+                notes.Add(string.Format(culture, ops["cargoMarketSummary"], totalSell.ToString("N0", culture), totalEstProfit.ToString("N0", culture), bestStr));
+            }
+        }
+
+        if (s.Colonisation?.Resources is { Count: > 0 })
+        {
+            var colMatches = s.CargoInventory
+                .Where(c => s.Colonisation.Resources.Any(r =>
+                    r.RequiredAmount > r.ProvidedAmount &&
+                    string.Equals(r.DisplayName, c.Name, StringComparison.OrdinalIgnoreCase)))
+                .Select(c => $"{c.Name} ({c.Count} t)")
+                .ToList();
+            if (colMatches.Count > 0)
+                notes.Add(string.Format(ops["cargoColonisationMatches"], string.Join(", ", colMatches)));
+        }
+
+        if (notes.Count > 0)
+        {
+            TxtCargoTradeProfitSummary.Text = string.Join("  |  ", notes);
+            TxtCargoTradeProfitSummary.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            TxtCargoTradeProfitSummary.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private string? _lastWishlistSignature;
+
+    /// <summary>
+    /// Refreshes the Engineering Blueprint Wishlist grid against live ship and Odyssey material inventories.
+    /// </summary>
+    private void UpdateEngineeringWishlistUi(ShipState s)
+    {
+        if (GridEngineeringWishlist is null || TxtEngineeringWishlistSummary is null)
+            return;
+
+        var selected = _configService.Current.EngineeringWishlistBlueprints ?? new List<string>();
+        var rows = EngineeringWishlistService.Evaluate(selected, s);
+        string signature = $"{_uiLanguage}|{string.Join(",", selected)}|{string.Join(";", rows.Select(static r => $"{r.MaterialName}:{r.Owned}/{r.Required}"))}";
+        if (string.Equals(_lastWishlistSignature, signature, StringComparison.Ordinal))
+            return;
+
+        _lastWishlistSignature = signature;
+        var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+        GridEngineeringWishlist.ItemsSource = rows;
+
+        if (selected.Count == 0)
+        {
+            TxtEngineeringWishlistSummary.Text = ops["wishlistEmpty"];
+            return;
+        }
+
+        int ready = rows.Count(static r => r.Missing == 0);
+        int missing = rows.Count - ready;
+        TxtEngineeringWishlistSummary.Text = string.Format(ops["wishlistProgress"], selected.Count, ready, rows.Count, missing);
+    }
+
+    private void BtnAddBlueprintToWishlist_Click(object sender, RoutedEventArgs e)
+    {
+        if (CmbEngineeringBlueprint?.SelectedValue is not string bpId || string.IsNullOrWhiteSpace(bpId))
+            return;
+        _configService.Current.EngineeringWishlistBlueprints ??= new List<string>();
+        _configService.Current.EngineeringWishlistBlueprints.Add(bpId);
+        _configService.Save();
+        _lastWishlistSignature = null;
+        UpdateEngineeringWishlistUi(_fileWatcher.State);
+    }
+
+    private void BtnClearWishlist_Click(object sender, RoutedEventArgs e)
+    {
+        _configService.Current.EngineeringWishlistBlueprints?.Clear();
+        _configService.Save();
+        _lastWishlistSignature = null;
+        UpdateEngineeringWishlistUi(_fileWatcher.State);
+    }
+
+    private async void BtnWishlistFindTrader_Click(object sender, RoutedEventArgs e)
+    {
+        var s = _fileWatcher.State;
+        if (s.StarPos is not { Length: 3 })
+        {
+            TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
+            return;
+        }
+
+        BtnWishlistFindTrader.IsEnabled = false;
+        try
+        {
+            var (_, results, _) = await _spanshSystemDataService.SearchNearestServicesAsync("material_trader", s.CurrentSystem, s.StarPos);
+            if (results.Count > 0)
+            {
+                var best = results[0];
+                CopySystemToClipboard(best.SystemName);
+                TxtStatusBarLeft.Text = $"Material Trader: {best.SystemName} / {best.StationName} ({best.DistanceDisplay})";
+            }
+            else
+            {
+                TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
+            }
+        }
+        finally
+        {
+            BtnWishlistFindTrader.IsEnabled = true;
+        }
     }
 
     private void SurfaceTarget_TextChanged(object sender, TextChangedEventArgs e) =>
@@ -553,17 +814,19 @@ public partial class MainWindow
         ViewCockpit.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         ViewNavigation.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         ViewOperations.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
-        ViewActivity.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
-        ViewControls.Visibility = index == 5 ? Visibility.Visible : Visibility.Collapsed;
-        ViewConfig.Visibility = index == 6 ? Visibility.Visible : Visibility.Collapsed;
+        ViewInventory.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
+        ViewActivity.Visibility = index == 5 ? Visibility.Visible : Visibility.Collapsed;
+        ViewControls.Visibility = index == 6 ? Visibility.Visible : Visibility.Collapsed;
+        ViewConfig.Visibility = index == 7 ? Visibility.Visible : Visibility.Collapsed;
 
         NavDashboard.IsChecked = index == 0;
         NavCockpit.IsChecked = index == 1;
         NavNavigation.IsChecked = index == 2;
         NavOperations.IsChecked = index == 3;
-        NavActivity.IsChecked = index == 4;
-        NavControls.IsChecked = index == 5;
-        NavConfig.IsChecked = index == 6;
+        NavInventory.IsChecked = index == 4;
+        NavActivity.IsChecked = index == 5;
+        NavControls.IsChecked = index == 6;
+        NavConfig.IsChecked = index == 7;
         BuildSectionNavigation(index);
 
         FrameworkElement activeView = index switch
@@ -572,9 +835,10 @@ public partial class MainWindow
             1 => ViewCockpit,
             2 => ViewNavigation,
             3 => ViewOperations,
-            4 => ViewActivity,
-            5 => ViewControls,
-            6 => ViewConfig,
+            4 => ViewInventory,
+            5 => ViewActivity,
+            6 => ViewControls,
+            7 => ViewConfig,
             _ => ViewDashboard
         };
 
@@ -595,7 +859,7 @@ public partial class MainWindow
                 .FirstOrDefault(element => element?.Visibility == Visibility.Visible)
             : null;
         SectionNavigationItems.Children.Clear();
-        if (viewIndex == 5)
+        if (viewIndex == 6)
         {
             BuildBindingCategoryNavigation();
             return;
@@ -613,46 +877,52 @@ public partial class MainWindow
             {
                 (text["status-resources"], (FrameworkElement)CockpitResourcesSection),
                 (text["ship-systems"], CockpitSystemsSection),
+                (text["ship-modules"], CockpitModulesSection),
                 (text["on-foot"], CockpitOnFootSection),
-                (text["ship-modules"], CockpitModulesSection)
+                (text["combat"], OperationsCombatSection)
             },
             2 => new[]
             {
                 (text["current-system"], (FrameworkElement)NavigationSystemSection),
-                (text["carrier"], NavigationCarrierSection),
                 (text["route"], NavigationRouteSection),
                 (text["exploration"], NavigationBodiesSection),
-                (text["surface-nav"], NavigationSurfaceSection)
+                (text["surface-nav"], NavigationSurfaceSection),
+                (text["carrier"], NavigationCarrierSection),
+                (text["spansh-services"], NavigationSpanshServicesSection)
             },
             3 => new[]
             {
+                (text["missions"], (FrameworkElement)OperationsMissionsSection),
+                (text["passengers"], OperationsPassengersSection),
+                (text["mining"], OperationsMiningSection),
+                (text["colonisation"], ActivityColonisationSection)
+            },
+            4 => new[]
+            {
                 (text["cargo"], (FrameworkElement)OperationsCargoSection),
                 (text["materials"], OperationsMaterialsSection),
-                (text["missions"], OperationsMissionsSection),
-                (text["passengers"], OperationsPassengersSection),
-                (text["backpack"], OperationsBackpackSection),
-                (text["ship-locker"], OperationsShipLockerSection),
                 (text["engineers"], OperationsEngineersSection),
-                (text["mining"], OperationsMiningSection),
-                (text["combat"], OperationsCombatSection),
+                (text["backpack"], OperationsBackpackSection),
                 (text["market"], OperationsMarketSection),
                 (text["outfitting"], OperationsOutfittingSection),
                 (text["shipyard"], OperationsShipyardSection)
             },
-            4 => new[]
+            5 => new[]
             {
-                (text["exploration-milestones"], (FrameworkElement)ActivityMilestonesSection),
-                (text["journal"], ActivityJournalSection),
-                (text["commander-profile"], ActivityProfileSection),
-                (text["colonisation"], ActivityColonisationSection),
+                (text["ai-copilot"], (FrameworkElement)ActivityAiSection),
                 (text["galnet"], ActivityGalnetSection),
-                (text["ai-copilot"], ActivityAiSection)
+                (text["exploration-milestones"], ActivityMilestonesSection),
+                (text["journal"], ActivityJournalSection),
+                (text["commander-profile"], ActivityProfileSection)
             },
-            6 => new[]
+            7 => new[]
             {
                 (text["interface"], (FrameworkElement)ConfigInterfaceSection),
                 (text["paths"], ConfigPathsSection),
                 (text["web-server"], ConfigWebSection),
+                (text["integrations"], ConfigIntegrationsSection),
+                (text["ai-settings"], ConfigAiSection),
+                (text["voice-audio"], ConfigVoiceSection),
                 (text["alerts"], ConfigAlertsSection),
                 (text["diagnostics"], ConfigDiagnosticsSection),
             },
@@ -1346,6 +1616,7 @@ public partial class MainWindow
             SectionNavigationPanel.Visibility = Visibility.Collapsed;
             SwitchView(0);
             _isMiniHud = true;
+            UpdateMiniHudContextUi(_fileWatcher.State);
             BtnToggleMiniHud.SetResourceReference(BackgroundProperty, "HudAccentBrush");
             BtnToggleMiniHud.SetResourceReference(ForegroundProperty, "HudBgBrush");
             BtnToggleMiniHud.ToolTip = text["miniHudExit"];
@@ -1362,6 +1633,7 @@ public partial class MainWindow
         Height = _miniHudBounds.Height;
         WindowState = _miniHudState;
         _isMiniHud = false;
+        UpdateMiniHudContextUi(_fileWatcher.State);
         BtnToggleMiniHud.SetResourceReference(BackgroundProperty, "HudPanelAltBrush");
         BtnToggleMiniHud.SetResourceReference(ForegroundProperty, "HudTextBrush");
         BtnToggleMiniHud.ToolTip = text["miniHud"];

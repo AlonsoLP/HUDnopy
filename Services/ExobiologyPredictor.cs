@@ -97,39 +97,13 @@ internal static class ExobiologyPredictor
     public static double CalculateSurfaceDistanceMeters(
         double lat1Deg, double lon1Deg,
         double lat2Deg, double lon2Deg,
-        double radiusMeters)
-    {
-        if (radiusMeters <= 0 || !double.IsFinite(radiusMeters))
-            return 0;
-
-        const double degToRad = Math.PI / 180.0;
-        double lat1 = lat1Deg * degToRad;
-        double lat2 = lat2Deg * degToRad;
-        double dLat = (lat2Deg - lat1Deg) * degToRad;
-        double dLon = (lon2Deg - lon1Deg) * degToRad;
-
-        double sinHalfLat = Math.Sin(dLat * 0.5);
-        double sinHalfLon = Math.Sin(dLon * 0.5);
-        double a = sinHalfLat * sinHalfLat + Math.Cos(lat1) * Math.Cos(lat2) * sinHalfLon * sinHalfLon;
-        double c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(Math.Max(0.0, 1.0 - a)));
-        return radiusMeters * c;
-    }
+        double radiusMeters) =>
+        SurfaceNavigationService.CalculateDistanceMeters(lat1Deg, lon1Deg, lat2Deg, lon2Deg, radiusMeters);
 
     public static double CalculateSurfaceBearingDegrees(
         double lat1Deg, double lon1Deg,
-        double lat2Deg, double lon2Deg)
-    {
-        const double degToRad = Math.PI / 180.0;
-        const double radToDeg = 180.0 / Math.PI;
-        double lat1 = lat1Deg * degToRad;
-        double lat2 = lat2Deg * degToRad;
-        double dLon = (lon2Deg - lon1Deg) * degToRad;
-
-        double y = Math.Sin(dLon) * Math.Cos(lat2);
-        double x = Math.Cos(lat1) * Math.Sin(lat2) - Math.Sin(lat1) * Math.Cos(lat2) * Math.Cos(dLon);
-        double bearing = (Math.Atan2(y, x) * radToDeg + 360.0) % 360.0;
-        return double.IsFinite(bearing) ? Math.Round(bearing, 0) % 360 : 0;
-    }
+        double lat2Deg, double lon2Deg) =>
+        Math.Round(SurfaceNavigationService.CalculateBearingDegrees(lat1Deg, lon1Deg, lat2Deg, lon2Deg), 0) % 360;
 
     public static void UpdateBodyInsights(ExplorationBodyItem body)
     {

@@ -45,6 +45,8 @@ public class WebServerService : IDisposable
     private readonly AlertService _alertService;
     private readonly SpanshSystemDataService _spanshSystemDataService;
     private readonly AiCopilotService _aiCopilot;
+    private readonly GalaxyStatusService _galaxyStatus;
+    private readonly GalnetService _galnetService;
 
     private WebApplication? _app;
     private CancellationTokenSource? _cts;
@@ -78,7 +80,9 @@ public class WebServerService : IDisposable
         InputSimulatorService inputSimulator,
         AlertService alertService,
         SpanshSystemDataService spanshSystemDataService,
-        AiCopilotService aiCopilot)
+        AiCopilotService aiCopilot,
+        GalaxyStatusService galaxyStatus,
+        GalnetService galnetService)
     {
         _configService = configService;
         _fileWatcher = fileWatcher;
@@ -87,12 +91,16 @@ public class WebServerService : IDisposable
         _alertService = alertService;
         _spanshSystemDataService = spanshSystemDataService;
         _aiCopilot = aiCopilot;
+        _galaxyStatus = galaxyStatus;
+        _galnetService = galnetService;
 
         _fileWatcher.StateUpdated += state => { _ = BroadcastStateAsync(); };
         _bindingsService.BindingsUpdated += binds => { _ = BroadcastStateAsync(); };
         _alertService.AlertsChanged += () => { _ = BroadcastStateAsync(); };
         _spanshSystemDataService.StateChanged += state => { _ = BroadcastStateAsync(); };
         _configService.ConfigChanged += config => { _ = BroadcastStateAsync(); };
+        _galaxyStatus.StatusUpdated += snap => { _ = BroadcastStateAsync(); };
+        _galnetService.ArticlesUpdated += () => { _ = BroadcastStateAsync(); };
     }
 
     public async Task StartAsync()
@@ -282,6 +290,20 @@ public class WebServerService : IDisposable
                     reply,
                     provider = _aiCopilot.GetActiveProviderSummary()
                 }));
+            });
+
+            app.MapPost("/api/galnet/refresh", async (HttpContext context) =>
+            {
+                var (ok, message) = await _galnetService.RefreshAsync(_configService.Current.InterfaceLanguage);
+                context.Response.ContentType = "application/json; charset=utf-8";
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new { ok, message, count = _galnetService.Articles.Count }));
+            });
+
+            app.MapPost("/api/galaxy-status/refresh", async (HttpContext context) =>
+            {
+                var snap = await _galaxyStatus.RefreshAsync();
+                context.Response.ContentType = "application/json; charset=utf-8";
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new { ok = true, serverMessage = snap.ServerMessage }));
             });
 
             app.MapPost("/api/theme", async (HttpContext context) =>
@@ -491,7 +513,37 @@ public class WebServerService : IDisposable
             languageSettings = LanguageSettingsTranslations.ForLanguage(language),
             presetName = _bindingsService.UsingDefaultBindings ? DeckTranslations.ForLanguage(language)["defaultProfile"] : _bindingsService.ActivePresetName,
             alerts = _alertService.Alerts,
-            activeAlerts = _alertService.ActiveAlerts
+            activeAlerts = _alertService.ActiveAlerts,
+            galaxyStatus = _galaxyStatus.Current,
+            landingPad = state.AssignedLandingPad is int pad && pad > 0
+                ? BuildLandingPadWebView(pad, state.AssignedLandingStation, state.AssignedLandingStationType, state.CurrentSystem, language)
+                : null,
+            loadoutLinks = string.IsNullOrWhiteSpace(state.LastLoadoutJson)
+                ? null
+                : new
+                {
+                    edsyUrl = ShipLoadoutExportService.BuildEdsyUrl(state.LastLoadoutJson),
+                    coriolisUrl = ShipLoadoutExportService.BuildCoriolisUrl(state.LastLoadoutJson)
+                },
+            engineeringWishlist = EngineeringWishlistService.Evaluate(_configService.Current.EngineeringWishlistBlueprints, state),
+            galnetArticles = _galnetService.Articles.Take(15).Select(static a => new
+            {
+                a.Title,
+                Date = a.DateDisplay,
+                a.Body
+            }).ToArray()
+        };
+    }
+
+    private static object BuildLandingPadWebView(int pad, string station, string stationType, string currentSystem, string language)
+    {
+        var info = LandingPadLocatorService.Resolve(pad, stationType);
+        return new
+        {
+            padNumber = pad,
+            station = string.IsNullOrWhiteSpace(station) ? currentSystem : station,
+            guidance = info.FormatGuidance(language),
+            bayIndicator = info.BuildBayIndicator()
         };
     }
 

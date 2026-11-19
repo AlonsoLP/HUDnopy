@@ -87,7 +87,7 @@
     "materials": "Materiais",
     "missions": "Missões",
     "passengers": "Passageiros",
-    "backpack": "Mochila",
+    "backpack": "Odyssey (Mochila e Armário)",
     "market": "Mercado",
     "outfitting": "Equipamento",
     "shipyard": "Estaleiro",
@@ -97,7 +97,7 @@
     "colonisation": "Colonização",
     "interface": "Aparência e janela",
     "paths": "Jogo, arquivos e controles",
-    "web-server": "Conectividade e integrações",
+    "web-server": "Servidor Web",
     "alerts": "Alertas",
     "diagnostics": "Diagnóstico",
     "ship-modules": "Módulos e veículos",
@@ -107,7 +107,11 @@
     "mining": "Mineração",
     "combat": "Combate e massacres",
     "galnet": "GalNet",
-    "ai-copilot": "Copiloto IA"
+    "ai-copilot": "Copiloto IA",
+    "spansh-services": "Serviços Spansh",
+    "integrations": "Integrações",
+    "ai-settings": "Copiloto IA",
+    "voice-audio": "Voz e Áudio"
   },
   "carrier": {
     "identityTitle": "Identificação",
@@ -186,6 +190,11 @@
       "label": "CONFIGURAÇÕES",
       "accessibleName": "Configurações",
       "tooltip": "Preferências do aplicativo"
+    },
+    "inventory": {
+      "label": "INVENTÁRIO",
+      "accessibleName": "Inventário e estação",
+      "tooltip": "Carga, materiais, engenheiros e estação"
     }
   },
   "dashboard": {
@@ -760,7 +769,19 @@
     "spanshRouteCalculating": "Calculando rota no Spansh...",
     "spanshRouteLoaded": "Rota carregada ({0} paradas). Duplo clique copia o sistema.",
     "spanshRouteNextCopied": "Próximo salto copiado: {0}",
-    "carrierCargoTitle": "Porão do porta-naves (Frontier cAPI)"
+    "carrierCargoTitle": "Porão do porta-naves (Frontier cAPI)",
+    "exportEdsy": "🔗 Abrir no EDSY",
+    "exportCoriolis": "🔗 Abrir no Coriolis",
+    "galaxyServerStatus": "Servidores Elite: {0} · Último BGS Tick: {1}",
+    "bgsTickInfo": "Último BGS Tick galáctico: {0} UTC ({1} local · há {2})",
+    "bgsTickUnavailable": "Último BGS Tick galáctico: verificando…",
+    "loadoutExportUnavailable": "Nenhum evento Loadout foi detectado no Journal ainda.",
+    "targetLastExo": "🎯 Última amostra Exo",
+    "noExoSampleCoords": "Nenhuma coordenada de amostra exobiológica ativa.",
+    "carrierUpkeepRunway": "Autonomia financeira estimada: ~{0} sem. (base 5M/sem) · ~{1} sem. / {2} meses (típico 15M/sem)",
+    "carrierJumpVoice10m": "Porta-naves: dez minutos para o salto.",
+    "carrierJumpVoiceLockdown": "Porta-naves: bloqueio de plataformas em andamento. Três minutos para o salto.",
+    "carrierJumpVoice1m": "Porta-naves: um minuto para o salto."
   },
   "spansh": {
     "title": "DADOS DO SPANSH — SISTEMA ATUAL",
@@ -1013,7 +1034,14 @@
     "frontierSyncBtn": "🔄 Sincronizar cAPI",
     "frontierDisconnectBtn": "🔌 Desconectar",
     "frontierConnected": "Conectado à Frontier cAPI (tokens criptografados via DPAPI)",
-    "frontierDisconnected": "Desconectado da Frontier cAPI"
+    "frontierDisconnected": "Desconectado da Frontier cAPI",
+    "aiVerbosityLabel": "Extensão:",
+    "aiCustomPersonalityLabel": "Papel / personalidade personalizada:",
+    "aiWakeWordToggle": "Exigir palavra de ativação no Mãos Livres:",
+    "aiClearMemoryBtn": "🧹 Limpar memória IA",
+    "aiMemoryCleared": "Memória persistente da COVAS limpa.",
+    "aiArrivalBriefingToggle": "Briefing expresso ao chegar ao sistema (nota pessoal, porta-naves, anarquia)",
+    "aiGlobalPttToggle": "Tecla global Push-to-Talk (funciona em tela cheia / VR):"
   },
   "operations": {
     "marketSearch": "Buscar mercadoria pelo nome",
@@ -1136,7 +1164,22 @@
     "aiHandsFreeSpeaking": "🔴 Capturando voz...",
     "aiHandsFreeStatusOn": "Modo mãos livres ativo: fale naturalmente e faça uma pausa para enviar.",
     "storedShipsTitle": "Frota de naves armazenadas (Frontier cAPI)",
-    "communityGoalsTitle": "Objetivos comunitários ativos (Frontier cAPI)"
+    "communityGoalsTitle": "Objetivos comunitários ativos (Frontier cAPI)",
+    "missionsBySystem": "Por sistema: {0}",
+    "missionsMissingCargo": "⚠ Carga de missão faltando no porão: {0}",
+    "wishlistPlannerTitle": "Lista de compras de engenharia (Wishlist)",
+    "wishlistAddBtn": "➕ Adicionar projeto",
+    "wishlistClearBtn": "🗑 Limpar",
+    "wishlistFindTraderBtn": "🔍 Comerciante de Materiais (Spansh)",
+    "wishlistEmpty": "Adicione um ou mais projetos para calcular os materiais faltantes em tempo real.",
+    "wishlistProgress": "Projetos ativos: {0} · Materiais prontos: {1}/{2} · Faltando: {3}",
+    "cargoMarketSummary": "Venda nesta estação: {0} CR (lucro est. vs média: +{1} CR{2})",
+    "cargoColonisationMatches": "★ Carga de colonização no porão: {0}",
+    "expeditionAnalyzeBtn": "📊 Estatísticas históricas",
+    "expeditionExportMdBtn": "📝 Relatório MD",
+    "expeditionSummary": "Journals: {0} · Saltos: {1} ({2} AL) · Sistemas únicos: {3} · ELW: {4} / WW: {5} / AW: {6} · Exobiologia: {7} · Missões: {8} · Ganhos: {9} CR",
+    "aiPreFlightBtn": "✈ Cheque pré-voo",
+    "aiExportChatBtn": "📝 Exportar chat"
   },
   "deck": {
     "title": "CONTROLES E PAINEL DE BOTÕES DO JOGO (.BINDS)",

@@ -26,6 +26,7 @@ public sealed class ApplicationServices
     public SpanshSystemDataService SpanshSystemData { get; }
     public CommunitySyncService CommunitySync { get; }
     public FrontierCapiService FrontierCapi { get; }
+    public GalaxyStatusService GalaxyStatus { get; }
     public GalnetService Galnet { get; }
     public AiCopilotService AiCopilot { get; }
     public WebServerService WebServer { get; }
@@ -45,8 +46,9 @@ public sealed class ApplicationServices
         SpanshSystemData = new SpanshSystemDataService(Configuration, ShipState);
         CommunitySync = new CommunitySyncService(Configuration, ShipState, GameEvents);
         FrontierCapi = new FrontierCapiService(Configuration, ShipState, GameEvents);
+        GalaxyStatus = new GalaxyStatusService();
         Galnet = new GalnetService();
-        AiCopilot = new AiCopilotService(Configuration, ShipState, InputSimulator, SpanshSystemData, CommunitySync, Galnet, AlertSpeech, GameEvents);
-        WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot);
+        AiCopilot = new AiCopilotService(Configuration, ShipState, InputSimulator, SpanshSystemData, CommunitySync, Galnet, GalaxyStatus, AlertSpeech, GameEvents);
+        WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot, GalaxyStatus, Galnet);
     }
 }

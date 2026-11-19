@@ -213,7 +213,9 @@ public partial class EliteFileWatcherService
                     BodyName = body.BodyName,
                     SamplesCollected = sampleNumber,
                     RequiredDistanceMeters = ExobiologyPredictor.GetRequiredDistanceMeters(!string.IsNullOrWhiteSpace(genusName) ? genusName : speciesDisplay),
-                    CurrentDistanceMeters = 0
+                    CurrentDistanceMeters = 0,
+                    LastSampleLatitude = _state.HasLatLong ? _state.Latitude : null,
+                    LastSampleLongitude = _state.HasLatLong ? _state.Longitude : null
                 };
             }
             else if (scanType.Equals("Analyse", StringComparison.OrdinalIgnoreCase))

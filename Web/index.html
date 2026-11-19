@@ -685,6 +685,28 @@
   #activeAlertBanner[hidden] { display: none; }
   #activeAlertBannerTitle { font-size: 1rem; }
   #activeAlertBannerMessage { margin-top: 3px; font-size: .9rem; font-weight: 700; }
+  #webLandingPadBanner {
+    padding: 10px 16px;
+    background: var(--hud-panel-alt);
+    border: 2px solid var(--hud-accent);
+    color: var(--hud-text);
+    font-weight: 800;
+    margin: 10px 14px 0;
+  }
+  #webLandingPadBanner[hidden] { display: none; }
+  .split-mfd-btn {
+    background: var(--hud-panel-alt);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: var(--hud-accent);
+    font: 700 0.78rem 'Consolas', monospace;
+    padding: 5px 10px;
+    cursor: pointer;
+    margin-left: 8px;
+  }
+  .split-mfd-btn.active { background: var(--hud-accent); color: #080A0E; }
+  @media (min-width: 900px) {
+    body.split-mfd #tab-dashboard.active .module-section { display: grid !important; }
+  }
 </style>
 </head>
 <body>
@@ -698,7 +720,9 @@
       </div>
     </div>
     <div class="header-telemetry" id="headerTelemetry"></div>
+    <button id="btnSplitMfd" class="split-mfd-btn" type="button" onclick="toggleSplitMfd()" title="Toggle Split MFD view on wide tablets">⊞ SPLIT MFD</button>
   </header>
+  <div id="webLandingPadBanner" hidden></div>
   <p id="languageWarning" role="status" hidden style="padding:6px 12px;color:var(--hud-muted);"></p>
   <div id="activeAlertBanner" class="alert-critical" role="alert" aria-live="assertive" hidden>
     <div id="activeAlertBannerTitle"></div>
@@ -710,7 +734,8 @@
       <button class="active" data-nav-key="dashboard" title="Resumen general" aria-label="Panel" onclick="switchTab('dashboard', this)"><span class="nav-icon">⌂</span><span class="nav-label">PANEL</span></button>
       <button data-nav-key="flight" title="Estado y controles de vuelo" aria-label="Vuelo" onclick="switchTab('flight', this)"><span class="nav-icon">◉</span><span class="nav-label">VUELO</span></button>
       <button data-nav-key="navigation" title="Sistema actual y ruta" aria-label="Navegación" onclick="switchTab('nav', this)"><span class="nav-icon">⌖</span><span class="nav-label">NAVEGACIÓN</span></button>
-      <button data-nav-key="operations" title="Carga y operaciones" aria-label="Operaciones" onclick="switchTab('operations', this)"><span class="nav-icon">▣</span><span class="nav-label">OPERACIONES</span></button>
+      <button data-nav-key="operations" title="Misiones, minería y colonización" aria-label="Operaciones" onclick="switchTab('operations', this)"><span class="nav-icon">▣</span><span class="nav-label">OPERACIONES</span></button>
+      <button data-nav-key="inventory" title="Carga, materiales, ingenieros y estación" aria-label="Inventario" onclick="switchTab('inventory', this)"><span class="nav-icon">◫</span><span class="nav-label">INVENTARIO</span></button>
       <button data-nav-key="activity" title="Actividad reciente" aria-label="Actividad" onclick="switchTab('activity', this)"><span class="nav-icon">≡</span><span class="nav-label">ACTIVIDAD</span></button>
       <button data-nav-key="controls" title="Botonera y asignaciones" aria-label="Botonera" onclick="switchTab('deck', this)"><span class="nav-icon">&#x2328;&#xFE0E;</span><span class="nav-label">BOTONERA</span></button>
     </nav>
@@ -725,7 +750,8 @@
         <div class="hud-card"><h3 data-dashboard-key="flightResources">Recursos de vuelo</h3><div class="val" id="dashResources">---</div><div id="dashCargo" style="color:var(--hud-muted);margin-top:5px;"></div></div>
       </div>
       <div class="dashboard-overview module-section" data-section-title="Alertas y actividad" data-section-key="alerts-activity">
-        <div class="hud-card wide-card"><h3 data-dashboard-key="sessionStatsTitle">Resumen financiero y estadístico de la sesión</h3><div id="webSessionStatsSummary" style="color:var(--hud-secondary);font-weight:600;">---</div></div>
+        <div class="hud-card wide-card"><h3 data-dashboard-key="sessionStatsTitle">Resumen financiero y estadístico de la sesión</h3><div id="webSessionStatsSummary" style="color:var(--hud-secondary);font-weight:600;">---</div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;"><span id="webGalaxyStatusLine" style="color:var(--hud-muted);font-size:0.8rem;"></span><button class="split-mfd-btn" type="button" onclick="refreshWebGalaxyStatus()">🔄</button></div></div>
+        <div class="hud-card wide-card" id="webCapiSummaryCard" hidden><h3>FRONTIER cAPI — FLEET &amp; COMMUNITY GOALS</h3><div id="webCapiSummary" style="color:var(--hud-text);font-size:0.88rem;"></div></div>
         <div class="hud-card"><h3 data-dashboard-key="visualAlerts">Centro de alertas visuales</h3><div id="alertList" class="alert-list" style="color:var(--hud-muted);">Sin alertas visuales.</div></div>
         <div class="hud-card"><h3 data-dashboard-key="nextRoute">Siguiente etapa de ruta</h3><div id="dashRoute">No hay ruta activa</div></div>
         <div class="hud-card wide-card"><h3 data-dashboard-key="recentActivity">Actividad reciente</h3><div id="dashActivity">Esperando eventos del diario.</div></div>
@@ -822,10 +848,28 @@
             <div id="vehicleStatusText"></div>
           </div>
           <p id="modulesPowerSummary" style="color:var(--hud-secondary);font-weight:700;margin-bottom:4px;"></p>
-          <p id="modulesAmmoSummary" style="color:var(--hud-muted);margin-bottom:10px;"></p>
+          <p id="modulesAmmoSummary" style="color:var(--hud-muted);margin-bottom:8px;"></p>
+          <div id="webLoadoutExportRow" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;" hidden>
+            <a id="webEdsyLink" class="split-mfd-btn" style="text-decoration:none;margin-left:0;" target="_blank" rel="noopener noreferrer" data-flight-key="exportEdsy">🔗 Abrir en EDSY</a>
+            <a id="webCoriolisLink" class="split-mfd-btn" style="text-decoration:none;margin-left:0;" target="_blank" rel="noopener noreferrer" data-flight-key="exportCoriolis">🔗 Abrir en Coriolis</a>
+          </div>
           <div class="table-scroll"><table class="hud-table">
             <thead><tr><th data-translation-key="slot">Ranura</th><th data-translation-key="module">Módulo</th><th data-translation-key="healthCol">Salud</th><th data-translation-key="priority">Prioridad</th><th data-translation-key="powerDraw">Energía</th><th data-translation-key="ammo">Munición</th><th data-translation-key="engineering">Ingeniería</th></tr></thead>
             <tbody id="shipModulesTableBody"></tbody>
+          </table></div>
+        </div>
+        <div class="hud-card operations-section module-section" data-section-title="Combate y Masacres" data-section-key="combat">
+          <h3><span data-operations-key="combatTitle">Sesión de combate, recompensas y masacres</span></h3>
+          <p id="webCombatSessionStats" style="color:var(--hud-secondary);font-weight:700;margin-bottom:10px;"></p>
+          <div class="table-scroll" style="margin-bottom:14px;"><table class="hud-table">
+            <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="kills">Bajas</th><th data-translation-key="pendingCredits">Pendiente</th></tr></thead>
+            <tbody id="combatFactionsTableBody"></tbody>
+          </table></div>
+          <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="massacreTitle">Apilamiento de misiones de masacre</span></h4>
+          <p id="webMassacreSummary" style="color:var(--hud-muted);margin-bottom:10px;"></p>
+          <div class="table-scroll"><table class="hud-table">
+            <thead><tr><th data-translation-key="issuingFaction">Facción emisora</th><th data-translation-key="targetFaction">Facción objetivo</th><th data-translation-key="missionsCol">Misiones</th><th data-translation-key="kills">Bajas</th><th data-translation-key="reward">Recompensa</th></tr></thead>
+            <tbody id="massacreStacksTableBody"></tbody>
           </table></div>
         </div>
       </div>
@@ -881,7 +925,8 @@
           </div>
           <div id="webBgsCard" class="hud-card" style="margin-top:14px;">
             <h3 data-flight-key="bgsTitle">Facciones del sistema (BGS) y Powerplay</h3>
-            <p id="webPowerplaySummary" style="color:var(--hud-secondary);font-weight:700;margin-bottom:8px;"></p>
+            <p id="webPowerplaySummary" style="color:var(--hud-secondary);font-weight:700;margin-bottom:4px;"></p>
+            <p id="webBgsTickInfo" style="color:var(--hud-muted);font-size:0.8rem;margin-bottom:8px;"></p>
             <div class="table-scroll"><table class="hud-table">
               <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="influence">Influencia</th><th data-translation-key="status">Estado</th><th data-translation-key="government">Gobierno</th><th data-translation-key="reputation">Reputación</th></tr></thead>
               <tbody id="webSystemFactionsTableBody"></tbody>
@@ -891,7 +936,8 @@
 
         <div class="hud-card wide-card module-section" data-section-title="Portanaves" data-section-key="carrier">
           <h3 id="carrierTitle"></h3>
-          <p id="carrierStatus" style="color:var(--hud-muted);margin-bottom:10px;"></p>
+          <p id="carrierStatus" style="color:var(--hud-muted);margin-bottom:6px;"></p>
+          <p id="webCarrierCountdown" style="color:var(--hud-secondary);font-family:Consolas,monospace;font-weight:800;font-size:1.05rem;margin-bottom:6px;" hidden></p>
           <div id="carrierCards" class="carrier-cards" hidden></div>
           <div class="table-scroll" id="carrierTableContainer"><table class="hud-table">
             <thead><tr><th id="carrierFieldHeader" data-carrier-key="field"></th><th id="carrierValueHeader" data-carrier-key="value"></th></tr></thead>
@@ -904,6 +950,14 @@
               <input id="webCarrierRouteLy" type="number" value="2500" style="width:110px;padding:6px;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);" />
             </div>
             <div id="webCarrierTritiumResult" style="color:var(--hud-secondary);font-weight:700;"></div>
+            <div id="webCarrierUpkeepRunway" style="color:var(--hud-muted);font-size:0.8rem;margin-top:6px;"></div>
+          </div>
+          <div id="webCarrierCargoSection" style="margin-top:14px;" hidden>
+            <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-flight-key="carrierCargoTitle">Bodega del portanaves (Frontier cAPI)</span></h4>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="commodity">Mercancía</th><th data-translation-key="quantity">Cantidad</th><th data-translation-key="originSystem">Sistema de origen</th></tr></thead>
+              <tbody id="webCarrierCargoTableBody"></tbody>
+            </table></div>
           </div>
           <div style="margin-top:14px;">
             <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-flight-key="fcMaterialsTitle">Mercado de Bartender (FCMaterials.json)</span></h4>
@@ -956,8 +1010,55 @@
     </section>
 
     <section id="tab-operations" class="tab-view">
+      <div class="hud-card operations-section module-section" data-section-title="Misiones" data-section-key="missions">
+        <h3><span data-operations-key="missionsTitle">Misiones activas</span></h3>
+        <p id="missionsStatus" style="color:var(--hud-muted);margin-bottom:6px;">Esperando misiones del Journal.</p>
+        <p id="webMissionsGrouped" style="color:var(--hud-secondary);font-weight:600;margin-bottom:4px;" hidden></p>
+        <p id="webMissionsCargoWarning" style="color:#FFB020;font-weight:700;margin-bottom:8px;" hidden></p>
+        <div class="table-scroll"><table class="hud-table">
+          <thead><tr><th data-translation-key="mission">Misión</th><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="objective">Objetivo</th><th data-translation-key="expires">Vence</th><th data-translation-key="remaining">Restante</th></tr></thead>
+          <tbody id="missionsTableBody"></tbody>
+        </table></div>
+        <div id="webCommunityGoalsSection" style="margin-top:14px;" hidden>
+          <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="communityGoalsTitle">Objetivos comunitarios activos (Frontier cAPI)</span></h4>
+          <div class="table-scroll"><table class="hud-table">
+            <thead><tr><th data-translation-key="goalTitle">Objetivo comunitario</th><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="progress">Progreso</th><th data-translation-key="expires">Vence</th></tr></thead>
+            <tbody id="webCommunityGoalsTableBody"></tbody>
+          </table></div>
+        </div>
+      </div>
+        <div class="hud-card operations-section module-section" data-section-title="Pasajeros" data-section-key="passengers">
+          <h3><span data-operations-key="passengersTitle">Pasajeros</span></h3>
+          <p id="passengerStatus" style="color:var(--hud-muted);margin-bottom:10px;">No hay pasajeros registrados.</p>
+          <div class="table-scroll"><table class="hud-table">
+            <thead><tr><th data-translation-key="mission">Misión</th><th data-translation-key="passengers">Pasajeros</th><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="expires">Vence</th><th data-translation-key="missionId">ID de misión</th></tr></thead>
+            <tbody id="passengerTableBody"></tbody>
+          </table></div>
+        </div>
+        <div class="hud-card operations-section module-section" data-section-title="Minería" data-section-key="mining">
+          <h3><span data-operations-key="miningTitle">Minería en tiempo real (Prospector y sesión)</span></h3>
+          <p id="webProspectorSummary" style="color:var(--hud-accent);font-weight:700;margin-bottom:6px;"></p>
+          <p id="webMiningSessionStats" style="color:var(--hud-secondary);margin-bottom:10px;"></p>
+          <div class="table-scroll"><table class="hud-table">
+            <thead><tr><th data-translation-key="mineral">Mineral</th><th data-translation-key="tons">Toneladas</th></tr></thead>
+            <tbody id="miningRefinedTableBody"></tbody>
+          </table></div>
+        </div>
+        <div class="hud-card module-section" data-section-title="Colonización" data-section-key="colonisation">
+          <h3><span data-operations-key="colonisationTitle">Colonización</span></h3>
+          <p id="colonisationStatus" style="color:var(--hud-muted);margin-bottom:6px;">No hay datos de construcción disponibles.</p>
+          <p id="colonisationProgress" style="color:var(--hud-muted);margin-bottom:10px;">Progreso: ---</p>
+          <div class="table-scroll"><table class="hud-table">
+            <thead><tr><th data-translation-key="resource">Recurso</th><th data-translation-key="required">Requerido</th><th data-translation-key="provided">Aportado</th><th data-translation-key="payment">Pago</th></tr></thead>
+            <tbody id="colonisationTableBody"></tbody>
+          </table></div>
+        </div>
+    </section>
+
+    <section id="tab-inventory" class="tab-view">
       <div class="hud-card operations-section module-section active" data-section-title="Carga" data-section-key="cargo">
         <h3><span data-operations-key="cargoTitle">Manifiesto de carga (Cargo.json)</span></h3>
+        <p id="webCargoTradeProfit" style="color:var(--hud-secondary);font-weight:700;margin-bottom:8px;" hidden></p>
         <div class="table-scroll"><table class="hud-table">
             <thead><tr><th data-translation-key="commodity">Mercancía</th><th data-translation-key="quantity">Cantidad</th><th data-translation-key="status">Estado</th></tr></thead>
             <tbody id="cargoTableBody"></tbody>
@@ -990,20 +1091,19 @@
           <tbody id="materialsTableBody"></tbody>
         </table></div>
       </div>
-      <div class="hud-card operations-section module-section" data-section-title="Misiones" data-section-key="missions">
-        <h3><span data-operations-key="missionsTitle">Misiones activas</span></h3>
-        <p id="missionsStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando misiones del Journal.</p>
-        <div class="table-scroll"><table class="hud-table">
-          <thead><tr><th data-translation-key="mission">Misión</th><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="objective">Objetivo</th><th data-translation-key="expires">Vence</th><th data-translation-key="remaining">Restante</th></tr></thead>
-          <tbody id="missionsTableBody"></tbody>
-        </table></div>
-      </div>
-        <div class="hud-card operations-section module-section" data-section-title="Pasajeros" data-section-key="passengers">
-          <h3><span data-operations-key="passengersTitle">Pasajeros</span></h3>
-          <p id="passengerStatus" style="color:var(--hud-muted);margin-bottom:10px;">No hay pasajeros registrados.</p>
+        <div class="hud-card operations-section module-section" data-section-title="Ingenieros" data-section-key="engineers">
+          <h3><span data-operations-key="engineersTitle">Progreso de ingenieros</span></h3>
+          <p id="engineersStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando evento EngineerProgress del Journal.</p>
+          <div id="webWishlistSection" style="margin-bottom:14px;" hidden>
+            <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="wishlistPlannerTitle">Lista de la compra de ingeniería (Wishlist)</span></h4>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="material">Material</th><th data-translation-key="category">Categoría</th><th data-translation-key="required">Necesario</th><th data-translation-key="current">Actual</th><th data-translation-key="status">Estado</th></tr></thead>
+              <tbody id="webWishlistTableBody"></tbody>
+            </table></div>
+          </div>
           <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="mission">Misión</th><th data-translation-key="passengers">Pasajeros</th><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="expires">Vence</th><th data-translation-key="missionId">ID de misión</th></tr></thead>
-            <tbody id="passengerTableBody"></tbody>
+            <thead><tr><th data-translation-key="engineer">Ingeniero</th><th data-translation-key="status">Estado</th><th data-translation-key="rank">Rango</th></tr></thead>
+            <tbody id="engineersTableBody"></tbody>
           </table></div>
         </div>
         <div class="hud-card operations-section module-section" data-section-title="Mochila" data-section-key="backpack">
@@ -1013,8 +1113,7 @@
             <thead><tr><th data-translation-key="item">Objeto</th><th data-translation-key="type">Tipo</th><th data-translation-key="quantity">Cantidad</th></tr></thead>
             <tbody id="backpackTableBody"></tbody>
           </table></div>
-        </div>
-        <div class="hud-card operations-section module-section" data-section-title="Taquilla de la nave" data-section-key="ship-locker">
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--hud-border);">
           <h3><span data-operations-key="shipLockerTitle">Taquilla de la nave (ShipLocker.json)</span></h3>
           <p id="shipLockerStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando datos de ShipLocker.json.</p>
           <div class="table-scroll"><table class="hud-table">
@@ -1022,36 +1121,6 @@
             <tbody id="shipLockerTableBody"></tbody>
           </table></div>
         </div>
-        <div class="hud-card operations-section module-section" data-section-title="Ingenieros" data-section-key="engineers">
-          <h3><span data-operations-key="engineersTitle">Progreso de ingenieros</span></h3>
-          <p id="engineersStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando evento EngineerProgress del Journal.</p>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="engineer">Ingeniero</th><th data-translation-key="status">Estado</th><th data-translation-key="rank">Rango</th></tr></thead>
-            <tbody id="engineersTableBody"></tbody>
-          </table></div>
-        </div>
-        <div class="hud-card operations-section module-section" data-section-title="Minería" data-section-key="mining">
-          <h3><span data-operations-key="miningTitle">Minería en tiempo real (Prospector y sesión)</span></h3>
-          <p id="webProspectorSummary" style="color:var(--hud-accent);font-weight:700;margin-bottom:6px;"></p>
-          <p id="webMiningSessionStats" style="color:var(--hud-secondary);margin-bottom:10px;"></p>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="mineral">Mineral</th><th data-translation-key="tons">Toneladas</th></tr></thead>
-            <tbody id="miningRefinedTableBody"></tbody>
-          </table></div>
-        </div>
-        <div class="hud-card operations-section module-section" data-section-title="Combate y Masacres" data-section-key="combat">
-          <h3><span data-operations-key="combatTitle">Sesión de combate, recompensas y masacres</span></h3>
-          <p id="webCombatSessionStats" style="color:var(--hud-secondary);font-weight:700;margin-bottom:10px;"></p>
-          <div class="table-scroll" style="margin-bottom:14px;"><table class="hud-table">
-            <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="kills">Bajas</th><th data-translation-key="pendingCredits">Pendiente</th></tr></thead>
-            <tbody id="combatFactionsTableBody"></tbody>
-          </table></div>
-          <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="massacreTitle">Apilamiento de misiones de masacre</span></h4>
-          <p id="webMassacreSummary" style="color:var(--hud-muted);margin-bottom:10px;"></p>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="issuingFaction">Facción emisora</th><th data-translation-key="targetFaction">Facción objetivo</th><th data-translation-key="missionsCol">Misiones</th><th data-translation-key="kills">Bajas</th><th data-translation-key="reward">Recompensa</th></tr></thead>
-            <tbody id="massacreStacksTableBody"></tbody>
-          </table></div>
         </div>
         <div class="hud-card operations-section module-section" data-section-title="Mercado" data-section-key="market">
           <h3><span data-operations-key="marketTitle">Mercado</span></h3>
@@ -1081,10 +1150,36 @@
             <thead><tr><th data-translation-key="ship">Nave</th><th data-translation-key="price">Precio</th></tr></thead>
             <tbody id="shipyardTableBody"></tbody>
           </table></div>
+          <div id="webStoredShipsSection" style="margin-top:14px;" hidden>
+            <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="storedShipsTitle">Flota de naves almacenadas (Frontier cAPI)</span></h4>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="ship">Nave</th><th data-translation-key="shipName">Nombre</th><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="value">Valor</th></tr></thead>
+              <tbody id="webStoredShipsTableBody"></tbody>
+            </table></div>
+          </div>
         </div>
     </section>
 
     <section id="tab-activity" class="tab-view">
+        <div class="hud-card module-section" data-section-title="Copiloto IA" data-section-key="ai-copilot">
+          <h3><span data-operations-key="aiCopilotTitle">Copiloto IA Conversacional (COVAS)</span></h3>
+          <div id="webAiChatLog" style="min-height:180px;max-height:360px;overflow-y:auto;background:#080A0E;border:1px solid var(--hud-border);padding:10px;margin-bottom:10px;white-space:pre-wrap;font-size:0.88rem;line-height:1.45;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input id="webAiPrompt" type="text" style="flex:1;min-width:180px;padding:10px;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);" onkeydown="if(event.key==='Enter')sendWebAiPrompt();" />
+            <button class="deck-button" style="min-height:42px;padding:0 12px;" onclick="sendWebAiPreFlight()" data-operations-key="aiPreFlightBtn">✈ Chequeo pre-vuelo</button>
+            <button class="deck-button" style="min-height:42px;padding:0 12px;" onclick="exportWebAiChat()" data-operations-key="aiExportChatBtn">📝 Exportar chat</button>
+            <button id="btnWebAiMic" class="deck-button" style="min-height:42px;padding:0 14px;" onclick="toggleWebAiVoice()">🎤</button>
+            <button id="btnWebAiSend" class="deck-button" style="min-height:42px;padding:0 16px;" onclick="sendWebAiPrompt()" data-operations-key="aiSend">➤ Enviar</button>
+          </div>
+        </div>
+        <div class="hud-card module-section" data-section-title="GalNet" data-section-key="galnet">
+          <h3><span data-operations-key="galnetTitle">GalNet News</span><button class="split-mfd-btn" type="button" onclick="refreshWebGalnet()">🔄</button></h3>
+          <div class="table-scroll" style="max-height:220px;margin-bottom:10px;"><table class="hud-table">
+            <thead><tr><th data-translation-key="date">Fecha</th><th data-translation-key="headline">Titular</th></tr></thead>
+            <tbody id="webGalnetTableBody"></tbody>
+          </table></div>
+          <div id="webGalnetBody" style="background:#080A0E;border:1px solid var(--hud-border);padding:10px;white-space:pre-wrap;font-size:0.88rem;line-height:1.45;color:var(--hud-text);"></div>
+        </div>
       <div class="hud-card module-section active" data-section-title="Hitos de exploración" data-section-key="exploration-milestones">
         <h3><span data-operations-key="milestonesTitle">Hitos de exploración</span></h3>
         <div class="table-scroll"><table class="hud-table">
@@ -1111,24 +1206,6 @@
             <thead><tr><th data-translation-key="category">Categoría</th><th data-translation-key="field">Dato</th><th data-translation-key="value">Valor</th></tr></thead>
             <tbody id="commanderProfileTableBody"></tbody>
           </table></div>
-        </div>
-        <div class="hud-card module-section" data-section-title="Colonización" data-section-key="colonisation">
-          <h3><span data-operations-key="colonisationTitle">Colonización</span></h3>
-          <p id="colonisationStatus" style="color:var(--hud-muted);margin-bottom:6px;">No hay datos de construcción disponibles.</p>
-          <p id="colonisationProgress" style="color:var(--hud-muted);margin-bottom:10px;">Progreso: ---</p>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="resource">Recurso</th><th data-translation-key="required">Requerido</th><th data-translation-key="provided">Aportado</th><th data-translation-key="payment">Pago</th></tr></thead>
-            <tbody id="colonisationTableBody"></tbody>
-          </table></div>
-        </div>
-        <div class="hud-card module-section" data-section-title="Copiloto IA" data-section-key="ai-copilot">
-          <h3><span data-operations-key="aiCopilotTitle">Copiloto IA Conversacional (COVAS)</span></h3>
-          <div id="webAiChatLog" style="min-height:180px;max-height:360px;overflow-y:auto;background:#080A0E;border:1px solid var(--hud-border);padding:10px;margin-bottom:10px;white-space:pre-wrap;font-size:0.88rem;line-height:1.45;"></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <input id="webAiPrompt" type="text" style="flex:1;min-width:180px;padding:10px;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);" onkeydown="if(event.key==='Enter')sendWebAiPrompt();" />
-            <button id="btnWebAiMic" class="deck-button" style="min-height:42px;padding:0 14px;" onclick="toggleWebAiVoice()">🎤</button>
-            <button id="btnWebAiSend" class="deck-button" style="min-height:42px;padding:0 16px;" onclick="sendWebAiPrompt()" data-operations-key="aiSend">➤ Enviar</button>
-          </div>
         </div>
     </section>
 
@@ -1428,6 +1505,20 @@
     }
   }
 
+  function toggleSplitMfd() {
+    document.body.classList.toggle('split-mfd');
+    const btn = document.getElementById('btnSplitMfd');
+    if (btn) btn.classList.toggle('active', document.body.classList.contains('split-mfd'));
+  }
+
+  async function refreshWebGalnet() {
+    try { await fetch('/api/galnet/refresh', { method: 'POST' }); } catch {}
+  }
+
+  async function refreshWebGalaxyStatus() {
+    try { await fetch('/api/galaxy-status/refresh', { method: 'POST' }); } catch {}
+  }
+
   function renderState(payload) {
     lastPayload = payload;
     if (payload.sectionLanguage && payload.sectionLanguage !== sectionLanguage) {
@@ -1625,6 +1716,289 @@
       item => formatCount(item.ProvidedAmount),
       item => `${formatCount(item.Payment)} CR`
     ], operations.resourcesEmpty);
+
+    // Full v0.2.0 Desktop <-> Web parity rendering
+    const padBanner = document.getElementById('webLandingPadBanner');
+    if (padBanner) {
+      if (payload.landingPad) {
+        const lp = payload.landingPad;
+        padBanner.innerHTML = '';
+        const title = document.createElement('div');
+        title.textContent = `🛬 ${(lp.station || 'STARPORT').toUpperCase()} — ${lp.guidance}`;
+        const bay = document.createElement('div');
+        bay.style.cssText = 'font-family:Consolas,monospace;color:var(--hud-secondary);font-size:0.84rem;margin-top:4px;';
+        bay.textContent = lp.bayIndicator || '';
+        padBanner.appendChild(title);
+        padBanner.appendChild(bay);
+        padBanner.hidden = false;
+      } else {
+        padBanner.hidden = true;
+      }
+    }
+
+    // Galaxy Server Status + Last BGS Tick
+    const gs = payload.galaxyStatus || {};
+    const gsLine = document.getElementById('webGalaxyStatusLine');
+    const bgsLine = document.getElementById('webBgsTickInfo');
+    const serverMsg = gs.ServerMessage || '---';
+    let tickShort = '---';
+    let tickFull = (flightTranslations && flightTranslations.bgsTickUnavailable) || '---';
+    if (gs.LastBgsTickUtc) {
+      const tickDate = new Date(gs.LastBgsTickUtc);
+      if (!isNaN(tickDate.getTime())) {
+        const diffMin = Math.max(0, Math.floor((Date.now() - tickDate.getTime()) / 60000));
+        const elapsed = diffMin >= 60 ? `${Math.floor(diffMin / 60)}h ${String(diffMin % 60).padStart(2, '0')}m` : `${diffMin}m`;
+        const utcStr = tickDate.toISOString().slice(0, 16).replace('T', ' ');
+        const localStr = tickDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        tickShort = `${localStr} (${elapsed})`;
+        tickFull = (flightTranslations && flightTranslations.bgsTickInfo)
+          ? flightTranslations.bgsTickInfo.replace('{0}', utcStr).replace('{1}', localStr).replace('{2}', elapsed)
+          : `${utcStr} UTC (${localStr} · ${elapsed})`;
+      }
+    }
+    if (gsLine) {
+      gsLine.textContent = (flightTranslations && flightTranslations.galaxyServerStatus)
+        ? flightTranslations.galaxyServerStatus.replace('{0}', serverMsg).replace('{1}', tickShort)
+        : `Elite Servers: ${serverMsg} · BGS Tick: ${tickShort}`;
+    }
+    if (bgsLine) bgsLine.textContent = tickFull;
+
+    // EDSY / Coriolis ship loadout links
+    const loadoutRow = document.getElementById('webLoadoutExportRow');
+    if (loadoutRow) {
+      const links = payload.loadoutLinks;
+      if (links && (links.edsyUrl || links.coriolisUrl)) {
+        const edsy = document.getElementById('webEdsyLink');
+        const cor = document.getElementById('webCoriolisLink');
+        if (edsy && links.edsyUrl) edsy.href = links.edsyUrl;
+        if (cor && links.coriolisUrl) cor.href = links.coriolisUrl;
+        loadoutRow.hidden = false;
+      } else {
+        loadoutRow.hidden = true;
+      }
+    }
+
+    // Carrier countdown, financial runway & cAPI cargo
+    const fcCountdown = document.getElementById('webCarrierCountdown');
+    if (fcCountdown) {
+      const depRaw = s.Carrier && s.Carrier.DepartureTime;
+      if (depRaw) {
+        const remSec = Math.floor((new Date(depRaw).getTime() - Date.now()) / 1000);
+        if (remSec > 0) {
+          const m = Math.floor(remSec / 60);
+          const sec = remSec % 60;
+          fcCountdown.textContent = `⏱ T-${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+          fcCountdown.hidden = false;
+        } else {
+          fcCountdown.hidden = true;
+        }
+      } else {
+        fcCountdown.hidden = true;
+      }
+    }
+    const fcRunway = document.getElementById('webCarrierUpkeepRunway');
+    if (fcRunway) {
+      const bal = s.Carrier && s.Carrier.Balance;
+      if (bal && bal > 0) {
+        const wksBase = Math.floor(bal / 5000000);
+        const wksTyp = Math.floor(bal / 15000000);
+        const mosTyp = (wksTyp / 4.345).toFixed(1);
+        fcRunway.textContent = (flightTranslations && flightTranslations.carrierUpkeepRunway)
+          ? flightTranslations.carrierUpkeepRunway.replace('{0}', formatCount(wksBase)).replace('{1}', formatCount(wksTyp)).replace('{2}', mosTyp)
+          : `~${wksBase} wks (5M/wk) · ~${wksTyp} wks / ${mosTyp} mos (15M/wk)`;
+      } else {
+        fcRunway.textContent = '';
+      }
+    }
+    const fcCargoSec = document.getElementById('webCarrierCargoSection');
+    const fcCargo = Array.isArray(s.CarrierCargo) ? s.CarrierCargo : [];
+    if (fcCargoSec) {
+      fcCargoSec.hidden = fcCargo.length === 0;
+      if (fcCargo.length > 0) {
+        renderTableRows('webCarrierCargoTableBody', fcCargo, [
+          item => item.Commodity,
+          item => formatCount(item.Quantity),
+          item => item.OriginSystem || '---'
+        ], '');
+      }
+    }
+
+    // Cargo instant sell value + colonisation cross-reference
+    const cargoProfitEl = document.getElementById('webCargoTradeProfit');
+    if (cargoProfitEl) {
+      const cargoList = Array.isArray(s.CargoInventory) ? s.CargoInventory : [];
+      const marketItems = (s.Market && Array.isArray(s.Market.Items)) ? s.Market.Items : [];
+      const notes = [];
+      if (cargoList.length > 0 && marketItems.length > 0) {
+        let totalSell = 0, totalProfit = 0;
+        for (const c of cargoList) {
+          const m = marketItems.find(x => (x.DisplayName || '').toLowerCase() === (c.Name || '').toLowerCase() || (x.Name || '').toLowerCase() === (c.Name || '').toLowerCase());
+          if (m && m.SellPrice > 0) {
+            totalSell += m.SellPrice * c.Count;
+            if (m.MeanPrice > 0 && m.SellPrice > m.MeanPrice) totalProfit += (m.SellPrice - m.MeanPrice) * c.Count;
+          }
+        }
+        if (totalSell > 0) {
+          notes.push((operations && operations.cargoMarketSummary)
+            ? operations.cargoMarketSummary.replace('{0}', formatCount(totalSell)).replace('{1}', formatCount(totalProfit)).replace('{2}', '')
+            : `${formatCount(totalSell)} CR (+${formatCount(totalProfit)} CR)`);
+        }
+      }
+      const colRes = (s.Colonisation && Array.isArray(s.Colonisation.Resources)) ? s.Colonisation.Resources : [];
+      if (cargoList.length > 0 && colRes.length > 0) {
+        const matches = cargoList
+          .filter(c => colRes.some(r => r.RequiredAmount > r.ProvidedAmount && (r.DisplayName || '').toLowerCase() === (c.Name || '').toLowerCase()))
+          .map(c => `${c.Name} (${c.Count} t)`);
+        if (matches.length > 0) {
+          notes.push((operations && operations.cargoColonisationMatches)
+            ? operations.cargoColonisationMatches.replace('{0}', matches.join(', '))
+            : `★ ${matches.join(', ')}`);
+        }
+      }
+      cargoProfitEl.textContent = notes.join('  |  ');
+      cargoProfitEl.hidden = notes.length === 0;
+    }
+
+    // Missions grouped by system + missing cargo warning
+    const mGroupEl = document.getElementById('webMissionsGrouped');
+    const mWarnEl = document.getElementById('webMissionsCargoWarning');
+    if (mGroupEl && mWarnEl) {
+      const missions = Array.isArray(s.ActiveMissions) ? s.ActiveMissions : [];
+      const bySys = new Map();
+      const reqByComm = new Map();
+      for (const m of missions) {
+        if (m.DestinationSystem) {
+          const k = m.DestinationSystem;
+          const prev = bySys.get(k) || { count: 0, cr: 0, tons: 0 };
+          prev.count++;
+          prev.cr += m.Reward || 0;
+          if (m.Commodity && m.Count) prev.tons += m.Count;
+          bySys.set(k, prev);
+        }
+        if (m.Commodity && m.Count > 0 && m.PassengerMission !== true) {
+          const ck = m.Commodity.trim().toLowerCase();
+          const prev = reqByComm.get(ck) || { name: m.Commodity.trim(), req: 0 };
+          prev.req += m.Count;
+          reqByComm.set(ck, prev);
+        }
+      }
+      if (bySys.size > 0) {
+        const parts = [...bySys.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5)
+          .map(([sys, v]) => `${sys} (${v.count} · ${v.cr >= 1e6 ? (v.cr / 1e6).toFixed(1) + 'M CR' : formatCount(v.cr) + ' CR'}${v.tons > 0 ? ' · ' + v.tons + ' t' : ''})`);
+        mGroupEl.textContent = (operations && operations.missionsBySystem)
+          ? operations.missionsBySystem.replace('{0}', parts.join('  |  '))
+          : parts.join('  |  ');
+        mGroupEl.hidden = false;
+      } else {
+        mGroupEl.hidden = true;
+      }
+      const cargoList = Array.isArray(s.CargoInventory) ? s.CargoInventory : [];
+      const missing = [];
+      for (const [, info] of reqByComm) {
+        const carried = cargoList.filter(c => (c.Name || '').trim().toLowerCase() === info.name.toLowerCase()).reduce((acc, c) => acc + (c.Count || 0), 0);
+        if (carried < info.req) missing.push(`${info.name} (${carried}/${info.req} t)`);
+      }
+      if (missing.length > 0) {
+        mWarnEl.textContent = (operations && operations.missionsMissingCargo)
+          ? operations.missionsMissingCargo.replace('{0}', missing.slice(0, 4).join(', '))
+          : `⚠ ${missing.slice(0, 4).join(', ')}`;
+        mWarnEl.hidden = false;
+      } else {
+        mWarnEl.hidden = true;
+      }
+    }
+
+    // Engineering Wishlist (live)
+    const wishSec = document.getElementById('webWishlistSection');
+    const wishRows = Array.isArray(payload.engineeringWishlist) ? payload.engineeringWishlist : [];
+    if (wishSec) {
+      wishSec.hidden = wishRows.length === 0;
+      if (wishRows.length > 0) {
+        renderTableRows('webWishlistTableBody', wishRows, [
+          r => r.MaterialName,
+          r => r.Category,
+          r => formatCount(r.Required),
+          r => formatCount(r.Owned),
+          r => r.StatusDisplay
+        ], '');
+      }
+    }
+
+    // Frontier cAPI Stored Ships, Community Goals & Dashboard summary
+    const ships = Array.isArray(s.StoredShips) ? s.StoredShips : [];
+    const cgs = Array.isArray(s.CommunityGoals) ? s.CommunityGoals : [];
+    const storedSec = document.getElementById('webStoredShipsSection');
+    if (storedSec) {
+      storedSec.hidden = ships.length === 0;
+      if (ships.length > 0) {
+        renderTableRows('webStoredShipsTableBody', ships, [
+          x => x.ShipType,
+          x => x.ShipName || '---',
+          x => x.StarSystem || '---',
+          x => x.StationName || '---',
+          x => x.ValueDisplay || `${formatCount(x.Value)} CR`
+        ], '');
+      }
+    }
+    const cgSec = document.getElementById('webCommunityGoalsSection');
+    if (cgSec) {
+      cgSec.hidden = cgs.length === 0;
+      if (cgs.length > 0) {
+        renderTableRows('webCommunityGoalsTableBody', cgs, [
+          g => g.Title,
+          g => g.StarSystem || '---',
+          g => g.StationName || '---',
+          g => g.ProgressDisplay || formatCount(g.CurrentTotal),
+          g => g.ExpiryDisplay || '---'
+        ], '');
+      }
+    }
+    const capiCard = document.getElementById('webCapiSummaryCard');
+    const capiBody = document.getElementById('webCapiSummary');
+    if (capiCard && capiBody) {
+      if (ships.length > 0 || cgs.length > 0) {
+        const parts = [];
+        if (ships.length > 0) parts.push(`Stored Ships: ${ships.length} (${ships.slice(0, 4).map(x => x.ShipType + (x.StarSystem ? ' @ ' + x.StarSystem : '')).join(', ')})`);
+        if (cgs.length > 0) parts.push(`Community Goals: ${cgs.map(g => `${g.Title} [${g.StarSystem}]`).join(' · ')}`);
+        capiBody.textContent = parts.join('  |  ');
+        capiCard.hidden = false;
+      } else {
+        capiCard.hidden = true;
+      }
+    }
+
+    // GalNet News (tab-activity -> galnet)
+    const galnetTbody = document.getElementById('webGalnetTableBody');
+    const galnetBodyEl = document.getElementById('webGalnetBody');
+    const articles = Array.isArray(payload.galnetArticles) ? payload.galnetArticles : [];
+    if (galnetTbody) {
+      galnetTbody.innerHTML = '';
+      if (articles.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 2;
+        td.style.color = 'var(--hud-muted)';
+        td.textContent = '---';
+        tr.appendChild(td);
+        galnetTbody.appendChild(tr);
+      } else {
+        articles.forEach((art, idx) => {
+          const tr = document.createElement('tr');
+          tr.style.cursor = 'pointer';
+          tr.onclick = () => { if (galnetBodyEl) galnetBodyEl.textContent = `${art.Title}\n(${art.Date})\n\n${art.Body || ''}`; };
+          const tdDate = document.createElement('td');
+          tdDate.textContent = art.Date || '';
+          const tdTitle = document.createElement('td');
+          tdTitle.textContent = art.Title || '';
+          tr.appendChild(tdDate);
+          tr.appendChild(tdTitle);
+          galnetTbody.appendChild(tr);
+          if (idx === 0 && galnetBodyEl && !galnetBodyEl.textContent) {
+            galnetBodyEl.textContent = `${art.Title}\n(${art.Date})\n\n${art.Body || ''}`;
+          }
+        });
+      }
+    }
 
     function renderAlerts(payload) {
       const alerts = payload.alerts || [];
@@ -2526,6 +2900,22 @@
     if (lastPayload && lastPayload.bindings)
       renderDeck(lastPayload.deckBindings, lastPayload.hideUnassignedBindings);
   });
+
+  function sendWebAiPreFlight() {
+    sendWebAiPrompt('Run a concise tactical pre-flight check (fuel, limpets, FSD health, hull, missing mission cargo, route fuel stars) and give launch clearance or warnings.');
+  }
+
+  function exportWebAiChat() {
+    const log = document.getElementById('webAiChatLog');
+    if (!log || !log.textContent.trim()) return;
+    const blob = new Blob(['# HUDnopy COVAS Chat Log\n\n' + log.textContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `HUDnopy-COVAS-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function sendWebAiPrompt(overrideText) {
     const input = document.getElementById('webAiPrompt');

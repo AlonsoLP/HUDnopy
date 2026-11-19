@@ -67,7 +67,73 @@ public partial class MainWindow
         {
             _configService.Current.AiPersonality = personality;
             _configService.Save();
+            UpdateAiConfigVisibility();
         }
+    }
+
+    private void CmbAiVerbosity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null) return;
+        if (CmbAiVerbosity.SelectedValue is string verbosity)
+        {
+            _configService.Current.AiVerbosity = verbosity;
+            _configService.Save();
+        }
+    }
+
+    private void ChkAiRequireWakeWord_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null) return;
+        _configService.Current.AiRequireWakeWord = ChkAiRequireWakeWord.IsChecked == true;
+        _configService.Current.AiWakeWord = string.IsNullOrWhiteSpace(TxtAiWakeWord?.Text) ? "COVAS" : TxtAiWakeWord.Text.Trim();
+        _configService.Save();
+    }
+
+    private void BtnClearAiMemory_Click(object sender, RoutedEventArgs e)
+    {
+        _configService.Current.AiCommanderMemory?.Clear();
+        _configService.Save();
+        RefreshAiMemoryPreview();
+        TxtAiConfigStatus.Text = SettingsTranslations.ForLanguage(_uiLanguage)["aiMemoryCleared"];
+    }
+
+    private void ChkAiArrivalBriefing_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null) return;
+        _configService.Current.AiSystemArrivalBriefing = ChkAiArrivalBriefing.IsChecked == true;
+        _configService.Save();
+    }
+
+    private void ChkAiGlobalPttHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null) return;
+        _configService.Current.AiGlobalPttHotkeyEnabled = ChkAiGlobalPttHotkey.IsChecked == true;
+        _configService.Save();
+        RegisterGlobalPttHotkey();
+    }
+
+    private void CmbAiGlobalPttHotkey_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null) return;
+        if (CmbAiGlobalPttHotkey.SelectedValue is string key)
+        {
+            _configService.Current.AiGlobalPttHotkey = key;
+            _configService.Save();
+            RegisterGlobalPttHotkey();
+        }
+    }
+
+    private void RefreshAiMemoryPreview()
+    {
+        if (TxtAiMemoryPreview is null)
+            return;
+        var mem = _configService.Current.AiCommanderMemory;
+        if (mem is null || mem.Count == 0)
+        {
+            TxtAiMemoryPreview.Text = "";
+            return;
+        }
+        TxtAiMemoryPreview.Text = $"🧠 ({mem.Count}): " + string.Join(" · ", mem.TakeLast(6));
     }
 
     private void ChkAiSpeakReplies_Click(object sender, RoutedEventArgs e)
@@ -104,6 +170,9 @@ public partial class MainWindow
             AiGeminiPanel.Visibility = enabled && provider == "gemini" ? Visibility.Visible : Visibility.Collapsed;
         if (AiOpenAiPanel is not null)
             AiOpenAiPanel.Visibility = enabled && provider == "openai" ? Visibility.Visible : Visibility.Collapsed;
+        string personality = CmbAiPersonality?.SelectedValue as string ?? _configService?.Current.AiPersonality ?? "covas";
+        if (AiCustomPersonalityPanel is not null)
+            AiCustomPersonalityPanel.Visibility = enabled && personality == "custom" ? Visibility.Visible : Visibility.Collapsed;
         if (TxtAiProviderBadge is not null && _aiCopilot is not null)
             TxtAiProviderBadge.Text = _aiCopilot.GetActiveProviderSummary();
     }
@@ -133,6 +202,10 @@ public partial class MainWindow
         cfg.AiOpenAiModel = (CmbAiOpenAiModel.SelectedItem as string ?? cfg.AiOpenAiModel).Trim();
         cfg.AiSpeakReplies = ChkAiSpeakReplies.IsChecked == true;
         cfg.AiAllowActions = ChkAiAllowActions.IsChecked == true;
+        cfg.AiVerbosity = CmbAiVerbosity?.SelectedValue as string ?? "normal";
+        cfg.AiCustomPersonality = (TxtAiCustomPersonality?.Text ?? "").Trim();
+        cfg.AiRequireWakeWord = ChkAiRequireWakeWord?.IsChecked == true;
+        cfg.AiWakeWord = string.IsNullOrWhiteSpace(TxtAiWakeWord?.Text) ? "COVAS" : TxtAiWakeWord.Text.Trim();
         _configService.Save();
         UpdateAiConfigVisibility();
     }
@@ -505,10 +578,11 @@ public partial class MainWindow
         {
             SetAiBusy(true);
             TxtStatusBarLeft.Text = ops["aiVoiceProcessing"];
-            var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes);
+            var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes, isHandsFree: true);
             if (!string.IsNullOrWhiteSpace(transcript))
                 AppendAiChatLine("CMDR", transcript);
-            AppendAiChatLine("COVAS", reply);
+            if (!string.IsNullOrWhiteSpace(reply))
+                AppendAiChatLine("COVAS", reply);
         }
         finally
         {
@@ -565,6 +639,233 @@ public partial class MainWindow
         string block = $"[{DateTime.Now:HH:mm:ss}] {speaker}:\n{message}\n\n";
         TxtAiChatHistory.AppendText(block);
         TxtAiChatHistory.ScrollToEnd();
+    }
+
+    /// <summary>
+    /// Saves the commander's live planetary coordinates as a surface bookmark when requested by COVAS.
+    /// </summary>
+    private void HandleAiSurfaceBookmarkSave(string label)
+    {
+        if (TxtBookmarkLabel is null)
+            return;
+        TxtBookmarkLabel.Text = label;
+        BtnSaveSurfaceBookmark_Click(this, new RoutedEventArgs());
+    }
+
+    /// <summary>
+    /// Targets either the latest exobiology sample or a saved surface bookmark in the live surface compass.
+    /// </summary>
+    private void HandleAiSurfaceNavigate(string target)
+    {
+        if (target.Equals("exo", StringComparison.OrdinalIgnoreCase) ||
+            target.Contains("exo", StringComparison.OrdinalIgnoreCase))
+        {
+            BtnTargetLastExoSample_Click(this, new RoutedEventArgs());
+            return;
+        }
+
+        var match = _configService.Current.SurfaceBookmarks?
+            .FirstOrDefault(b => b.Label.Contains(target, StringComparison.OrdinalIgnoreCase));
+        if (match is not null && TxtTargetLat is not null && TxtTargetLon is not null)
+        {
+            TxtTargetLat.Text = match.Latitude.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture);
+            TxtTargetLon.Text = match.Longitude.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture);
+            UpdateSurfaceGuidance(_fileWatcher.State);
+        }
+    }
+
+    /// <summary>
+    /// Runs a Spansh ship/module search with optional Li Yong-Rui discount filter from COVAS.
+    /// </summary>
+    private void HandleAiSpanshItemSearch(string query, bool lyrDiscount)
+    {
+        if (TxtSpanshItemQuery is null)
+            return;
+        TxtSpanshItemQuery.Text = query;
+        if (ChkSpanshLyrDiscount is not null)
+            ChkSpanshLyrDiscount.IsChecked = lyrDiscount;
+        BtnSearchSpanshItem_Click(this, new RoutedEventArgs());
+    }
+
+    /// <summary>
+    /// Opens the active ship loadout in EDSY or Coriolis when requested by COVAS.
+    /// </summary>
+    private void HandleAiExportShip(string target)
+    {
+        if (target.Equals("coriolis", StringComparison.OrdinalIgnoreCase))
+            BtnExportCoriolis_Click(this, new RoutedEventArgs());
+        else
+            BtnExportEdsy_Click(this, new RoutedEventArgs());
+    }
+
+    /// <summary>
+    /// Switches the active HUDnopy tab or toggles the floating Mini-HUD from a COVAS command.
+    /// </summary>
+    private void HandleAiUiNavigation(string target)
+    {
+        if (target is "minihud" or "mini-hud" or "mini")
+        {
+            ToggleMiniHud();
+            return;
+        }
+
+        int? tabIndex = target switch
+        {
+            "dashboard" or "panel" => 0,
+            "flight" or "vuelo" or "combat" => 1,
+            "navigation" or "navegacion" or "carrier" or "route" => 2,
+            "operations" or "operaciones" or "missions" or "mining" => 3,
+            "inventory" or "inventario" or "market" or "cargo" or "shipyard" => 4,
+            "activity" or "actividad" or "galnet" or "journal" => 5,
+            "controls" or "botonera" or "deck" => 6,
+            _ => null
+        };
+
+        if (tabIndex.HasValue)
+            SwitchView(tabIndex.Value);
+    }
+
+    private async void BtnAiPreFlightCheck_Click(object sender, RoutedEventArgs e)
+    {
+        SetAiBusy(true);
+        try
+        {
+            var (_, reply) = await _aiCopilot.RunPreFlightCheckAsync();
+            AppendAiChatLine("COVAS (Pre-Flight)", reply);
+        }
+        finally
+        {
+            SetAiBusy(false);
+        }
+    }
+
+    private void HandleAiSpanshMining(string mineral)
+    {
+        if (CmbSpanshMiningMineral is null)
+            return;
+        CmbSpanshMiningMineral.SelectedValue = mineral;
+        BtnSearchMiningRings_Click(this, new RoutedEventArgs());
+    }
+
+    private void HandleAiWishlistAdd(string blueprintId)
+    {
+        _configService.Current.EngineeringWishlistBlueprints ??= new List<string>();
+        _configService.Current.EngineeringWishlistBlueprints.Add(blueprintId);
+        _configService.Save();
+        _lastWishlistSignature = null;
+        UpdateEngineeringWishlistUi(_fileWatcher.State);
+    }
+
+    private void HandleAiTritiumCalc(double lightYears)
+    {
+        if (TxtCarrierRouteLy is null)
+            return;
+        TxtCarrierRouteLy.Text = Math.Round(lightYears).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        UpdateCarrierTritiumCalc(_fileWatcher.State);
+    }
+
+    private void HandleAiVoiceRateAdjust(int delta)
+    {
+        int next = delta == 0 ? 0 : Math.Clamp((int)SldSpeechRate.Value + delta, -5, 5);
+        SldSpeechRate.Value = next;
+    }
+
+    private void BtnExportAiChat_Click(object sender, RoutedEventArgs e)
+    {
+        if (TxtAiChatHistory is null || string.IsNullOrWhiteSpace(TxtAiChatHistory.Text))
+            return;
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "Markdown (*.md)|*.md|Text (*.txt)|*.txt",
+            FileName = $"HUDnopy-COVAS-{DateTime.Now:yyyyMMdd-HHmm}.md"
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            File.WriteAllText(dialog.FileName, "# HUDnopy COVAS Chat Log\n\n" + TxtAiChatHistory.Text, System.Text.Encoding.UTF8);
+            TxtStatusBarLeft.Text = string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName));
+        }
+        catch (Exception ex)
+        {
+            TxtStatusBarLeft.Text = ex.Message;
+        }
+    }
+
+    // =========================================================================
+    // Global Push-to-Talk Hotkey (Win32 RegisterHotKey — works in Fullscreen/VR)
+    // =========================================================================
+
+    private const int WmHotKey = 0x0312;
+    private const int GlobalPttHotKeyId = 0x4855; // "HU"
+    private System.Windows.Interop.HwndSource? _hotkeyHwndSource;
+    private bool _globalPttRegistered;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    private void RegisterGlobalPttHotkey()
+    {
+        UnregisterGlobalPttHotkey();
+
+        if (!_configService.Current.AiGlobalPttHotkeyEnabled)
+            return;
+
+        var helper = new System.Windows.Interop.WindowInteropHelper(this);
+        if (helper.Handle == IntPtr.Zero)
+            return;
+
+        _hotkeyHwndSource ??= System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
+        if (_hotkeyHwndSource is null)
+            return;
+
+        _hotkeyHwndSource.RemoveHook(GlobalHotKeyWndProc);
+        _hotkeyHwndSource.AddHook(GlobalHotKeyWndProc);
+
+        var (mods, vk) = ParseGlobalHotkey(_configService.Current.AiGlobalPttHotkey);
+        _globalPttRegistered = RegisterHotKey(helper.Handle, GlobalPttHotKeyId, mods, vk);
+    }
+
+    private void UnregisterGlobalPttHotkey()
+    {
+        if (!_globalPttRegistered)
+            return;
+        var helper = new System.Windows.Interop.WindowInteropHelper(this);
+        if (helper.Handle != IntPtr.Zero)
+            UnregisterHotKey(helper.Handle, GlobalPttHotKeyId);
+        _globalPttRegistered = false;
+    }
+
+    private IntPtr GlobalHotKeyWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WmHotKey && wParam.ToInt32() == GlobalPttHotKeyId)
+        {
+            handled = true;
+            Dispatcher.BeginInvoke(() => BtnAiVoiceInput_Click(this, new RoutedEventArgs()));
+        }
+        return IntPtr.Zero;
+    }
+
+    private static (uint Modifiers, uint VirtualKey) ParseGlobalHotkey(string? spec)
+    {
+        const uint ModAlt = 0x0001;
+        const uint ModControl = 0x0002;
+        const uint ModShift = 0x0004;
+        const uint ModNoRepeat = 0x4000;
+
+        return (spec ?? "Ctrl+Alt+V").Trim() switch
+        {
+            "Ctrl+Alt+Space" => (ModControl | ModAlt | ModNoRepeat, 0x20),
+            "Ctrl+Shift+V" => (ModControl | ModShift | ModNoRepeat, 0x56),
+            "Alt+F1" => (ModAlt | ModNoRepeat, 0x70),
+            "F13" => (ModNoRepeat, 0x7C),
+            _ => (ModControl | ModAlt | ModNoRepeat, 0x56) // Ctrl+Alt+V
+        };
     }
 
 }

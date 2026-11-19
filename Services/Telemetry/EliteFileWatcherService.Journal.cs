@@ -737,6 +737,7 @@ public partial class EliteFileWatcherService
                     break;
 
                 case "Loadout":
+                    _state.LastLoadoutJson = line;
                     if (root.TryGetProperty("Modules", out var modulesProp) &&
                         modulesProp.ValueKind == JsonValueKind.Array)
                     {
@@ -835,6 +836,9 @@ public partial class EliteFileWatcherService
 
                 case "Location":
                 case "FSDJump":
+                    _state.AssignedLandingPad = null;
+                    _state.AssignedLandingStation = "";
+                    _state.AssignedLandingStationType = "";
                     if (root.TryGetProperty("StarSystem", out var sysProp))
                         _state.CurrentSystem = sysProp.GetString() ?? _state.CurrentSystem;
                     if (root.TryGetProperty("StarPos", out var spProp) && spProp.ValueKind == JsonValueKind.Array && spProp.GetArrayLength() >= 3)
@@ -872,9 +876,29 @@ public partial class EliteFileWatcherService
                     SyncSessionStatsToState();
                     break;
 
+                case "DockingGranted":
+                    if (TryGetJournalInt(root, "LandingPad", out int padNum) && padNum > 0)
+                    {
+                        _state.AssignedLandingPad = padNum;
+                        _state.AssignedLandingStation = ReadJsonString(root, "StationName");
+                        _state.AssignedLandingStationType = ReadJsonString(root, "StationType");
+                    }
+                    break;
+
+                case "DockingCancelled":
+                case "DockingTimeout":
+                case "DockingDenied":
+                    _state.AssignedLandingPad = null;
+                    _state.AssignedLandingStation = "";
+                    _state.AssignedLandingStationType = "";
+                    break;
+
                 case "Docked":
                     if (root.TryGetProperty("StationName", out var stProp))
                         _state.StationName = stProp.GetString() ?? "";
+                    _state.AssignedLandingPad = null;
+                    _state.AssignedLandingStation = "";
+                    _state.AssignedLandingStationType = "";
                     AddLocalizedJournalEntry(evt, "docked", ts, _state.StationName, _state.CurrentSystem);
                     break;
 
@@ -893,6 +917,9 @@ public partial class EliteFileWatcherService
                 case "Undocked":
                     AddLocalizedJournalEntry(evt, "undocked", ts, _state.StationName);
                     _state.StationName = "";
+                    _state.AssignedLandingPad = null;
+                    _state.AssignedLandingStation = "";
+                    _state.AssignedLandingStationType = "";
                     break;
 
                 case "StartJump":

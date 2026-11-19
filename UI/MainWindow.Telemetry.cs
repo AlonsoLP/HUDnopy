@@ -271,6 +271,10 @@ public partial class MainWindow
         if (!ReferenceEquals(GridShipModules.ItemsSource, s.ShipModules))
             GridShipModules.ItemsSource = s.ShipModules;
 
+        bool hasLoadout = !string.IsNullOrWhiteSpace(s.LastLoadoutJson);
+        if (BtnExportEdsy is not null) BtnExportEdsy.IsEnabled = hasLoadout;
+        if (BtnExportCoriolis is not null) BtnExportCoriolis.IsEnabled = hasLoadout;
+
         if (s.ShipModules.Count == 0)
         {
             TxtModulesPowerSummary.Text = flight["modulesWaiting"];
@@ -443,6 +447,8 @@ public partial class MainWindow
                 ? flight["bgsNoPowerplay"]
                 : string.Format(flight["bgsPowerplay"], s.PowerplaySummary);
         }
+
+        UpdateGalaxyStatusUi(_galaxyStatus.Current);
 
         if (GridSystemFactions is not null && !ReferenceEquals(GridSystemFactions.ItemsSource, s.SystemFactions))
             GridSystemFactions.ItemsSource = s.SystemFactions;
@@ -642,6 +648,305 @@ public partial class MainWindow
                 File.WriteAllLines(dialog.FileName, lines, System.Text.Encoding.UTF8);
             }
             TxtStatusBarLeft.Text = string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName));
+        }
+        catch (Exception ex)
+        {
+            TxtStatusBarLeft.Text = ex.Message;
+        }
+    }
+
+    // =========================================================================
+    // Galaxy Status (EDSM Server Status + EliteBGS Tick) & EDSY/Coriolis Export
+    // =========================================================================
+
+    /// <summary>
+    /// Updates Dashboard and BGS panels with the latest Elite server status and galaxy BGS tick.
+    /// </summary>
+    private void UpdateGalaxyStatusUi(GalaxyStatusSnapshot snap)
+    {
+        var flight = FlightTranslations.ForLanguage(_uiLanguage);
+
+        string serverText = string.IsNullOrWhiteSpace(snap.ServerMessage) ? "---" : snap.ServerMessage;
+        string tickShort = "---";
+        string tickFull = flight["bgsTickUnavailable"];
+
+        if (snap.LastBgsTickUtc is DateTimeOffset tickUtc)
+        {
+            TimeSpan age = DateTimeOffset.UtcNow - tickUtc;
+            string elapsed = age.TotalHours >= 1
+                ? $"{(int)age.TotalHours}h {age.Minutes:D2}m"
+                : $"{Math.Max(0, (int)age.TotalMinutes)}m";
+
+            string utcStr = tickUtc.ToString("yyyy-MM-dd HH:mm");
+            string localStr = tickUtc.ToLocalTime().ToString("HH:mm");
+            tickShort = $"{localStr} ({elapsed})";
+            tickFull = string.Format(flight["bgsTickInfo"], utcStr, localStr, elapsed);
+        }
+
+        if (TxtGalaxyStatusSummary is not null)
+            TxtGalaxyStatusSummary.Text = string.Format(flight["galaxyServerStatus"], serverText, tickShort);
+
+        if (TxtBgsTickInfo is not null)
+            TxtBgsTickInfo.Text = tickFull;
+    }
+
+    private async void BtnRefreshGalaxyStatus_Click(object sender, RoutedEventArgs e)
+    {
+        if (BtnRefreshGalaxyStatus is not null)
+            BtnRefreshGalaxyStatus.IsEnabled = false;
+        try
+        {
+            var snap = await _galaxyStatus.RefreshAsync();
+            UpdateGalaxyStatusUi(snap);
+        }
+        finally
+        {
+            if (BtnRefreshGalaxyStatus is not null)
+                BtnRefreshGalaxyStatus.IsEnabled = true;
+        }
+    }
+
+    private void BtnExportEdsy_Click(object sender, RoutedEventArgs e)
+    {
+        string? url = ShipLoadoutExportService.BuildEdsyUrl(_fileWatcher.State.LastLoadoutJson);
+        OpenExternalLoadoutUrl(url);
+    }
+
+    private void BtnExportCoriolis_Click(object sender, RoutedEventArgs e)
+    {
+        string? url = ShipLoadoutExportService.BuildCoriolisUrl(_fileWatcher.State.LastLoadoutJson);
+        OpenExternalLoadoutUrl(url);
+    }
+
+    private int? _lastAnnouncedLandingPad;
+    private string _lastAnnouncedLandingStation = "";
+    private int _lastCarrierCountdownStage;
+    private DateTimeOffset? _lastCarrierDepartureTime;
+
+    /// <summary>
+    /// Shows starport landing pad spatial guidance on DockingGranted and announces it via TTS.
+    /// </summary>
+    private void UpdateLandingPadUi(ShipState s)
+    {
+        if (LandingPadCard is null || TxtLandingPadStation is null || TxtLandingPadGuidance is null || TxtLandingPadDiagram is null)
+            return;
+
+        if (s.AssignedLandingPad is not int pad || pad <= 0)
+        {
+            LandingPadCard.Visibility = Visibility.Collapsed;
+            _lastAnnouncedLandingPad = null;
+            _lastAnnouncedLandingStation = "";
+            return;
+        }
+
+        var info = LandingPadLocatorService.Resolve(pad, s.AssignedLandingStationType);
+        string station = string.IsNullOrWhiteSpace(s.AssignedLandingStation) ? s.CurrentSystem : s.AssignedLandingStation;
+        string guidance = info.FormatGuidance(_uiLanguage);
+
+        TxtLandingPadStation.Text = $"🛬 {station.ToUpperInvariant()}";
+        TxtLandingPadGuidance.Text = guidance;
+        TxtLandingPadDiagram.Text = info.BuildBayIndicator();
+        LandingPadCard.Visibility = Visibility.Visible;
+
+        if (_lastAnnouncedLandingPad != pad || !string.Equals(_lastAnnouncedLandingStation, station, StringComparison.OrdinalIgnoreCase))
+        {
+            _lastAnnouncedLandingPad = pad;
+            _lastAnnouncedLandingStation = station;
+            _alertSpeechService.SpeakCustomText(guidance);
+        }
+    }
+
+    /// <summary>
+    /// Updates live Fleet Carrier jump countdown (with voice alerts at 10m, 3m lockdown, and 1m)
+    /// and estimates financial upkeep runway in weeks and months.
+    /// </summary>
+    private void UpdateCarrierCountdownAndRunway(ShipState s)
+    {
+        var flight = FlightTranslations.ForLanguage(_uiLanguage);
+        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+
+        if (TxtCarrierUpkeepRunway is not null)
+        {
+            if (s.Carrier?.Balance is long bal && bal > 0)
+            {
+                // Base Fleet Carrier upkeep is 5,000,000 CR/week (core hull); typical equipped carriers range 10-25M/week.
+                const double baseWeeklyUpkeep = 5_000_000.0;
+                const double typicalWeeklyUpkeep = 15_000_000.0;
+                double weeksBase = bal / baseWeeklyUpkeep;
+                double weeksTypical = bal / typicalWeeklyUpkeep;
+                double monthsTypical = weeksTypical / 4.345;
+                TxtCarrierUpkeepRunway.Text = string.Format(
+                    culture,
+                    flight["carrierUpkeepRunway"],
+                    Math.Floor(weeksBase).ToString("N0", culture),
+                    Math.Floor(weeksTypical).ToString("N0", culture),
+                    monthsTypical.ToString("0.0", culture));
+            }
+            else
+            {
+                TxtCarrierUpkeepRunway.Text = "";
+            }
+        }
+
+        if (TxtCarrierJumpCountdown is null)
+            return;
+
+        if (s.Carrier?.DepartureTime is DateTimeOffset dep)
+        {
+            if (_lastCarrierDepartureTime != dep)
+            {
+                _lastCarrierDepartureTime = dep;
+                _lastCarrierCountdownStage = 0;
+            }
+
+            TimeSpan rem = dep - DateTimeOffset.UtcNow;
+            if (rem > TimeSpan.Zero)
+            {
+                TxtCarrierJumpCountdown.Text = $"⏱ T-{(int)rem.TotalMinutes:D2}:{rem.Seconds:D2}";
+                TxtCarrierJumpCountdown.Visibility = Visibility.Visible;
+
+                int stage = rem.TotalMinutes <= 1.0 ? 3 : rem.TotalMinutes <= 3.3 ? 2 : rem.TotalMinutes <= 10.0 ? 1 : 0;
+                if (stage > _lastCarrierCountdownStage)
+                {
+                    _lastCarrierCountdownStage = stage;
+                    string key = stage == 3 ? "carrierJumpVoice1m" : stage == 2 ? "carrierJumpVoiceLockdown" : "carrierJumpVoice10m";
+                    _alertSpeechService.SpeakCustomText(flight[key]);
+                }
+                return;
+            }
+        }
+
+        TxtCarrierJumpCountdown.Visibility = Visibility.Collapsed;
+    }
+
+    private ExpeditionStatsSnapshot? _lastExpeditionStats;
+
+    /// <summary>
+    /// Updates the contextual Mini-HUD banner with the highest-priority live telemetry strip
+    /// (docking pad, combat target, exobiology/surface heading, or active navigation route).
+    /// </summary>
+    private void UpdateMiniHudContextUi(ShipState s)
+    {
+        if (MiniHudContextBanner is null || TxtMiniHudContext is null)
+            return;
+
+        if (!_isMiniHud)
+        {
+            MiniHudContextBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        string line = "";
+        if (s.AssignedLandingPad is int pad && pad > 0)
+        {
+            var info = LandingPadLocatorService.Resolve(pad, s.AssignedLandingStationType);
+            line = $"🛬 {info.FormatGuidance(_uiLanguage)}";
+        }
+        else if (s.CurrentTarget is { } target && (s.IsInDanger || s.HardpointsDeployed))
+        {
+            string shield = target.ShieldHealth.HasValue ? $"{target.ShieldHealth.Value:0}%" : "---";
+            string hull = target.HullHealth.HasValue ? $"{target.HullHealth.Value:0}%" : "---";
+            line = $"🎯 {target.PilotName} ({target.Ship}) · SHD {shield} · HULL {hull}";
+        }
+        else if (s.ExobiologyTracker is not null)
+        {
+            var exo = s.ExobiologyTracker;
+            line = $"🧬 {exo.Species} ({exo.SamplesCollected}/3 · {exo.CurrentDistanceMeters:0}/{exo.RequiredDistanceMeters} m) · HDG {s.Heading:000}°";
+        }
+        else if (s.HasLatLong)
+        {
+            line = $"🧭 {s.BodyName} · LAT {s.Latitude:0.000}° · LON {s.Longitude:0.000}° · ALT {s.Altitude:0} m · HDG {s.Heading:000}°";
+        }
+        else if (s.NavRoute.Count > 1)
+        {
+            var next = s.NavRoute.FirstOrDefault(static w => !w.IsCurrentSystem) ?? s.NavRoute[1];
+            line = $"🧭 Next: {next.StarSystem} ({next.StarClass}) · {next.StepDistanceLy:0.0} LY · {s.NavRoute.Count - 1} jumps";
+        }
+
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            MiniHudContextBanner.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            TxtMiniHudContext.Text = line;
+            MiniHudContextBanner.Visibility = Visibility.Visible;
+        }
+    }
+
+    private async void BtnAnalyzeExpeditionHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (BtnAnalyzeExpeditionHistory is null || TxtExpeditionSummary is null)
+            return;
+
+        BtnAnalyzeExpeditionHistory.IsEnabled = false;
+        try
+        {
+            string folder = _configService.Current.JournalFolderPath;
+            var stats = await ExpeditionAnalyticsService.AnalyzeFolderAsync(folder);
+            _lastExpeditionStats = stats;
+
+            var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+            var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+            TxtExpeditionSummary.Text = string.Format(
+                culture,
+                ops["expeditionSummary"],
+                stats.JournalsScanned,
+                stats.TotalJumps.ToString("N0", culture),
+                stats.TotalDistanceLy.ToString("N1", culture),
+                stats.UniqueSystems.ToString("N0", culture),
+                stats.EarthLikeWorlds,
+                stats.WaterWorlds,
+                stats.AmmoniaWorlds,
+                stats.OrganicsAnalysed,
+                stats.MissionsCompleted,
+                stats.TotalBountiesAndSalesCredits.ToString("N0", culture));
+            TxtExpeditionSummary.Visibility = Visibility.Visible;
+            if (BtnExportExpeditionMarkdown is not null)
+                BtnExportExpeditionMarkdown.IsEnabled = stats.JournalsScanned > 0;
+        }
+        finally
+        {
+            BtnAnalyzeExpeditionHistory.IsEnabled = true;
+        }
+    }
+
+    private void BtnExportExpeditionMarkdown_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastExpeditionStats is null)
+            return;
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "Markdown (*.md)|*.md",
+            FileName = $"HUDnopy-Expedition-{DateTime.Now:yyyyMMdd}.md"
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            string md = _lastExpeditionStats.ToMarkdownReport(_fileWatcher.State.CommanderName);
+            File.WriteAllText(dialog.FileName, md, System.Text.Encoding.UTF8);
+            TxtStatusBarLeft.Text = string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName));
+        }
+        catch (Exception ex)
+        {
+            TxtStatusBarLeft.Text = ex.Message;
+        }
+    }
+
+    private void OpenExternalLoadoutUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["loadoutExportUnavailable"];
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
         }
         catch (Exception ex)
         {

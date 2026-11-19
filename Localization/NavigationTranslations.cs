@@ -27,7 +27,7 @@ internal sealed record NavigationText(
 
 internal static class NavigationTranslations
 {
-    private static readonly string[] Keys = { "dashboard", "flight", "navigation", "operations", "activity", "controls", "settings" };
+    private static readonly string[] Keys = { "dashboard", "flight", "navigation", "operations", "inventory", "activity", "controls", "settings" };
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, NavigationText>> Catalog = Load();
 
     public static IReadOnlyDictionary<string, NavigationText> ForLanguage(string language)

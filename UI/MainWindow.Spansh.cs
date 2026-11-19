@@ -75,7 +75,7 @@ public partial class MainWindow
         }
         catch
         {
-            // Ignorar error de portapapeles
+            // Ignore clipboard access errors when another process holds the clipboard lock.
         }
     }
 
@@ -388,8 +388,30 @@ public partial class MainWindow
         }
         catch
         {
-            // Ignorar error de portapapeles
+            // Ignore clipboard access errors when another process holds the clipboard lock.
         }
+    }
+
+    /// <summary>
+    /// Executes a Spansh route plot requested directly by the COVAS AI Copilot.
+    /// </summary>
+    private void ExecuteSpanshRouteFromAi(string mode, string destination)
+    {
+        if (CmbSpanshRouteMode is null || TxtSpanshRouteDest is null)
+            return;
+        CmbSpanshRouteMode.SelectedValue = mode;
+        TxtSpanshRouteDest.Text = destination;
+        BtnPlotSpanshRoute_Click(this, new RoutedEventArgs());
+    }
+
+    /// <summary>
+    /// Executes a Spansh nearest-service search requested directly by the COVAS AI Copilot.
+    /// </summary>
+    private void ExecuteSpanshServiceFromAi(string serviceKey)
+    {
+        if (string.IsNullOrWhiteSpace(serviceKey))
+            return;
+        BtnSearchSpanshService_Click(new System.Windows.Controls.Button { Tag = serviceKey }, new RoutedEventArgs());
     }
 
 }

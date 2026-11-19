@@ -81,7 +81,7 @@ public partial class MainWindow
             GridSystemFactions, GridCarrierMaterials,
             GridSpanshServices, GridGalnetArticles,
             GridSpanshRoute, GridSpanshTrade, GridSpanshMiningRings, GridColonisationSuppliers,
-            GridCarrierCargo, GridStoredShips, GridCommunityGoals
+            GridCarrierCargo, GridStoredShips, GridCommunityGoals, GridEngineeringWishlist
         };
         foreach (var column in tables.SelectMany(table => table.Columns))
         {
@@ -157,9 +157,13 @@ public partial class MainWindow
     private void ApplyFlightLabels()
     {
         var text = FlightTranslations.ForLanguage(_uiLanguage);
-        ApplyTextTree(ViewCockpit, text, flightLabels: true, uppercaseTitles: true);
+        ApplyTextTree(CockpitResourcesSection, text, flightLabels: true, uppercaseTitles: true);
+        ApplyTextTree(CockpitSystemsSection, text, flightLabels: true, uppercaseTitles: true);
+        ApplyTextTree(CockpitOnFootSection, text, flightLabels: true, uppercaseTitles: true);
+        ApplyTextTree(CockpitModulesSection, text, flightLabels: true, uppercaseTitles: true);
         ApplyTextTree(ViewNavigation, text, flightLabels: true, uppercaseTitles: true);
         UpdateNavigationActionsColumns();
+        UpdateGalaxyStatusUi(_galaxyStatus.Current);
     }
 
     private void ApplyTextTree(DependencyObject root, IReadOnlyDictionary<string, string> text, bool flightLabels = false, bool uppercaseTitles = false)
@@ -265,7 +269,9 @@ public partial class MainWindow
         System.Windows.Automation.AutomationProperties.SetName(CmbMarketCategory, materialText["categoryFilter"]);
         System.Windows.Automation.AutomationProperties.SetName(CmbProfileCategory, materialText["categoryFilter"]);
         ApplyTextTree(ViewOperations, text, uppercaseTitles: true);
+        ApplyTextTree(ViewInventory, text, uppercaseTitles: true);
         ApplyTextTree(ViewActivity, text, uppercaseTitles: true);
+        ApplyTextTree(OperationsCombatSection, text, uppercaseTitles: true);
         LblExplorationBodies.Text = text["explorationTitle"].ToUpper(System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage));
         void SetColumn(System.Windows.Controls.DataGrid grid, int index, OperationsValue kind)
         {
@@ -468,7 +474,7 @@ public partial class MainWindow
         _cockpitCardsKey = null;
         UpdateFlightUi(_fileWatcher.State);
         UpdateCarrierUi(_fileWatcher.State);
-        BuildSectionNavigation(6, preserveSelection: true);
+        BuildSectionNavigation(7, preserveSelection: true);
         BuildAlertSettingsGrid();
         ApplyDesktopFontScale(_desktopFontScale, AlertSettingsGrid);
         UpdateDashboardUi(_fileWatcher.State);
