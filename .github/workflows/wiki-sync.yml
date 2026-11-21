@@ -16,6 +16,7 @@ on:
       - main
     paths:
       - 'wiki/**'
+      - '.github/workflows/wiki-sync.yml'
   workflow_dispatch:
 
 permissions:
@@ -39,6 +40,8 @@ jobs:
       - name: Copy markdown pages and push if changed
         run: |
           cp -f wiki/*.md wiki-repo/
+          # GitHub Wiki renders internal links without the .md extension; keep .md in repo and strip on sync
+          sed -i -E 's/\]\(([A-Za-z0-9_-]+)\.md\)/](\1)/g' wiki-repo/*.md
           cd wiki-repo
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
