@@ -17,9 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.1.0-alpha)'
+        description: 'Release tag (e.g. v0.2.0)'
         required: true
-        default: 'v0.1.0-alpha'
+        default: 'v0.2.0'
 
 permissions:
   contents: write
@@ -51,6 +51,15 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+          cache: true
+
+      - name: Check Web HUD JavaScript syntax
+        shell: pwsh
+        run: node --check Web/app.js
+
+      - name: Run HUDnopy automated tests
+        shell: pwsh
+        run: dotnet run --project HUDnopy.Tests/HUDnopy.Tests.csproj -c Release
 
       - name: Publish self-contained Windows x64 binary
         shell: pwsh
@@ -112,14 +121,13 @@ jobs:
           ## HUDnopy __TAG__
 
           __BANNER__### Highlights
-          - **Live Desktop Telemetry HUD & Mini-HUD:** Real-time parsing of Elite Dangerous `Status.json`, Journal logs, Cargo, Market, Outfitting, Shipyard, NavRoute, Modules, ShipLocker, Backpack, and Fleet Carrier Bartender markets.
-          - **Exploration & Exobiology:** FSS/DSS body table with Universal Cartographics payout estimates, Odyssey exobiology genus predictions, 3-sample genetic diversity tracker, and unsold credit accounting.
-          - **Fleet Carrier & Tritium Calculator:** Live carrier overview, cargo hold (via Frontier cAPI), and mass-aware tritium calculator including depot fuel and step-by-step burn.
-          - **Spansh & GalNet Integration:** Built-in Neutron, Road to Riches, Exomastery, and Fleet Carrier route plotters (with CSV import and auto-copy next jump), Trade plotter, Pristine Mining Rings, Nearest Services, Ship/Module finder (Li Yong-Rui -15%), Colonisation supplier finder, and multi-language GalNet reader.
-          - **COVAS AI Copilot & Piper Neural TTS:** Supports Ollama/LM Studio, Google Gemini, and OpenAI-compatible providers with Push-to-Talk, Hands-Free VAD, dynamic event commentary, and offline Piper Neural TTS (11 curated voices across 6 languages) + Windows SAPI fallback.
+          - **8-Tab Desktop & Web HUD Parity:** Reorganized into 8 focused desktop tabs (7 in Web MFD, plus Split MFD mode) with live Elite Server Status, Galaxy BGS Tick, Landing Pad bay locator & TTS guidance, contextual Mini-HUD, and 1-click EDSY / Coriolis ship loadout export.
+          - **COVAS AI Copilot (Streaming, ReAct & Voice Macros):** Real-time SSE sentence-by-sentence streaming + persistent warm Piper Neural TTS daemon, configurable Thinking Mode (`no`/`auto`/`yes`), 2-step read-only `[[QUERY]]` analytics, instant zero-LLM Voice Macros, zero-token tactical announcements in all 6 languages, global Push-to-Talk hotkey, Wake Word, persistent memory, and voice timers.
+          - **Exploration, Exobiology & Surface Compass:** Live spherical surface compass tape with 1-click Last Exo Sample targeting, FSS/DSS body table with Universal Cartographics & Odyssey exobiology predictions, and historical Journal expedition analytics with Markdown export.
+          - **Engineering Wishlist, Cargo & Shipyard:** Curated ship & Odyssey engineering wishlist with live missing-material tracking, instant docked cargo sell-value & colonisation cross-reference, automatic EDSM Shipyard fallback, and official multilingual module names across all 6 languages.
+          - **Fleet Carrier, Spansh & GalNet:** Live carrier jump countdown with TTS warnings and financial runway, mass-aware tritium calculator, Spansh route/trade/mining/services/colonisation tools, and multi-language GalNet reader.
           - **Frontier cAPI & Community Sync:** Official Frontier Companion API (OAuth 2.0 + PKCE + DPAPI encrypted tokens) plus opt-in EDDN, EDSM, and Inara sync.
-          - **Secure HTTPS Web HUD & `.binds` Control Deck:** Embedded Kestrel HTTPS/WebSocket MFD with QR pairing, session codes, VPN binding, and auto-context Ship/SRV/On-Foot/DSS/SLF control deck.
-          - **6 Languages:** Spanish (`es-ES`), English (`en-GB`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`).
+          - **6 Languages (English Default):** English (`en-GB`, default), Spanish (`es-ES`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`).
 
           ### Downloads
           - **Windows Installer (`HUDnopy-__TAG__-Setup.exe`):** Per-user installer (no admin prompt required) with Start Menu and optional Desktop shortcuts.

@@ -1,6 +1,6 @@
 # HUDnopy Wiki
 
-> **Current Version:** `v0.1.0-alpha` *(Early Preview — under active development; not yet a final stable release).*
+> **Current Version:** `v0.2.0` *(Open-source release with 8-tab Desktop ↔ Web HUD parity, streaming COVAS AI Copilot, warm Piper Neural TTS, and 15 automated CI test suites).*
 
 Welcome to the official documentation for **HUDnopy** — an open-source Elite Dangerous telemetry HUD, Web MFD, Fleet Carrier manager, Spansh toolkit, and voice-enabled AI Copilot.
 

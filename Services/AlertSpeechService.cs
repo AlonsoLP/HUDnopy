@@ -38,7 +38,8 @@ public sealed class AlertSpeechService
         string? NotificationId,
         AlertSeverity Severity,
         DateTimeOffset EnqueuedAtUtc,
-        bool IsManualPreview) : IDisposable
+        bool IsManualPreview,
+        bool AppendSequential = false) : IDisposable
     {
         private readonly CancellationTokenSource _cts = new();
 
@@ -48,6 +49,7 @@ public sealed class AlertSpeechService
         public AlertSeverity Severity { get; } = Severity;
         public DateTimeOffset EnqueuedAtUtc { get; } = EnqueuedAtUtc;
         public bool IsManualPreview { get; } = IsManualPreview;
+        public bool AppendSequential { get; } = AppendSequential;
         public CancellationToken CancellationToken => _cts.Token;
         public bool IsCancellationRequested => _cts.IsCancellationRequested;
 
@@ -145,6 +147,24 @@ public sealed class AlertSpeechService
             IsManualPreview: true));
     }
 
+    /// <summary>
+    /// Enqueues a streamed sentence from COVAS AI. The first sentence interrupts any prior speech;
+    /// subsequent sentences append seamlessly in FIFO order without cutting off the previous sentence.
+    /// </summary>
+    public void SpeakStreamSentence(string text, bool interruptPrevious)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+        EnqueueSpeech(new SpeechRequest(
+            text.Trim(),
+            AlertId: null,
+            NotificationId: null,
+            Severity: AlertSeverity.Information,
+            EnqueuedAtUtc: DateTimeOffset.UtcNow,
+            IsManualPreview: interruptPrevious,
+            AppendSequential: !interruptPrevious));
+    }
+
     public void StopSpeaking()
     {
         lock (_queueLock)
@@ -181,7 +201,7 @@ public sealed class AlertSpeechService
             for (int i = _pendingRequests.Count - 1; i >= 0; i--)
             {
                 var req = _pendingRequests[i];
-                if (!req.IsManualPreview &&
+                if (!req.IsManualPreview && !req.AppendSequential &&
                     !_alertService.IsAlertStillRelevant(req.AlertId, req.NotificationId))
                 {
                     req.Dispose();
@@ -226,7 +246,11 @@ public sealed class AlertSpeechService
 
         lock (_queueLock)
         {
-            if (request.IsManualPreview || mode == "immediate")
+            if (request.AppendSequential)
+            {
+                _pendingRequests.Add(request);
+            }
+            else if (request.IsManualPreview || mode == "immediate")
             {
                 ClearPendingRequestsLocked();
                 _pendingRequests.Add(request);
@@ -243,14 +267,14 @@ public sealed class AlertSpeechService
             }
             else
             {
-                // Modo táctico: Si entra combustible crítico, descartar combustible bajo pendiente
+                // Tactical mode: if critical fuel arrives, discard any pending low-fuel alert
                 if (string.Equals(request.AlertId, "fuel-critical", StringComparison.OrdinalIgnoreCase))
                 {
                     RemovePendingRequestsLocked(r =>
                         string.Equals(r.AlertId, "fuel-low", StringComparison.OrdinalIgnoreCase));
                 }
 
-                // Deduplicación por tipo de alerta (Latest-Wins): reemplaza cualquier pendiente del mismo AlertId
+                // Deduplication by alert type (Latest-Wins): replace any pending item with the same AlertId
                 if (!string.IsNullOrEmpty(request.AlertId))
                 {
                     RemovePendingRequestsLocked(r =>
@@ -266,7 +290,7 @@ public sealed class AlertSpeechService
                     return sev != 0 ? sev : a.EnqueuedAtUtc.CompareTo(b.EnqueuedAtUtc);
                 });
 
-                // Limitar tamaño máximo de cola descartando los de menor prioridad / más antiguos
+                // Cap maximum queue size by discarding lowest-priority / oldest items
                 while (_pendingRequests.Count > MaxTacticalPendingRequests)
                 {
                     int lastIndex = _pendingRequests.Count - 1;
@@ -274,7 +298,7 @@ public sealed class AlertSpeechService
                     _pendingRequests.RemoveAt(lastIndex);
                 }
 
-                // Interrumpir la locución actual si la nueva tiene mayor severidad o si escala de fuel-low a fuel-critical
+                // Interrupt current speech if the new alert has higher severity or escalates from fuel-low to fuel-critical
                 if (_currentRequest is { IsManualPreview: false } current &&
                     (request.Severity > current.Severity ||
                      (string.Equals(current.AlertId, "fuel-low", StringComparison.OrdinalIgnoreCase) &&
@@ -358,10 +382,10 @@ public sealed class AlertSpeechService
 
     private bool IsRequestValidToSpeak(SpeechRequest request)
     {
-        if (request.IsManualPreview || !string.Equals(GetQueueMode(), "tactical", StringComparison.Ordinal))
+        if (request.IsManualPreview || request.AppendSequential || !string.Equals(GetQueueMode(), "tactical", StringComparison.Ordinal))
             return true;
 
-        // Si es una alerta de estado de la nave, verificar que la condición siga activa
+        // For ship-status alerts, verify that the condition is still active
         if (AlertService.IsConditionAlert(request.AlertId))
             return _alertService.IsAlertStillRelevant(request.AlertId, request.NotificationId);
 
@@ -472,7 +496,7 @@ public sealed class AlertSpeechService
         }
         catch (OperationCanceledException)
         {
-            // Cancelación normal por prioridad o nueva prueba manual.
+            // Normal cancellation due to priority preemption or a new manual test.
         }
         catch (Exception exception) when (
             exception is InvalidOperationException or ArgumentException or IOException or

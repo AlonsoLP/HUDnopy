@@ -75,6 +75,11 @@ public partial class EliteFileWatcherService : IDisposable
     private int _watcherRefreshPending;
     private static int? _cachedGameProcessId;
     private static long _lastProcessScanTick;
+    private static readonly System.Net.Http.HttpClient EdsmShipyardHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private string _lastEdsmShipyardLookupKey = "";
+    private string _lastModuleLocalizationLang = "";
+    private bool _stateDirty = true;
+    private DateTime _lastHeartbeatPublishUtc = DateTime.MinValue;
 
     public ShipState State => Volatile.Read(ref _publishedState);
     public string UnhandledEventsFilePath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "unhandled_events.jsonl");
@@ -97,10 +102,10 @@ public partial class EliteFileWatcherService : IDisposable
             ScanCurrentFolderForUnhandledMessages(notify: false);
 
         _pollTimer = new System.Timers.Timer(1200);
-        _pollTimer.Elapsed += (_, _) => RefreshState();
+        _pollTimer.Elapsed += (_, _) => RefreshState(forcePublish: false);
 
         InitializeWatcher();
-        RefreshState();
+        RefreshState(forcePublish: true);
         _pollTimer.Start();
     }
 
@@ -137,7 +142,7 @@ public partial class EliteFileWatcherService : IDisposable
         }
         catch
         {
-            // Se usará el temporizador de sondeo como respaldo
+            // The polling timer will be used as fallback
         }
     }
 
@@ -154,28 +159,45 @@ public partial class EliteFileWatcherService : IDisposable
                 {
                     await System.Threading.Tasks.Task.Delay(40).ConfigureAwait(false);
                     Interlocked.Exchange(ref _watcherRefreshPending, 0);
-                    RefreshState();
+                    RefreshState(forcePublish: false);
                 });
             }
         }
     }
 
-    public void RefreshState()
+    internal void RefreshStateForTest()
+    {
+        _journalSessionActive = true;
+        RefreshState(forcePublish: true);
+    }
+
+    public void RefreshState(bool forcePublish = true)
     {
         lock (_refreshLock)
         {
             var cfg = _configService.Current;
-            _state.ThemeAccentHex = cfg.ThemeAccentHex;
-            _state.ThemeSecondaryHex = cfg.ThemeSecondaryHex;
+            if (!string.Equals(_state.ThemeAccentHex, cfg.ThemeAccentHex, StringComparison.Ordinal) ||
+                !string.Equals(_state.ThemeSecondaryHex, cfg.ThemeSecondaryHex, StringComparison.Ordinal))
+            {
+                _state.ThemeAccentHex = cfg.ThemeAccentHex;
+                _state.ThemeSecondaryHex = cfg.ThemeSecondaryHex;
+                _stateDirty = true;
+            }
 
             string folder = cfg.JournalFolderPath;
+            long prevJournalPos = _lastJournalPosition;
+            string prevJournalFile = _currentJournalFile;
+            bool prevGameDetected = _state.IsGameDetected;
             bool isGameProcessRunning = IsEliteDangerousProcessRunning();
             if (isGameProcessRunning || _journalSessionActive == true)
                 ReadLatestJournal(folder);
+            if (_lastJournalPosition != prevJournalPos || !string.Equals(_currentJournalFile, prevJournalFile, StringComparison.OrdinalIgnoreCase))
+                _stateDirty = true;
             if (_materialsChanged)
             {
                 SyncMaterialsToState();
                 _materialsChanged = false;
+                _stateDirty = true;
             }
 
             if (_journalSessionActive == true)
@@ -210,7 +232,9 @@ public partial class EliteFileWatcherService : IDisposable
                 ReadMarketJson(Path.Combine(folder, "Market.json"));
                 SyncMarketColonisationNeeds();
                 ReadOutfittingJson(Path.Combine(folder, "Outfitting.json"));
+                RelocalizeModuleNames();
                 ReadShipyardJson(Path.Combine(folder, "Shipyard.json"));
+                TryEnsureEdsmShipyardFallback();
                 ReadModulesInfoJson(Path.Combine(folder, "ModulesInfo.json"));
                 ReadShipLockerJson(Path.Combine(folder, "ShipLocker.json"));
                 ReadCarrierMaterialsJson(Path.Combine(folder, "FCMaterials.json"));
@@ -226,8 +250,20 @@ public partial class EliteFileWatcherService : IDisposable
             }
 
             FlushUnhandledBatchIfNeeded();
-            _state.LastUpdated = DateTime.UtcNow;
-            PublishState();
+            if (_state.IsGameDetected != prevGameDetected)
+                _stateDirty = true;
+
+            DateTime nowUtc = DateTime.UtcNow;
+            bool carrierCountdownActive = _state.Carrier?.DepartureTime is DateTimeOffset dep && dep > nowUtc;
+            bool heartbeatDue = isGameSessionActive && (nowUtc - _lastHeartbeatPublishUtc).TotalSeconds >= 15;
+
+            if (forcePublish || _stateDirty || carrierCountdownActive || heartbeatDue)
+            {
+                _stateDirty = false;
+                _lastHeartbeatPublishUtc = nowUtc;
+                _state.LastUpdated = nowUtc;
+                PublishState();
+            }
         }
     }
 
@@ -255,7 +291,7 @@ public partial class EliteFileWatcherService : IDisposable
             }
             catch (ArgumentException)
             {
-                // El proceso ya terminó.
+                // Process has already exited.
             }
             catch (InvalidOperationException)
             {
@@ -568,7 +604,7 @@ public partial class EliteFileWatcherService : IDisposable
                         }
                         catch
                         {
-                            // Ignorar línea malformada
+                            // Ignore malformed line
                         }
                     }
                 }
@@ -624,7 +660,7 @@ public partial class EliteFileWatcherService : IDisposable
             }
             catch
             {
-                // Ignorar error de eliminación en disco
+                // Ignore disk deletion error
             }
         }
 
@@ -682,7 +718,7 @@ public partial class EliteFileWatcherService : IDisposable
                     }
                     catch
                     {
-                        // Ignorar línea inválida
+                        // Ignore invalid line
                     }
                 }
             }

@@ -14,16 +14,26 @@ HUDnopy integrates directly with the **Spansh** API (`https://spansh.co.uk/api/`
 
 ## Spansh Search Tools
 
-- **Nearest Services (**Navigation → Current System**):** Locate the closest Material Trader, Tech Broker, Interstellar Factors, or Tritium seller relative to your live coordinates. Double-click any row to copy the system name.
-- **Ship & Module Finder (**Navigation → Current System**):** Search stations stocking a specific ship or module with an optional **Li Yong-Rui (-15% discount)** filter.
-- **Trade Route Plotter (**Operations → Market**):** Plans multi-hop trade routes using your current cargo capacity and credit balance.
+- **Nearest Services & Ship/Module Finder (**Navigation → Spansh Services**):** Locate the closest Material Trader, Tech Broker, Interstellar Factors, or Tritium seller, or search stations stocking a specific ship or module with an optional **Li Yong-Rui (-15% discount)** filter.
+- **Trade Route Plotter (**Inventory → Market**):** Plans multi-hop trade routes using your current cargo capacity and credit balance.
 - **Pristine Mining Rings & Hotspots (**Operations → Mining**):** Finds nearby pristine rings and hotspots for a target mineral.
-- **Colonisation Supplier Finder (**Activity → Colonisation**):** Locates nearby Large-pad (`L`) stations supplying the selected or next pending colonisation commodity.
+- **Colonisation Supplier Finder (**Operations → Colonisation**):** Locates nearby Large-pad (`L`) stations supplying the selected or next pending colonisation commodity.
+- **Engineering Wishlist (**Inventory → Engineers & Wishlist**):** Tracks curated ship and Odyssey blueprints against your live materials inventory with 1-click Material Trader lookup.
+- **EDSY / Coriolis Export (**Flight → Ship Modules**):** Exports your current `Loadout` directly to EDSY or Coriolis in one click.
 
-## Fleet Carrier Tritium Calculator (**Navigation → Fleet Carrier**)
+## Commander Operations & Flight Utilities
 
-- Calculates estimated tritium consumption over any target distance in light-years.
-- Accounts for your carrier's **total live loaded mass** (`Capacity - FreeSpace + Fuel` depot tritium) and deducts burned fuel step-by-step across each 500 LY jump.
+- **Landing Pad Locator (**Dashboard**):** Resolves all 45 starport landing pads to clock hour, bay depth row, and pad size (`S`/`M`/`L`), displays a visual bay diagram card on both Desktop and Web HUD, and announces pad guidance via TTS (automatically cleared on undock or `FSDJump`).
+- **Elite Server Status & Galaxy BGS Tick (**Dashboard** & **Navigation → Current System**):** Polls EDSM server status and the latest EliteBGS galaxy tick every 10 minutes with a manual refresh button.
+- **Live Surface Compass & Exo Sample Target (**Navigation → Surface**):** Spherical bearing, turn arrows (`◀◀`/`◀`/`▲`/`▶`/`▶▶`), ASCII compass tape, and a 1-click **Last Exo Sample** button targeting your latest exobiology sample coordinates.
+- **Cargo Profit & Colonisation Cross-Reference (**Inventory → Cargo**):** Compares live hold contents against docked `Market.json` prices (estimated sell value & profit) and active Colonisation resource needs.
+- **Missions Grouped by System (**Operations → Missions**):** Groups active contracts by destination system, displays pending-cargo shortage warnings, and shows active Frontier cAPI Community Goals.
+- **Historical Expedition Analytics (**Activity → Milestones**):** Scans up to 100 recent Journal logs asynchronously to compute jumps, LY distance, unique systems, ELW/WW/AW counts, exobiology species, missions, and earnings, with Markdown report export.
+
+## Fleet Carrier Tritium Calculator & Jump Countdown (**Navigation → Fleet Carrier**)
+
+- Live `T-MM:SS` Fleet Carrier jump countdown with automatic TTS alerts at 10 min, 3 min (lockdown), and 1 min before jump, plus weekly/monthly upkeep runway calculation.
+- Calculates estimated tritium consumption over any target distance in light-years, accounting for your carrier's **total live loaded mass** (`Capacity - FreeSpace + Fuel` depot tritium) and deducting burned fuel step-by-step across each 500 LY jump.
 
 ## GalNet News (**Activity → GalNet**)
 

@@ -22,7 +22,10 @@ public sealed record EngineeringBlueprint(
     string Id,
     string DisplayName,
     string Category,
-    IReadOnlyDictionary<string, int> Ingredients);
+    IReadOnlyDictionary<string, int> Ingredients)
+{
+    public override string ToString() => DisplayName;
+}
 
 /// <summary>
 /// Live progress row comparing required engineering materials against commander inventory.
@@ -175,15 +178,15 @@ public static class EngineeringWishlistService
     private static int CountOwned(string materialName, ShipState state)
     {
         int shipOwned = state.MaterialsInventory
-            .Where(m => MatchesName(m.Name, materialName))
+            .Where(m => MatchesName(m.Name, materialName) || MatchesName(m.DisplayName, materialName))
             .Sum(static m => m.Count);
 
         int lockerOwned = state.ShipLockerInventory
-            .Where(b => MatchesName(b.Name, materialName))
+            .Where(b => MatchesName(b.Name, materialName) || MatchesName(b.DisplayName, materialName))
             .Sum(static b => b.Count);
 
         int backpackOwned = state.BackpackInventory
-            .Where(b => MatchesName(b.Name, materialName))
+            .Where(b => MatchesName(b.Name, materialName) || MatchesName(b.DisplayName, materialName))
             .Sum(static b => b.Count);
 
         return shipOwned + lockerOwned + backpackOwned;

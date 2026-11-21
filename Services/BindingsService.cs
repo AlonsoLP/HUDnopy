@@ -33,7 +33,7 @@ public class BindingsService
 
     private static readonly List<KnownAction> KnownActions = new()
     {
-        // Vuelo y Navegación
+        // Flight and Navigation
         new("Supercruise", "Supercrucero", "Vuelo y Navegación", "🚀", "Key_J"),
         new("HyperSuperCombination", "Salto Hiperespacial / FSD", "Vuelo y Navegación", "✦", "Key_J", "Key_LeftShift"),
         new("TargetNextRouteSystem", "Siguiente Sistema en Ruta", "Vuelo y Navegación", "🧭", "Key_N"),
@@ -62,7 +62,7 @@ public class BindingsService
         new("CycleNextTarget", "Siguiente Objetivo", "Combate y Defensas", "⏭", "Key_G"),
         new("CycleFireGroupNext", "Siguiente Grupo de Acción", "Combate y Defensas", "🔫", "Key_N"),
 
-        // Energía (Pips)
+        // Power (Pips)
         new("IncreaseSystemsPower", "Energía a Sistemas (SYS +)", "Energía (Pips)", "🛡", "Key_LeftArrow"),
         new("IncreaseEnginesPower", "Energía a Motores (ENG +)", "Energía (Pips)", "🚀", "Key_UpArrow"),
         new("IncreaseWeaponsPower", "Energía a Armas (WEP +)", "Energía (Pips)", "⚔", "Key_RightArrow"),
@@ -77,7 +77,7 @@ public class BindingsService
         new("FocusRadarPanel", "Panel Inferior (Rol / VRE)", "Paneles e Interfaz", "◩", "Key_3"),
         new("FocusRightPanel", "Panel Derecho (Sistemas / Nave)", "Paneles e Interfaz", "◨", "Key_4"),
 
-        // Vehículo SRV
+        // SRV Vehicle
         new("AutoBreakBuggyButton", "Freno de mano SRV", "Vehículo SRV", "🅿", "Key_X"),
         new("HeadlightsBuggyButton", "Luces SRV", "Vehículo SRV", "💡", "Key_Insert"),
         new("ToggleBuggyTurretButton", "Torreta SRV", "Vehículo SRV", "🎯", "Key_U"),
@@ -101,7 +101,7 @@ public class BindingsService
         new("OrderHoldPosition", "Caza: Mantener posición", "DSS y Caza (SLF)", "⏹", ""),
         new("OrderRequestDock", "Caza: Solicitar atraque", "DSS y Caza (SLF)", "🛬", ""),
 
-        // Macros Tácticas
+        // Tactical Macros
         new("Macro:CombatPosture", "Macro: Postura de combate", "Macros Tácticas", "⚔", "MACRO"),
         new("Macro:EscapePosture", "Macro: Evasión máxima", "Macros Tácticas", "⚡", "MACRO"),
         new("Macro:ExplorationPosture", "Macro: Modo exploración", "Macros Tácticas", "🔭", "MACRO"),
@@ -217,7 +217,7 @@ public class BindingsService
                 }
             }
 
-            // Si no se encuentra por StartPreset, tomar el archivo .binds modificado más recientemente
+            // If not found via StartPreset, pick the most recently modified .binds file
             return Directory.GetFiles(folder, "*.binds")
                 .OrderByDescending(File.GetLastWriteTimeUtc)
                 .FirstOrDefault();
@@ -250,7 +250,7 @@ public class BindingsService
 
                 if (!dict.TryGetValue(actionName, out var binding))
                 {
-                    // Solo añadir acciones extra si tienen algún botón o tecla asignada
+                    // Only add extra actions if they have at least one button or key bound
                     string pDev = primary?.Attribute("Device")?.Value ?? "{NoDevice}";
                     string sDev = secondary?.Attribute("Device")?.Value ?? "{NoDevice}";
                     if (pDev == "{NoDevice}" && sDev == "{NoDevice}") continue;
@@ -289,7 +289,7 @@ public class BindingsService
         }
         catch
         {
-            // Mantener valores actuales si el XML está siendo escrito
+            // Keep current values if the XML file is currently being written
         }
     }
 

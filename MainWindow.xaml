@@ -676,12 +676,13 @@
                         </StackPanel>
                     </Border>
                     <Border x:Name="NavigationRouteSection" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16" Margin="0,14,0,0">
-                        <DockPanel>
-                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,12">
                                 <TextBlock Text="RUTA DE NAVEGACIÓN ACTIVA (NavRoute.json)" local:UiText.Key="routeTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" />
                                 <TextBlock x:Name="TxtRouteSummary" Text="0 saltos" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" HorizontalAlignment="Right" />
                             </DockPanel>
                             <DataGrid x:Name="GridNavRoute"
+                                      MaxHeight="340"
                                       AutoGenerateColumns="False"
                                       IsReadOnly="True"
                                       Background="#090C10"
@@ -752,7 +753,7 @@
                                     <DataGridTextColumn Header="TOTAL (AL)" local:TableHeader.Key="totalDistance" Binding="{Binding DistanceFromStartLy, StringFormat='{}{0:0.0} AL'}" Width="90" MinWidth="90" />
                                 </DataGrid.Columns>
                             </DataGrid>
-                            <Border x:Name="SpanshRouteCard" DockPanel.Dock="Bottom" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,14,0,0">
+                            <Border x:Name="SpanshRouteCard" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,14,0,0">
                                 <StackPanel>
                                     <TextBlock Text="ASISTENTE DE RUTAS SPANSH (NEUTRONES / RICHES / EXOMASTERY / PORTANAVES)" local:UiText.Key="spanshRouteTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,8" />
                                     <WrapPanel Margin="0,0,0,8">
@@ -786,7 +787,7 @@
                                     </DataGrid>
                                 </StackPanel>
                             </Border>
-                        </DockPanel>
+                        </StackPanel>
                     </Border>
 
                     <Border x:Name="NavigationBodiesSection" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16" Margin="0,14,0,0">
@@ -2059,10 +2060,16 @@
                                                 <ComboBoxItem Content="Personalizada" Tag="custom" />
                                             </ComboBox>
                                             <TextBlock Text="Longitud:" local:UiText.Key="aiVerbosityLabel" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
-                                            <ComboBox x:Name="CmbAiVerbosity" Width="150" SelectedValuePath="Tag" SelectionChanged="CmbAiVerbosity_SelectionChanged" Margin="0,0,0,6">
+                                            <ComboBox x:Name="CmbAiVerbosity" Width="150" SelectedValuePath="Tag" SelectionChanged="CmbAiVerbosity_SelectionChanged" Margin="0,0,12,6">
                                                 <ComboBoxItem Content="Ultra-breve" Tag="brief" />
                                                 <ComboBoxItem Content="Normal" Tag="normal" />
                                                 <ComboBoxItem Content="Detallada" Tag="detailed" />
+                                            </ComboBox>
+                                            <TextBlock Text="Razonamiento:" local:UiText.Key="aiThinkingLabel" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                            <ComboBox x:Name="CmbAiThinkingMode" Width="165" SelectedValuePath="Tag" SelectionChanged="CmbAiThinkingMode_SelectionChanged" Margin="0,0,0,6">
+                                                <ComboBoxItem Content="No (Rápido)" local:UiText.Key="aiThinkingNo" Tag="no" />
+                                                <ComboBoxItem Content="Auto (Dinámico)" local:UiText.Key="aiThinkingAuto" Tag="auto" />
+                                                <ComboBoxItem Content="Sí (Profundo)" local:UiText.Key="aiThinkingYes" Tag="yes" />
                                             </ComboBox>
                                         </WrapPanel>
                                         <StackPanel x:Name="AiCustomPersonalityPanel" Visibility="Collapsed" Margin="0,0,0,8">
@@ -2114,6 +2121,39 @@
                                         <CheckBox x:Name="ChkAiArrivalBriefing" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkAiArrivalBriefing_Click">
                                             <TextBlock Text="Briefing exprés al llegar a sistema (nota personal, portanaves, anarquía)" local:UiText.Key="aiArrivalBriefingToggle" TextWrapping="Wrap" />
                                         </CheckBox>
+                                        <Border Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,4,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="AVISOS TÁCTICOS AUTOMÁTICOS (0 TOKENS — SIN LLAMAR AL LLM)" local:UiText.Key="aiTacticalTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                                <CheckBox x:Name="ChkAiTacticalHighGravity" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,4" Click="ChkAiTacticalOption_Click">
+                                                    <TextBlock Text="Aviso de alta gravedad al aproximarse a planeta (≥ 1,5 G)" local:UiText.Key="aiTacticalHighGravity" TextWrapping="Wrap" />
+                                                </CheckBox>
+                                                <CheckBox x:Name="ChkAiTacticalValuableSignals" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,4" Click="ChkAiTacticalOption_Click">
+                                                    <TextBlock Text="Señales FSS valiosas (Emisiones de Alto Grado, Thargoid, Guardián, Megaship)" local:UiText.Key="aiTacticalValuableSignals" TextWrapping="Wrap" />
+                                                </CheckBox>
+                                                <CheckBox x:Name="ChkAiTacticalMiningProspector" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,4" Click="ChkAiTacticalOption_Click">
+                                                    <TextBlock Text="Prospección minera inteligente (núcleos profundos y minerales objetivo)" local:UiText.Key="aiTacticalMiningProspector" TextWrapping="Wrap" />
+                                                </CheckBox>
+                                                <CheckBox x:Name="ChkAiTacticalRadioChatter" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,0" Click="ChkAiTacticalOption_Click">
+                                                    <TextBlock Text="Radio y escuadrón (mensajes de jugadores/escuadrón y amenazas piratas)" local:UiText.Key="aiTacticalRadioChatter" TextWrapping="Wrap" />
+                                                </CheckBox>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <CheckBox x:Name="ChkAiVoiceMacrosEnabled" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkAiTacticalOption_Click">
+                                                    <TextBlock Text="Macros de voz instantáneas (0 ms / sin gastar tokens LLM)" local:UiText.Key="aiVoiceMacrosToggle" FontWeight="Bold" TextWrapping="Wrap" />
+                                                </CheckBox>
+                                                <ListBox x:Name="LstAiVoiceMacros" MaxHeight="110" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="#33FFFFFF" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6" />
+                                                <WrapPanel Margin="0,0,0,6">
+                                                    <TextBox x:Name="TxtVoiceMacroTrigger" Width="190" Padding="5,3" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Margin="0,0,6,4" ToolTip="Frase(s) separadas por coma" />
+                                                    <TextBox x:Name="TxtVoiceMacroSteps" Width="220" Padding="5,3" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Margin="0,0,6,4" ToolTip="Acciones separadas por coma (ej: LandingGearToggle, DELAY:150, ShipSpotLightToggle)" />
+                                                    <TextBox x:Name="TxtVoiceMacroConfirm" Width="170" Padding="5,3" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Margin="0,0,6,4" ToolTip="Confirmación de voz opcional" />
+                                                    <Button x:Name="BtnAddVoiceMacro" Content="➕ Añadir" local:UiText.Key="aiVoiceMacroAdd" Style="{StaticResource HudButtonStyle}" Padding="7,3" Margin="0,0,6,4" Click="BtnAddVoiceMacro_Click" />
+                                                    <Button x:Name="BtnRemoveVoiceMacro" Content="🗑 Quitar" local:UiText.Key="aiVoiceMacroRemove" Style="{StaticResource HudButtonStyle}" Padding="7,3" Margin="0,0,6,4" Click="BtnRemoveVoiceMacro_Click" />
+                                                    <Button x:Name="BtnResetVoiceMacros" Content="↺ Presets" local:UiText.Key="aiVoiceMacroReset" Style="{StaticResource HudButtonStyle}" Padding="7,3" Margin="0,0,0,4" Click="BtnResetVoiceMacros_Click" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
                                         <WrapPanel Margin="0,0,0,6">
                                             <CheckBox x:Name="ChkAiGlobalPttHotkey" Foreground="{StaticResource HudTextBrush}" VerticalAlignment="Center" Margin="0,0,8,4" Click="ChkAiGlobalPttHotkey_Click">
                                                 <TextBlock Text="Tecla global Push-to-Talk (funciona en pantalla completa / VR):" local:UiText.Key="aiGlobalPttToggle" TextWrapping="Wrap" />

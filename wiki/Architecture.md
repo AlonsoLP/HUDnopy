@@ -30,14 +30,16 @@ Services/Telemetry/EliteFileWatcherService (partial classes)
 
 | Directory | Responsibility |
 |---|---|
-| `Localization/` | Strongly-typed translation catalogs backed by embedded JSON resources with startup parity checks. |
-| `Models/` | Immutable-friendly state snapshots and domain models split by gameplay area (`ShipState`, `ExplorationModels`, `OperationsModels`, `CombatMiningModels`, `FleetAndGoalsModels`, `CarrierState`, `AppConfig`). |
-| `Resources/Languages/` | Complete JSON translation packs for `es-ES`, `en-GB`, `fr-FR`, `de-DE`, `ru-RU`, and `pt-BR`. |
-| `Services/` | Independent domain services (AI, Alerts, Audio, Piper TTS, Bindings, Input Simulation, Frontier cAPI, Community Sync, Spansh, GalNet, Web Server). |
-| `Services/Telemetry/` | Modular `partial class EliteFileWatcherService` implementation. |
+| `HUDnopy.Tests/` | Zero-dependency automated regression test suite (15 suites) executed on every push/PR and release via GitHub Actions. |
+| `Localization/` | Strongly-typed translation catalogs backed by embedded JSON resources (`en-GB` default) with startup parity and placeholder checks. |
+| `Models/` | Immutable-friendly state snapshots and domain models split by gameplay area (`ShipState`, `ExplorationModels`, `OperationsModels`, `CombatMiningModels`, `FleetAndGoalsModels`, `CarrierState`, `ModuleDisplayCatalog`, `AppConfig`). |
+| `Resources/Languages/` | Complete JSON translation packs for `en-GB`, `es-ES`, `fr-FR`, `de-DE`, `ru-RU`, and `pt-BR`. |
+| `Services/` | Independent domain services (Alerts, Audio, Piper TTS, Bindings, Input Simulation, Frontier cAPI, Community Sync, Spansh, Galaxy Status, GalNet, Web Server). |
+| `Services/AiCopilot/` | Modular `partial class AiCopilotService` split into Core, Prompt, Queries (ReAct & actions), and Providers (SSE streaming & TTS normalization). |
+| `Services/Telemetry/` | Modular `partial class EliteFileWatcherService` with dirty-checked publishing and automatic EDSM Shipyard fallback. |
 | `UI/` | Modular `partial class MainWindow` files separated by feature area (`Telemetry`, `Operations`, `Spansh`, `AiCopilot`, `Integrations`, `Localization`, `SettingsAndAlerts`). |
 | `UI/Controls/` | Reusable WPF controls and attached properties (`UiText`, `TableHeader`, `SectionNavigationPanel`). |
-| `Web/` | Single-page responsive Web MFD (`index.html`) served over HTTPS. |
+| `Web/` | Modular responsive Web MFD (`index.html`, `styles.css`, `app.js`) served over HTTPS. |
 | `docs/` | Static GitHub Pages OAuth 2.0 callback relay (`callback.html`) for Frontier cAPI. |
 
 ## Concurrency & State Safety

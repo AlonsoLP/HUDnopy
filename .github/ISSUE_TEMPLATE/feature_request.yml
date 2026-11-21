@@ -1,0 +1,30 @@
+name: Feature Request
+description: Suggest a new feature or improvement for HUDnopy
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Feature Summary
+      description: Describe the feature or improvement you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: usecase
+    attributes:
+      label: Use Case
+      description: How would this help during Elite Dangerous gameplay?
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Target Surface
+      options:
+        - Desktop HUD & Web HUD
+        - Desktop HUD only (Settings / Mini-HUD)
+        - COVAS AI Copilot / Voice
+        - External Integrations (Spansh / EDSM / Inara / cAPI)
+    validations:
+      required: false

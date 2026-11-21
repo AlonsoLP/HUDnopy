@@ -1,13 +1,14 @@
 # HUDnopy
 
-[![Version](https://img.shields.io/badge/Version-0.1.0--alpha%20(Preview)-yellow.svg)](#hudnopy)
+[![CI Build & Tests](https://github.com/AlonsoLP/HUDnopy/actions/workflows/ci.yml/badge.svg)](https://github.com/AlonsoLP/HUDnopy/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/Version-0.2.0-blue.svg)](#hudnopy)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0--windows-512BD4)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20WPF%20%2B%20Web%20HUD-0078D6)](#)
 [![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-orange.svg)](LICENSE)
-[![Languages](https://img.shields.io/badge/Languages-ES%20%7C%20EN%20%7C%20FR%20%7C%20DE%20%7C%20RU%20%7C%20PT-brightgreen)](#localization)
+[![Languages](https://img.shields.io/badge/Languages-EN%20%7C%20ES%20%7C%20FR%20%7C%20DE%20%7C%20RU%20%7C%20PT-brightgreen)](#localization)
 
-> [!WARNING]
-> **Early Preview (`v0.1.0-alpha`) — Active Development:** HUDnopy is currently in an early testing phase and is **not yet a final stable release**. Features, configuration formats, UI layouts, and API integrations are still evolving and may contain bugs or breaking changes. Feedback and bug reports are very welcome.
+> [!NOTE]
+> **HUDnopy `v0.2.0`** — Active open-source release with full 8-tab Desktop ↔ Web HUD parity, real-time streaming COVAS AI Copilot, persistent warm Piper Neural TTS, and 15 automated CI test suites. Feedback and bug reports are always welcome.
 
 **HUDnopy** is an open-source desktop telemetry HUD, responsive Web MFD, Fleet Carrier manager, Spansh route/trade assistant, and voice-enabled AI Copilot (COVAS) for **Elite Dangerous**.
 
@@ -17,27 +18,23 @@ Built with **.NET 10 / WPF** and an embedded **Kestrel HTTPS + WebSocket** serve
 
 ## Key Features
 
-- **Live Telemetry & Mini-HUD**
-  - Real-time parsing of `Status.json`, Journal logs, `Cargo.json`, `Market.json`, `Outfitting.json`, `Shipyard.json`, `NavRoute.json`, `ModulesInfo.json`, `ShipLocker.json`, `Backpack.json`, and `FCMaterials.json`.
-  - Always-on-top translucent **Mini-HUD** overlay and system tray support.
-- **Exploration & Exobiology**
-  - FSS/DSS body scanner table with estimated **Universal Cartographics** payouts, **Exobiology** genus predictions, 3-sample genetic diversity distance tracking, and unsold value accounting.
-- **Fleet Carrier & Tritium Calculator**
-  - Full Fleet Carrier dashboard (location, fuel, space, finances, bartender market, and cargo hold via Frontier cAPI).
-  - Mass-aware **Tritium calculator** accounting for live cargo, depot fuel mass, and step-by-step fuel burn.
-- **Combat, Mining & Operations**
-  - Live target telemetry card, combat session statistics, massacre mission stack tracker, asteroid prospector readout, BGS faction/Powerplay tracker, colonisation resource tracker, and historical Journal viewer with CSV/JSON export.
-- **Spansh & GalNet Integration**
-  - Built-in **Spansh** plotters for Neutron, Road to Riches, Exomastery, and Fleet Carrier routes (with CSV import and automatic next-jump clipboard copy), Trade routes, Pristine Mining Rings, Nearest Services, Colonisation Suppliers, and Ship/Module search with Li Yong-Rui (-15%) filtering.
-  - Multi-language **GalNet News** reader with voice playback.
-- **COVAS AI Copilot & Piper Neural TTS**
-  - Supports **Local LLMs (Ollama / LM Studio)**, **Google Gemini**, and **OpenAI / Groq / OpenRouter** with dynamic model discovery, live ship/carrier/GalNet context injection, Push-to-Talk, **Hands-Free VAD**, and optional dynamic event commentary.
-  - Built-in **Piper Neural TTS** (portable auto-download with 11 open-source voices across 6 languages) plus **Windows SAPI** fallback and unified speech-rate control.
-- **Frontier cAPI & Community Sync**
-  - Official **Frontier Companion API (cAPI)** via OAuth 2.0 + PKCE and **Windows DPAPI** encrypted token storage (`/profile`, `/fleetcarrier`, `/communitygoals`, `/market`, `/shipyard`).
-  - Independent, opt-in sync for **EDDN** (14 schemas), **EDSM** (`api-journal-v1` + bidirectional comments/traffic/deaths), and **Inara** (batched with dirty tracking).
-- **Secure Web HUD & `.binds` Control Deck**
-  - Self-signed **HTTPS** Web MFD with QR-code pairing, session codes, VPN interface binding, and auto-context Ship/SRV/On-Foot/DSS/SLF control deck reading your Elite Dangerous `.binds` files.
+- **Live Telemetry, Landing Pad & Contextual Mini-HUD**
+  - Real-time parsing of `Status.json`, Journal logs, `Cargo.json`, `Market.json`, `Outfitting.json`, `Shipyard.json` (with automatic EDSM Shipyard fallback), `NavRoute.json`, `ModulesInfo.json`, `ShipLocker.json`, `Backpack.json`, and `FCMaterials.json`.
+  - **45-pad Starport Landing Pad Locator** (clock hour, bay depth diagram, and TTS guidance), live **Elite Server Status & Galaxy BGS Tick**, **1-click EDSY / Coriolis** ship loadout export, and a **contextual Mini-HUD** overlay.
+- **Exploration, Exobiology & Surface Compass**
+  - FSS/DSS body scanner table with estimated **Universal Cartographics** payouts, **Exobiology** genus predictions, 3-sample genetic diversity tracker, **live spherical Surface Compass** with 1-click *Last Exo Sample* targeting, and **Historical Expedition Analytics** with Markdown export.
+- **Engineering Wishlist, Inventory & Fleet Carrier**
+  - Curated ship & Odyssey **Engineering Wishlist** with live missing-material calculation, instant docked **Cargo sell-value & colonisation cross-reference**, and official multilingual in-game module names across all 6 languages.
+  - Full **Fleet Carrier** dashboard (jump countdown with TTS warnings, financial runway, bartender market, cAPI cargo hold, and mass-aware **Tritium calculator**).
+- **Combat, Mining, Missions & Spansh / GalNet**
+  - Live target telemetry, combat session stats, massacre stack tracker, missions grouped by system with pending-cargo warnings, asteroid prospector, BGS/Powerplay, colonisation tracker, and historical Journal viewer.
+  - Built-in **Spansh** plotters (Neutron, Road to Riches, Exomastery, Fleet Carrier, Trade, Pristine Mining Rings, Nearest Services, Colonisation Suppliers, and Li Yong-Rui Ship/Module search) plus multi-language **GalNet News**.
+- **COVAS AI Copilot (Streaming & ReAct) & Piper Neural TTS**
+  - Supports **Local LLMs (Ollama / LM Studio)**, **Google Gemini** (`gemini-flash-lite-latest` default), and **OpenAI / Groq / OpenRouter** with real-time **SSE sentence-by-sentence streaming**, configurable **Thinking Mode** (`no`/`auto`/`yes`), 2-step read-only `[[QUERY]]` analytics, instant **zero-LLM Voice Macros**, **6-language zero-token tactical announcements**, Global Push-to-Talk hotkey, Wake Word, Hands-Free VAD, persistent memory, and voice timers.
+  - Built-in **Piper Neural TTS** running as a **persistent warm daemon** (~100–150 ms per sentence, 11 voices across 6 languages) plus **Windows SAPI** fallback.
+- **Frontier cAPI, Community Sync & Secure Web HUD**
+  - Official **Frontier Companion API (cAPI)** via OAuth 2.0 + PKCE and **Windows DPAPI** encrypted tokens, plus independent opt-in sync for **EDDN** (14 schemas), **EDSM**, and **Inara**.
+  - Self-signed **HTTPS Web MFD** (7 tabs + **Split MFD** mode for wide tablets/monitors) with QR-code pairing, session codes, VPN binding, and auto-context `.binds` Control Deck.
 
 ---
 
@@ -55,9 +52,10 @@ cd HUDnopy
 dotnet run --project HUDnopy.csproj
 ```
 
-For a release build:
+For a release build and automated regression tests:
 ```powershell
 dotnet build HUDnopy.csproj -c Release
+dotnet run --project HUDnopy.Tests/HUDnopy.Tests.csproj -c Release
 ```
 
 ---
@@ -66,16 +64,18 @@ dotnet build HUDnopy.csproj -c Release
 
 ```text
 HUDnopy/
+├── HUDnopy.Tests/         # Zero-dependency automated regression test suite (15 suites, CI-integrated)
 ├── Localization/          # Strongly-typed translation catalogs and parity validators
-├── Models/                # Domain models (ShipState, Exploration, Operations, Combat/Mining, Fleet/Goals)
-├── Resources/Languages/   # 6-language JSON packs (es-ES, en-GB, fr-FR, de-DE, ru-RU, pt-BR)
+├── Models/                # Domain models (ShipState, Exploration, Operations, ModuleDisplayCatalog, AppConfig)
+├── Resources/Languages/   # 6-language JSON packs (en-GB default, es-ES, fr-FR, de-DE, ru-RU, pt-BR)
 ├── Services/
+│   ├── AiCopilot/         # Modular AiCopilotService partials (Prompt, Queries, Providers)
 │   ├── Telemetry/         # EliteFileWatcherService partials (Core, Snapshots, Journal, Exploration)
-│   └── *.cs               # Alerts, AI Copilot, Piper TTS, Frontier cAPI, Community Sync, Spansh, Web Server
+│   └── *.cs               # Alerts, Audio, Piper TTS, Bindings, Frontier cAPI, Community Sync, Spansh, Web Server
 ├── UI/
 │   ├── Controls/          # Reusable WPF controls and attached localization properties
 │   └── MainWindow.*.cs    # Modular partial classes for MainWindow by functional domain
-├── Web/                   # Single-page responsive HTTPS Web HUD (index.html)
+├── Web/                   # Modular responsive HTTPS Web HUD (index.html, styles.css, app.js)
 ├── docs/                  # Static GitHub Pages OAuth callback relay (callback.html)
 └── wiki/                  # Full technical and user documentation (GitHub Wiki source)
 ```
@@ -84,9 +84,9 @@ HUDnopy/
 
 ## Localization
 
-HUDnopy ships with **100% key-verified localization** across 6 languages:
+HUDnopy ships with **100% key- and placeholder-verified localization** across 6 languages (default: **English**):
+- **English** (`en-GB`, default)
 - **Spanish** (`es-ES`)
-- **English** (`en-GB`)
 - **French** (`fr-FR`)
 - **German** (`de-DE`)
 - **Russian** (`ru-RU`)

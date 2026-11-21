@@ -32,8 +32,8 @@ namespace HUDnopy.Services;
 public sealed class FrontierCapiService : IDisposable
 {
     public const string DefaultClientId = "77f5fc55-aefa-491d-94c0-b0b4aea27552";
-    // Frontier solo admite redirect_uri https://. Esta página estática de GitHub Pages
-    // (docs/callback.html) reenvía code + state al loopback local http://127.0.0.1:{puerto}/callback.
+    // Frontier only allows https:// redirect_uri values. This static GitHub Pages relay
+    // (docs/callback.html) forwards code + state to local loopback http://127.0.0.1:{port}/callback.
     public const string PublicRedirectUri = "https://alonsolp.github.io/HUDnopy/callback.html";
     private const string AuthBaseUrl = "https://auth.frontierstore.net";
     private const string CapiBaseUrl = "https://companion.orerve.net";
@@ -121,7 +121,7 @@ public sealed class FrontierCapiService : IDisposable
 
         string codeVerifier = GenerateBase64UrlRandom(64);
         string codeChallenge = Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier)));
-        // El puerto va como prefijo del state para que callback.html sepa a qué loopback reenviar.
+        // The port is prefixed to state so callback.html knows which loopback port to forward to.
         string stateToken = $"{port}.{GenerateBase64UrlRandom(24)}";
 
         string authUrl =
@@ -297,7 +297,7 @@ public sealed class FrontierCapiService : IDisposable
     }
 
     // =========================================================================
-    // Sincronización de los 5 endpoints cAPI (/profile, /fleetcarrier, /cg, /market, /shipyard)
+    // Synchronize all 5 cAPI endpoints (/profile, /fleetcarrier, /cg, /market, /shipyard)
     // =========================================================================
 
     public async Task<(bool Success, string Summary)> SyncAllAsync(bool includeDockedEndpoints = false, CancellationToken ct = default)
@@ -354,7 +354,7 @@ public sealed class FrontierCapiService : IDisposable
                 syncedParts.Add("CGs");
             }
 
-            // 4 y 5. /market y /shipyard si el comandante está atracado
+            // 4 & 5. /market and /shipyard when the commander is docked
             if (includeDockedEndpoints || _fileWatcher.State.Docked)
             {
                 var (mOk, mDoc, _) = await GetCapiJsonAsync("/market", token, ct);
@@ -460,7 +460,7 @@ public sealed class FrontierCapiService : IDisposable
             if (ships.Count > 0)
                 state.StoredShips = ships.OrderBy(static s => s.StarSystem, StringComparer.CurrentCultureIgnoreCase).ThenBy(static s => s.ShipType).ToList();
 
-            // Si el juego está cerrado, rellenar datos básicos del comandante desde /profile
+            // If the game is closed, populate basic commander data from /profile
             if (!state.IsGameDetected)
             {
                 if (root.TryGetProperty("commander", out var cmdr))

@@ -47,7 +47,7 @@ public partial class EliteFileWatcherService
             else
                 _state.RawFlags2 = 0;
 
-            // En el menú principal o pantalla de carga (nave girando), Elite escribe Flags=0 y Flags2=0 sin telemetría real
+            // On the main menu or loading screen (spinning ship), Elite writes Flags=0 and Flags2=0 without real telemetry
             _state.HasStatusTelemetry = hasFlagsNumber && (_state.RawFlags != 0 || _state.RawFlags2 != 0);
             if (_state.HasStatusTelemetry)
                 _state.HasShieldTelemetry = true;
@@ -339,11 +339,14 @@ public partial class EliteFileWatcherService
                 foreach (var item in items.EnumerateArray())
                 {
                     string name = ReadJsonString(item, "Name");
+                    string localised = ReadJsonString(item, "Name_Localised");
                     snapshot.Items.Add(new OutfittingItem
                     {
                         Id = ReadJsonIdentifier(item, "id"),
                         Name = name,
-                        DisplayName = ReadJsonString(item, "Name_Localised", name),
+                        DisplayName = !string.IsNullOrWhiteSpace(localised)
+                            ? localised
+                            : ModuleDisplayCatalog.Format(name, _configService.Current.InterfaceLanguage),
                         BuyPrice = ReadJsonInt64(item, "BuyPrice") ?? 0
                     });
                 }
@@ -358,6 +361,37 @@ public partial class EliteFileWatcherService
         catch
         {
             // El juego puede estar escribiendo el archivo en ese instante.
+        }
+    }
+
+    /// <summary>
+    /// Re-localizes cached outfitting and ship module display names immediately when the UI language changes.
+    /// </summary>
+    private void RelocalizeModuleNames()
+    {
+        string lang = _configService.Current.InterfaceLanguage;
+        if (string.Equals(_lastModuleLocalizationLang, lang, StringComparison.OrdinalIgnoreCase))
+            return;
+        _lastModuleLocalizationLang = lang;
+
+        if (_state.Outfitting.Items.Count > 0)
+        {
+            foreach (var item in _state.Outfitting.Items)
+            {
+                if (!string.IsNullOrWhiteSpace(item.Name))
+                    item.DisplayName = ModuleDisplayCatalog.Format(item.Name, lang);
+            }
+            _state.Outfitting = _state.Outfitting.Snapshot();
+        }
+
+        if (_shipModulesBySlot.Count > 0)
+        {
+            foreach (var mod in _shipModulesBySlot.Values)
+            {
+                if (!string.IsNullOrWhiteSpace(mod.Item))
+                    mod.DisplayName = ModuleDisplayCatalog.Format(mod.Item, lang);
+            }
+            SyncShipModulesToState();
         }
     }
 
@@ -393,7 +427,15 @@ public partial class EliteFileWatcherService
                 }
             }
 
-            _state.Shipyard = snapshot;
+            // Preserve an existing multi-ship catalog (e.g. from EDSM fallback) if Odyssey writes a 1-ship Shipyard.json for the same station
+            bool keepExisting = snapshot.Items.Count <= 1 &&
+                _state.Shipyard.Available &&
+                _state.Shipyard.Items.Count > 1 &&
+                !string.IsNullOrWhiteSpace(snapshot.StationName) &&
+                string.Equals(_state.Shipyard.StationName, snapshot.StationName, StringComparison.OrdinalIgnoreCase);
+
+            if (!keepExisting)
+                _state.Shipyard = snapshot;
             bool hadStamp = _snapshotFileStamps.ContainsKey(path);
             MarkSnapshotFileRead(path);
             if (_hasCompletedInitialJournalLoad && hadStamp)
@@ -402,6 +444,119 @@ public partial class EliteFileWatcherService
         catch
         {
             // El juego puede estar escribiendo el archivo en ese instante.
+        }
+    }
+
+    /// <summary>
+    /// Workaround for the Elite Dangerous Odyssey Shipyard.json bug where PriceList contains 0 or only 1 ship.
+    /// Automatically fetches the full station shipyard catalog from EDSM's public API once per docked station.
+    /// </summary>
+    private void TryEnsureEdsmShipyardFallback()
+    {
+        if (!_state.Docked ||
+            string.IsNullOrWhiteSpace(_state.CurrentSystem) ||
+            string.IsNullOrWhiteSpace(_state.StationName))
+        {
+            return;
+        }
+
+        string system = _state.CurrentSystem.Trim();
+        string station = _state.StationName.Trim();
+
+        // Local Shipyard.json already has a valid multi-ship catalog for this exact station
+        if (_state.Shipyard.Available &&
+            _state.Shipyard.Items.Count > 1 &&
+            string.Equals(_state.Shipyard.StationName, station, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        string key = $"{system}|{station}";
+        if (string.Equals(_lastEdsmShipyardLookupKey, key, StringComparison.OrdinalIgnoreCase))
+            return;
+        _lastEdsmShipyardLookupKey = key;
+
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            var snapshot = await FetchEdsmShipyardAsync(system, station);
+            if (snapshot is null)
+                return;
+
+            lock (_refreshLock)
+            {
+                if (!string.Equals(_state.CurrentSystem, system, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(_state.StationName, station, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                if (_state.Shipyard.Available &&
+                    _state.Shipyard.Items.Count > 1 &&
+                    string.Equals(_state.Shipyard.StationName, station, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                _state.Shipyard = snapshot;
+                _state.LastUpdated = DateTime.UtcNow;
+                PublishState();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Fetches a station's shipyard catalog from EDSM's public API (shared by Watcher fallback and COVAS AI).
+    /// </summary>
+    internal static async System.Threading.Tasks.Task<ShipyardSnapshot?> FetchEdsmShipyardAsync(string system, string station)
+    {
+        if (string.IsNullOrWhiteSpace(system) || string.IsNullOrWhiteSpace(station))
+            return null;
+
+        try
+        {
+            string url = $"https://www.edsm.net/api-system-v1/stations/shipyard?systemName={Uri.EscapeDataString(system.Trim())}&stationName={Uri.EscapeDataString(station.Trim())}";
+            using var resp = await EdsmShipyardHttp.GetAsync(url);
+            if (!resp.IsSuccessStatusCode)
+                return null;
+
+            string json = await resp.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(json) || json.Trim() is "{}" or "[]")
+                return null;
+
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("ships", out var shipsProp) || shipsProp.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var items = new List<ShipyardItem>();
+            foreach (var ship in shipsProp.EnumerateArray())
+            {
+                string name = ReadJsonString(ship, "name");
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+                long price = ReadJsonInt64(ship, "baseValue")
+                    ?? ReadJsonInt64(ship, "price")
+                    ?? ReadJsonInt64(ship, "ShipPrice")
+                    ?? 0;
+                items.Add(new ShipyardItem
+                {
+                    ShipType = name,
+                    DisplayName = name,
+                    ShipPrice = price
+                });
+            }
+
+            if (items.Count == 0)
+                return null;
+
+            return new ShipyardSnapshot
+            {
+                Timestamp = ReadJsonTimestamp(root, "updateTime") ?? DateTimeOffset.UtcNow,
+                MarketId = ReadJsonInt64(root, "marketId"),
+                StationName = station.Trim(),
+                StarSystem = system.Trim(),
+                Items = items.OrderBy(static i => i.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToList()
+            };
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -435,6 +590,7 @@ public partial class EliteFileWatcherService
         var info = new FileInfo(path);
         if (info.Exists)
             _snapshotFileStamps[path] = (info.Length, info.LastWriteTimeUtc.Ticks);
+        _stateDirty = true;
     }
 
     private static string ReadJsonString(JsonElement data, string propertyName, string fallback = "") =>

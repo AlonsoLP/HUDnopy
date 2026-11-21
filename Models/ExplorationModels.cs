@@ -82,15 +82,15 @@ public class ExplorationBodyItem
     public List<ExplorationRingItem> Rings { get; set; } = new();
     [JsonIgnore]
     public string RadiusDisplay => RadiusMeters.HasValue
-        ? $"{(RadiusMeters.Value / 1000).ToString("N0", CultureInfo.GetCultureInfo("es-ES"))} km"
+        ? $"{(RadiusMeters.Value / 1000).ToString("N0", ShipState.EsCulture)} km"
         : "---";
     [JsonIgnore]
     public string SurfaceGravityDisplay => SurfaceGravity.HasValue
-        ? $"{SurfaceGravity.Value.ToString("0.##", CultureInfo.GetCultureInfo("es-ES"))} m/s²"
+        ? $"{SurfaceGravity.Value.ToString("0.##", ShipState.EsCulture)} m/s²"
         : "---";
     [JsonIgnore]
     public string SurfaceTemperatureDisplay => SurfaceTemperatureKelvin.HasValue
-        ? $"{SurfaceTemperatureKelvin.Value.ToString("N0", CultureInfo.GetCultureInfo("es-ES"))} K"
+        ? $"{SurfaceTemperatureKelvin.Value.ToString("N0", ShipState.EsCulture)} K"
         : "---";
     public string AtmosphereDisplay => !string.IsNullOrWhiteSpace(AtmosphereType) ? AtmosphereType
         : !string.IsNullOrWhiteSpace(Atmosphere) ? Atmosphere
@@ -99,7 +99,7 @@ public class ExplorationBodyItem
     public string MaterialsDisplay => Materials.Count == 0
         ? "---"
         : string.Join(", ", Materials.Select(material =>
-            $"{material.Name} {material.Percent.ToString("0.##", CultureInfo.GetCultureInfo("es-ES"))}%"));
+            $"{material.Name} {material.Percent.ToString("0.##", ShipState.EsCulture)}%"));
     public string RingsDisplay => Rings.Count == 0
         ? "---"
         : string.Join(", ", Rings.Select(ring => string.IsNullOrWhiteSpace(ring.Name) ? ring.RingClass : ring.Name));
@@ -114,7 +114,7 @@ public class ExplorationBodyItem
     public string AtmosphereCompositionDisplay => AtmosphereComposition.Count == 0
         ? "---"
         : string.Join(", ", AtmosphereComposition.Select(item =>
-            $"{item.Name} {item.Percent.ToString("0.##", CultureInfo.GetCultureInfo("es-ES"))}%"));
+            $"{item.Name} {item.Percent.ToString("0.##", ShipState.EsCulture)}%"));
     [JsonIgnore]
     public string OrbitalDetailsDisplay => JoinDisplay(new[]
     {
@@ -167,11 +167,11 @@ public class ExplorationBodyItem
 
     private static string FormatComposition(string name, double? value) =>
         value.HasValue
-            ? $"{name}: {(value.Value * 100).ToString("0.#", CultureInfo.GetCultureInfo("es-ES"))}%"
+            ? $"{name}: {(value.Value * 100).ToString("0.#", ShipState.EsCulture)}%"
             : "";
 
     private static string FormatExplorationNumber(double? value) =>
-        value?.ToString("N0", CultureInfo.GetCultureInfo("es-ES")) ?? "";
+        value?.ToString("N0", ShipState.EsCulture) ?? "";
 
     private static string JoinDisplay(IEnumerable<string> values)
     {

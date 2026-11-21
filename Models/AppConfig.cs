@@ -24,14 +24,14 @@ public class AppConfig
     public string WebVpnInterfaceId { get; set; } = "";
     public string JournalFolderPath { get; set; } = GetDefaultJournalPath();
     public string BindingsFolderPath { get; set; } = GetDefaultBindingsPath();
-    public string SelectedBindsFile { get; set; } = ""; // Vacío = autodetección desde StartPreset
+    public string SelectedBindsFile { get; set; } = ""; // Empty = auto-detect from StartPreset
     public string ThemeName { get; set; } = "Naranja HUD (Clásico)";
     public string ThemeAccentHex { get; set; } = "#FF7100";
     public string ThemeSecondaryHex { get; set; } = "#FFB300";
     public bool FocusGameWindowOnInput { get; set; } = true;
     public bool HideUnassignedBindings { get; set; }
     public bool HideNavigationMenuText { get; set; }
-    public string InterfaceLanguage { get; set; } = "es-ES";
+    public string InterfaceLanguage { get; set; } = "en-GB";
     public bool EnableSpanshSystemData { get; set; }
     public int DesktopFontScalePercent { get; set; } = 100;
     public bool StartMinimizedToTray { get; set; }
@@ -77,7 +77,7 @@ public class AppConfig
     public string AiOllamaEndpoint { get; set; } = "http://localhost:11434/v1";
     public string AiOllamaModel { get; set; } = "qwen2.5:7b";
     public string AiGeminiApiKey { get; set; } = "";
-    public string AiGeminiModel { get; set; } = "gemini-2.5-flash";
+    public string AiGeminiModel { get; set; } = "gemini-flash-lite-latest";
     public string AiOpenAiEndpoint { get; set; } = "https://api.groq.com/openai/v1";
     public string AiOpenAiApiKey { get; set; } = "";
     public string AiOpenAiModel { get; set; } = "llama-3.3-70b-versatile";
@@ -90,9 +90,16 @@ public class AppConfig
     public string AiWakeWord { get; set; } = "COVAS";
     public string AiCustomPersonality { get; set; } = "";
     public string AiVerbosity { get; set; } = "normal";
+    public string AiThinkingMode { get; set; } = "auto"; // "no" | "auto" | "yes"
     public bool AiSystemArrivalBriefing { get; set; }
     public bool AiGlobalPttHotkeyEnabled { get; set; }
     public string AiGlobalPttHotkey { get; set; } = "Ctrl+Alt+V";
+    public bool AiTacticalHighGravity { get; set; } = true;
+    public bool AiTacticalValuableSignals { get; set; } = true;
+    public bool AiTacticalMiningProspector { get; set; } = true;
+    public bool AiTacticalRadioChatter { get; set; }
+    public bool AiVoiceMacrosEnabled { get; set; } = true;
+    public List<VoiceMacroDefinition> AiVoiceMacros { get; set; } = VoiceMacroDefinition.CreateDefaults();
     public List<string> AiCommanderMemory { get; set; } = new();
     public Dictionary<string, AlertChannelPreferences> AlertPreferences { get; set; } =
         AlertDefinitions.CreateDefaultPreferences();
@@ -127,4 +134,42 @@ public class HudThemePreset
     public string Name { get; set; } = "";
     public string AccentHex { get; set; } = "#FF7100";
     public string SecondaryHex { get; set; } = "#FFB300";
+}
+
+/// <summary>
+/// Instant zero-LLM voice macro mapping spoken trigger phrases to keyboard/macro action sequences.
+/// </summary>
+public class VoiceMacroDefinition
+{
+    public string TriggerPhrase { get; set; } = "";
+    public string Steps { get; set; } = "";
+    public string SpokenConfirmation { get; set; } = "";
+
+    public static List<VoiceMacroDefinition> CreateDefaults() =>
+    [
+        new()
+        {
+            TriggerPhrase = "modo combate, postura de combate, combat mode, combat posture",
+            Steps = "Macro:CombatPosture",
+            SpokenConfirmation = "Postura de combate activada."
+        },
+        new()
+        {
+            TriggerPhrase = "evasión máxima, modo escape, escape mode, evasive maneuvers",
+            Steps = "Macro:EscapePosture",
+            SpokenConfirmation = "Maniobra de evasión máxima iniciada."
+        },
+        new()
+        {
+            TriggerPhrase = "escape silencioso, modo sigilo, silent escape, silent running",
+            Steps = "Macro:SilentEscape",
+            SpokenConfirmation = "Navegación silenciosa y eyector térmico activados."
+        },
+        new()
+        {
+            TriggerPhrase = "preparar aterrizaje, landing prep, tren de aterrizaje",
+            Steps = "SetSpeedZero, DELAY:150, LandingGearToggle, DELAY:150, ShipSpotLightToggle",
+            SpokenConfirmation = "Secuencia de aproximación y tren de aterrizaje ejecutada."
+        }
+    ];
 }

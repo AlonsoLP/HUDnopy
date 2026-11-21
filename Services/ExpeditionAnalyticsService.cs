@@ -210,4 +210,114 @@ public static class ExpeditionAnalyticsService
                 latest);
         }, ct);
     }
+
+    /// <summary>
+    /// Queries historical Journal logs for COVAS AI copilot questions (career summary or system visit history).
+    /// </summary>
+    public static async Task<string> QueryLogbookAsync(
+        string journalFolder,
+        string query,
+        int maxFiles = 100,
+        CancellationToken ct = default)
+    {
+        string clean = (query ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(journalFolder) || !Directory.Exists(journalFolder))
+            return "No se encontró la carpeta de diarios de Elite Dangerous.";
+
+        if (string.IsNullOrWhiteSpace(clean) ||
+            clean.Equals("summary", StringComparison.OrdinalIgnoreCase) ||
+            clean.Equals("resumen", StringComparison.OrdinalIgnoreCase) ||
+            clean.Equals("stats", StringComparison.OrdinalIgnoreCase))
+        {
+            var snap = await AnalyzeFolderAsync(journalFolder, maxFiles, ct);
+            string period = snap.EarliestUtc.HasValue && snap.LatestUtc.HasValue
+                ? $"{snap.EarliestUtc.Value:yyyy-MM-dd} a {snap.LatestUtc.Value:yyyy-MM-dd}"
+                : "sin fechas";
+            return $"Historial de {snap.JournalsScanned} diarios ({period}): {snap.TotalJumps:N0} saltos, {snap.TotalDistanceLy:N1} AL, {snap.UniqueSystems:N0} sistemas únicos, {snap.EarthLikeWorlds} planetas tipo Tierra (ELW), {snap.WaterWorlds} mundos acuáticos, {snap.AmmoniaWorlds} mundos de amoníaco, {snap.OrganicsAnalysed} especies exobiológicas, {snap.MissionsCompleted} misiones completadas, {snap.TotalBountiesAndSalesCredits:N0} CR registrados en ventas y recompensas.";
+        }
+
+        string systemFilter = clean.StartsWith("system:", StringComparison.OrdinalIgnoreCase)
+            ? clean["system:".Length..].Trim()
+            : clean;
+
+        return await Task.Run(() =>
+        {
+            var files = Directory.GetFiles(journalFolder, "Journal.*.log")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .Take(Math.Clamp(maxFiles, 1, 200))
+                .ToList();
+
+            int visitCount = 0;
+            DateTimeOffset? firstVisit = null;
+            DateTimeOffset? lastVisit = null;
+            string matchedSystemName = systemFilter;
+            int elwMatches = 0;
+
+            foreach (string file in files)
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var sr = new StreamReader(fs, Encoding.UTF8);
+                    string? line;
+                    while ((line = sr.ReadLine()) is not null)
+                    {
+                        if (string.IsNullOrWhiteSpace(line) || line[0] != '{' ||
+                            !line.Contains(systemFilter, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(line);
+                            var root = doc.RootElement;
+                            if (!root.TryGetProperty("event", out var evProp) || evProp.ValueKind != JsonValueKind.String)
+                                continue;
+
+                            string evt = evProp.GetString() ?? "";
+                            if (evt is "FSDJump" or "Location" or "CarrierJump")
+                            {
+                                string sys = root.TryGetProperty("StarSystem", out var ss) && ss.ValueKind == JsonValueKind.String
+                                    ? ss.GetString() ?? ""
+                                    : "";
+                                if (!string.IsNullOrWhiteSpace(sys) && sys.Contains(systemFilter, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    matchedSystemName = sys;
+                                    visitCount++;
+                                    if (root.TryGetProperty("timestamp", out var tsProp) &&
+                                        tsProp.ValueKind == JsonValueKind.String &&
+                                        DateTimeOffset.TryParse(tsProp.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var ts))
+                                    {
+                                        var utc = ts.ToUniversalTime();
+                                        if (!firstVisit.HasValue || utc < firstVisit.Value) firstVisit = utc;
+                                        if (!lastVisit.HasValue || utc > lastVisit.Value) lastVisit = utc;
+                                    }
+                                }
+                            }
+                            else if (evt == "Scan" &&
+                                     root.TryGetProperty("PlanetClass", out var pc) &&
+                                     pc.ValueKind == JsonValueKind.String &&
+                                     pc.GetString()!.Equals("Earthlike body", StringComparison.OrdinalIgnoreCase))
+                            {
+                                elwMatches++;
+                            }
+                        }
+                        catch
+                        {
+                            // Skip malformed lines.
+                        }
+                    }
+                }
+                catch
+                {
+                    // Skip unreadable files.
+                }
+            }
+
+            if (visitCount == 0)
+                return $"No se encontraron visitas a '{systemFilter}' en los últimos {files.Count} diarios.";
+
+            return $"Sistema '{matchedSystemName}': {visitCount} visita(s) registrada(s) en los últimos {files.Count} diarios. Última visita: {lastVisit?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "?"}, primera en este rango: {firstVisit?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "?"}{(elwMatches > 0 ? $". Planetas tipo Tierra detectados ahí: {elwMatches}" : "")}.";
+        }, ct);
+    }
 }

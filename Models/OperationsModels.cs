@@ -143,7 +143,7 @@ public class PassengerItem
     public string DestinationStation { get; set; } = "";
     public DateTimeOffset? Expiry { get; set; }
     [JsonIgnore]
-    public string CountDisplay => Count?.ToString("N0", CultureInfo.GetCultureInfo("es-ES")) ?? "—";
+    public string CountDisplay => Count?.ToString("N0", ShipState.EsCulture) ?? "—";
     [JsonIgnore]
     public string ExpiryDisplay => Expiry?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Sin vencimiento";
 }
@@ -176,7 +176,7 @@ public class ColonisationSnapshot
     public string TimestampDisplay => Timestamp?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "---";
     [JsonIgnore]
     public string ProgressDisplay => ConstructionProgress.HasValue
-        ? $"{(ConstructionProgress.Value * 100).ToString("0.#", CultureInfo.GetCultureInfo("es-ES"))}%"
+        ? $"{(ConstructionProgress.Value * 100).ToString("0.#", ShipState.EsCulture)}%"
         : "---";
     [JsonIgnore]
     public string StatusDisplay => !Timestamp.HasValue
@@ -239,22 +239,22 @@ public class MarketCommodityItem
     public long ColonisationNeeded { get; set; }
     [JsonIgnore]
     public string ColonisationDisplay => ColonisationNeeded > 0
-        ? $"🏗 {ColonisationNeeded.ToString("N0", CultureInfo.GetCultureInfo("es-ES"))} t"
+        ? $"🏗 {ColonisationNeeded.ToString("N0", ShipState.EsCulture)} t"
         : "—";
     [JsonIgnore]
-    public string BuyPriceDisplay => $"{BuyPrice.ToString("N0", CultureInfo.GetCultureInfo("es-ES"))} CR";
+    public string BuyPriceDisplay => $"{BuyPrice.ToString("N0", ShipState.EsCulture)} CR";
     [JsonIgnore]
-    public string SellPriceDisplay => $"{SellPrice.ToString("N0", CultureInfo.GetCultureInfo("es-ES"))} CR";
+    public string SellPriceDisplay => $"{SellPrice.ToString("N0", ShipState.EsCulture)} CR";
     [JsonIgnore]
-    public string MeanPriceDisplay => $"{MeanPrice.ToString("N0", CultureInfo.GetCultureInfo("es-ES"))} CR";
+    public string MeanPriceDisplay => $"{MeanPrice.ToString("N0", ShipState.EsCulture)} CR";
     [JsonIgnore]
-    public string StockDisplay => Stock.ToString("N0", CultureInfo.GetCultureInfo("es-ES"));
+    public string StockDisplay => Stock.ToString("N0", ShipState.EsCulture);
     [JsonIgnore]
-    public string DemandDisplay => Demand.ToString("N0", CultureInfo.GetCultureInfo("es-ES"));
+    public string DemandDisplay => Demand.ToString("N0", ShipState.EsCulture);
     [JsonIgnore]
-    public string StockBracketDisplay => StockBracket > 0 ? StockBracket.ToString(CultureInfo.GetCultureInfo("es-ES")) : "—";
+    public string StockBracketDisplay => StockBracket > 0 ? StockBracket.ToString(ShipState.EsCulture) : "—";
     [JsonIgnore]
-    public string DemandBracketDisplay => DemandBracket > 0 ? DemandBracket.ToString(CultureInfo.GetCultureInfo("es-ES")) : "—";
+    public string DemandBracketDisplay => DemandBracket > 0 ? DemandBracket.ToString(ShipState.EsCulture) : "—";
     [JsonIgnore]
     public string FlagsDisplay
     {
@@ -301,7 +301,7 @@ public class OutfittingItem
     public string DisplayName { get; set; } = "";
     public long BuyPrice { get; set; }
     [JsonIgnore]
-    public string BuyPriceDisplay => $"{BuyPrice.ToString("N0", CultureInfo.GetCultureInfo("es-ES"))} CR";
+    public string BuyPriceDisplay => $"{BuyPrice.ToString("N0", ShipState.EsCulture)} CR";
 }
 
 public class ShipyardSnapshot
@@ -334,7 +334,7 @@ public class ShipyardItem
     public string DisplayName { get; set; } = "";
     public long ShipPrice { get; set; }
     [JsonIgnore]
-    public string ShipPriceDisplay => $"{ShipPrice.ToString("N0", CultureInfo.GetCultureInfo("es-ES"))} CR";
+    public string ShipPriceDisplay => $"{ShipPrice.ToString("N0", ShipState.EsCulture)} CR";
 }
 
 internal static class SnapshotFormatting

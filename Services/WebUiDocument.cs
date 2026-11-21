@@ -17,9 +17,11 @@ namespace HUDnopy.Services;
 /// </summary>
 internal static class WebUiDocument
 {
-    public static string Load()
+    public static string Load() => LoadAsset("index.html");
+
+    public static string LoadAsset(string fileName)
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "Web", "index.html");
+        string path = Path.Combine(AppContext.BaseDirectory, "Web", fileName);
         return File.ReadAllText(path);
     }
 }

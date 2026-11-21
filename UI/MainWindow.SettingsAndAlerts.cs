@@ -823,7 +823,7 @@ public partial class MainWindow
 
 
     // =========================================================================
-    // Piper TTS Neuronal (Voces gratuitas locales con descarga automática)
+    // Piper Neural TTS (Free local voices with automatic download)
     // =========================================================================
 
     private async void CmbSpeechEngine_SelectionChanged(object sender, SelectionChangedEventArgs e)

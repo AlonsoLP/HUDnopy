@@ -205,7 +205,7 @@ public partial class MainWindow
         // Matriz de sistemas en Cabina
         RenderCockpitSystemCards(s);
 
-        // Navegación
+        // Navigation
         TxtNavSystem.Text = s.CurrentSystem;
         TxtNavSecurity.Text = s.SecurityLevel;
         TxtNavEconomy.Text = s.Economy;
@@ -381,15 +381,27 @@ public partial class MainWindow
         UpdateCarrierTritiumCalc(_fileWatcher.State);
     }
 
+    private (long Fuel, long Used, string RouteText, string Language)? _lastTritiumCalcKey;
+
     private void UpdateCarrierTritiumCalc(ShipState s)
     {
         if (TxtCarrierTritiumResult is null || TxtCarrierRouteLy is null)
             return;
 
+        long usedCapacity = s.Carrier?.Capacity is long cap && s.Carrier?.FreeSpace is long free
+            ? Math.Max(0, cap - free)
+            : (s.Carrier?.Cargo ?? 0);
+        long fuel = Math.Max(0, s.Carrier?.Fuel ?? 0);
+        string routeText = TxtCarrierRouteLy.Text.Trim();
+        var key = (fuel, usedCapacity, routeText, _uiLanguage);
+        if (_lastTritiumCalcKey == key)
+            return;
+        _lastTritiumCalcKey = key;
+
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
         var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
         if (!double.TryParse(
-                TxtCarrierRouteLy.Text.Trim().Replace(',', '.'),
+                routeText.Replace(',', '.'),
                 System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out double totalLy) || totalLy <= 0)
@@ -398,10 +410,6 @@ public partial class MainWindow
             return;
         }
 
-        long usedCapacity = s.Carrier?.Capacity is long cap && s.Carrier?.FreeSpace is long free
-            ? Math.Max(0, cap - free)
-            : (s.Carrier?.Cargo ?? 0);
-        long fuel = Math.Max(0, s.Carrier?.Fuel ?? 0);
         long initialExtraMass = usedCapacity + fuel;
 
         int jumps = (int)Math.Ceiling(totalLy / 500.0);
@@ -447,8 +455,6 @@ public partial class MainWindow
                 ? flight["bgsNoPowerplay"]
                 : string.Format(flight["bgsPowerplay"], s.PowerplaySummary);
         }
-
-        UpdateGalaxyStatusUi(_galaxyStatus.Current);
 
         if (GridSystemFactions is not null && !ReferenceEquals(GridSystemFactions.ItemsSource, s.SystemFactions))
             GridSystemFactions.ItemsSource = s.SystemFactions;

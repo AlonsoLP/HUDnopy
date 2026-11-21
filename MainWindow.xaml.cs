@@ -99,7 +99,7 @@ public partial class MainWindow : Window
     private ResizeMode _windowedResizeMode;
     private readonly ConditionalWeakTable<FrameworkElement, FontSizeBaseline> _desktopFontBaseSizes = new();
     private double _desktopFontScale = 1;
-    private string _uiLanguage = "es-ES";
+    private string _uiLanguage = "en-GB";
     private string _readyStatusText = "";
     private string? _displayedBindsFile;
     private IReadOnlyList<string>? _installedVoiceNames;
@@ -156,6 +156,7 @@ public partial class MainWindow : Window
         _galaxyStatus.StatusUpdated += snap => Dispatcher.BeginInvoke(() => UpdateGalaxyStatusUi(snap));
         _galnetService.ArticlesUpdated += () => Dispatcher.BeginInvoke(RefreshGalnetUi);
         _aiCopilot.CopilotMessageAdded += (speaker, msg) => Dispatcher.BeginInvoke(() => AppendAiChatLine(speaker, msg));
+        _aiCopilot.CopilotStreamChunk += chunk => Dispatcher.BeginInvoke(() => AppendAiStreamChunk(chunk));
         _aiCopilot.SpanshRouteRequested += (mode, dest) => Dispatcher.BeginInvoke(() => ExecuteSpanshRouteFromAi(mode, dest));
         _aiCopilot.SpanshServiceRequested += svc => Dispatcher.BeginInvoke(() => ExecuteSpanshServiceFromAi(svc));
         _aiCopilot.CopySystemRequested += sys => Dispatcher.BeginInvoke(() => CopySystemToClipboard(sys));
@@ -382,9 +383,9 @@ public partial class MainWindow : Window
         if (!LanguageCatalog.TryNormalize(cfg.InterfaceLanguage, out _uiLanguage))
         {
             TxtStatusBarLeft.Text = string.Format(
-                SettingsTranslations.ForLanguage("es-ES")["invalidLanguage"],
+                SettingsTranslations.ForLanguage("en-GB")["invalidLanguage"],
                 cfg.InterfaceLanguage);
-            _uiLanguage = "es-ES";
+            _uiLanguage = "en-GB";
         }
         cfg.InterfaceLanguage = _uiLanguage;
         CmbUiLanguage.SelectedValue = _uiLanguage;
@@ -429,10 +430,17 @@ public partial class MainWindow : Window
         ChkAiAllowActions.IsChecked = cfg.AiAllowActions;
         ChkAiDynamicEvents.IsChecked = cfg.AiDynamicEvents;
         CmbAiVerbosity.SelectedValue = string.IsNullOrWhiteSpace(cfg.AiVerbosity) ? "normal" : cfg.AiVerbosity;
+        CmbAiThinkingMode.SelectedValue = string.IsNullOrWhiteSpace(cfg.AiThinkingMode) ? "auto" : cfg.AiThinkingMode;
         TxtAiCustomPersonality.Text = cfg.AiCustomPersonality ?? "";
         ChkAiRequireWakeWord.IsChecked = cfg.AiRequireWakeWord;
         TxtAiWakeWord.Text = string.IsNullOrWhiteSpace(cfg.AiWakeWord) ? "COVAS" : cfg.AiWakeWord;
         ChkAiArrivalBriefing.IsChecked = cfg.AiSystemArrivalBriefing;
+        ChkAiTacticalHighGravity.IsChecked = cfg.AiTacticalHighGravity;
+        ChkAiTacticalValuableSignals.IsChecked = cfg.AiTacticalValuableSignals;
+        ChkAiTacticalMiningProspector.IsChecked = cfg.AiTacticalMiningProspector;
+        ChkAiTacticalRadioChatter.IsChecked = cfg.AiTacticalRadioChatter;
+        ChkAiVoiceMacrosEnabled.IsChecked = cfg.AiVoiceMacrosEnabled;
+        RefreshAiVoiceMacrosUi();
         ChkAiGlobalPttHotkey.IsChecked = cfg.AiGlobalPttHotkeyEnabled;
         CmbAiGlobalPttHotkey.SelectedValue = string.IsNullOrWhiteSpace(cfg.AiGlobalPttHotkey) ? "Ctrl+Alt+V" : cfg.AiGlobalPttHotkey;
         RefreshAiMemoryPreview();

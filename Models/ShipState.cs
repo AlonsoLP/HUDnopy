@@ -100,7 +100,7 @@ public class ShipState
     public string CargoVessel { get; set; } = "";
     public DateTimeOffset? CargoTimestamp { get; set; }
 
-    // Ubicación y Navegación
+    // Location and Navigation
     public string CurrentSystem { get; set; } = "---";
     public string SecurityLevel { get; set; } = "---";
     public string Economy { get; set; } = "---";
@@ -227,7 +227,7 @@ public class ShipState
     public bool SupercruiseOverdriveActive => HasFlag2(EliteStatusFlags2.SupercruiseOverdriveActive);
     public bool SupercruiseAssistActive => HasFlag2(EliteStatusFlags2.SupercruiseAssistActive);
 
-    // Pips de energía (en medios puntos de Status.json, aquí convertidos a 0.0 - 4.0)
+    // Power pips (half-pip values in Status.json, converted here to 0.0 - 4.0)
     public double PipsSys { get; set; }
     public double PipsEng { get; set; }
     public double PipsWep { get; set; }
@@ -243,7 +243,7 @@ public class ShipState
     public double FuelReservoir { get; set; }
     public int CargoUsed { get; set; } = 0;
 
-    // Telemetría planetaria
+    // Planetary telemetry
     public bool HasLatLong => HasFlag(EliteStatusFlags.HasLatLong);
     public double Latitude { get; set; }
     public double Longitude { get; set; }
@@ -251,7 +251,7 @@ public class ShipState
     public double Heading { get; set; }
     public double PlanetRadius { get; set; }
 
-    // Ruta de navegación (NavRoute.json)
+    // Navigation route (NavRoute.json)
     public List<RouteWaypoint> NavRoute { get; set; } = new();
 
     // Inventario de carga (Cargo.json)
@@ -271,7 +271,7 @@ public class ShipState
     public ShipyardSnapshot Shipyard { get; set; } = new();
     public CarrierState? Carrier { get; set; }
 
-    // Exploración avanzada y exobiología (Categoría A)
+    // Advanced exploration and exobiology (Category A)
     public int? SystemTotalBodies { get; set; }
     public int SystemScannedBodies { get; set; }
     public bool SystemAllBodiesFound { get; set; }
@@ -279,7 +279,7 @@ public class ShipState
     public long UnsoldExobiologyCredits { get; set; }
     public ExobiologyTrackerState? ExobiologyTracker { get; set; }
 
-    // Copiloto táctico de vuelo y seguridad (Categoría B)
+    // Tactical flight and safety copilot (Category B)
     public bool HasLimpetController { get; set; }
     public int LimpetCount { get; set; }
     public double? FsdHealthPercent { get; set; }
@@ -293,23 +293,23 @@ public class ShipState
     public int? JumpsToNextFuelStar { get; set; }
     public bool RouteHasNoFuelStar { get; set; }
 
-    // Módulos instalados, taquilla Odyssey e ingenieros (Categorías C y D)
+    // Installed modules, Odyssey locker, and engineers (Categories C and D)
     public List<ShipModuleItem> ShipModules { get; set; } = new();
     public string LastLoadoutJson { get; set; } = "";
     public List<BackpackItem> ShipLockerInventory { get; set; } = new();
     public List<EngineerProgressItem> Engineers { get; set; } = new();
 
-    // Minería y navegación de superficie (Categorías E y F)
+    // Mining and surface navigation (Categories E and F)
     public ProspectedAsteroidState? LastProspectedAsteroid { get; set; }
     public MiningSessionState MiningSession { get; set; } = new();
     public List<SurfaceEventItem> RecentSurfaceEvents { get; set; } = new();
 
-    // Combate avanzado y masacres (Categoría G)
+    // Advanced combat and massacres (Category G)
     public TargetShipState? CurrentTarget { get; set; }
     public List<MassacreStackItem> MassacreStacks { get; set; } = new();
     public CombatSessionState CombatSession { get; set; } = new();
 
-    // Portanaves Bartender, BGS/Powerplay, Sesión y Notas (Categorías I y J)
+    // Fleet Carrier Bartender, BGS/Powerplay, Session, and Notes (Categories I and J)
     public List<CarrierMaterialItem> CarrierMaterials { get; set; } = new();
     public string CarrierMaterialsStation { get; set; } = "";
     public List<SystemFactionItem> SystemFactions { get; set; } = new();
@@ -320,7 +320,7 @@ public class ShipState
     public List<CommunityGoalItem> CommunityGoals { get; set; } = new();
     public List<CarrierCargoItem> CarrierCargo { get; set; } = new();
 
-    // Metadatos de sesión y versión del juego (para EDDN / EDSM / Inara)
+    // Session metadata and game version (for EDDN / EDSM / Inara)
     public string GameVersion { get; set; } = "";
     public string GameBuild { get; set; } = "";
     public bool IsHorizons { get; set; } = true;
@@ -339,12 +339,14 @@ public class ShipState
 
     internal ShipState Snapshot() => (ShipState)MemberwiseClone();
 
+    internal static readonly CultureInfo EsCulture = CultureInfo.GetCultureInfo("es-ES");
+
     private bool HasFlag(EliteStatusFlags flag) => ((EliteStatusFlags)RawFlags).HasFlag(flag);
     private bool HasFlag2(EliteStatusFlags2 flag) => ((EliteStatusFlags2)RawFlags2).HasFlag(flag);
     private static string FormatTelemetry(double? value) =>
-        value?.ToString("0.##", CultureInfo.GetCultureInfo("es-ES")) ?? "---";
+        value?.ToString("0.##", EsCulture) ?? "---";
     private static string FormatPercent(double? value) =>
-        value.HasValue ? $"{(value.Value * 100).ToString("0.#", CultureInfo.GetCultureInfo("es-ES"))}%" : "---";
+        value.HasValue ? $"{(value.Value * 100).ToString("0.#", EsCulture)}%" : "---";
 }
 
 public class RouteWaypoint

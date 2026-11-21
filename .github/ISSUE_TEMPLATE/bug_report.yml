@@ -1,0 +1,52 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in HUDnopy
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: HUDnopy Version
+      description: Which release or commit are you running?
+      placeholder: "e.g. v0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area
+      options:
+        - Desktop HUD (WPF)
+        - Web HUD / MFD
+        - Telemetry / Journal Parsing
+        - COVAS AI Copilot / TTS
+        - Spansh / GalNet / EDSM / Inara / Frontier cAPI
+        - Controls (.binds) / Input Simulator
+        - Localization
+        - Installer / Build
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Clear description of the bug and what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Open HUDnopy
+        2. Go to ...
+        3. Observe ...
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs / Screenshots
+      description: Paste any error messages or diagnostics (remove API keys/tokens first).
+    validations:
+      required: false

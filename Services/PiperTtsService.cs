@@ -56,8 +56,17 @@ public sealed class PiperTtsService : IDisposable
         new PiperVoiceInfo("pt_BR-faber-medium", "pt-BR", "Português (BR) — Faber", "pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx", true)
     };
 
+    private static readonly JsonSerializerOptions IndentedUnsafeJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _downloadLock = new(1, 1);
+    private readonly SemaphoreSlim _synthLock = new(1, 1);
+    private Process? _daemonProcess;
+    private string _daemonKey = "";
 
     public string BaseDirectory { get; }
     public string VoicesDirectory { get; }
@@ -114,7 +123,7 @@ public sealed class PiperTtsService : IDisposable
             }
         }
 
-        // Comprobar si ya existe una instalación completa previa en PATH
+        // Check whether a complete Piper installation already exists on PATH
         string? pathEnv = Environment.GetEnvironmentVariable("PATH");
         if (!string.IsNullOrWhiteSpace(pathEnv))
         {
@@ -128,7 +137,7 @@ public sealed class PiperTtsService : IDisposable
                 }
                 catch
                 {
-                    // Ignorar rutas inválidas en PATH
+                    // Ignore invalid paths in PATH
                 }
             }
         }
@@ -324,16 +333,11 @@ public sealed class PiperTtsService : IDisposable
             foreach (string key in invalidKeys)
                 map.Remove(key);
 
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-            File.WriteAllText(jsonPath, root.ToJsonString(options), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            File.WriteAllText(jsonPath, root.ToJsonString(IndentedUnsafeJsonOptions), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
         catch
         {
-            // No bloquear si el JSON ya es válido
+            // Do not block if the JSON config is already valid
         }
     }
 
@@ -399,31 +403,126 @@ public sealed class PiperTtsService : IDisposable
         }
 
         string modelPath = GetVoiceModelPath(voice.Id);
-        SanitizeVoiceConfigJson(modelPath + ".json");
         string exeDir = Path.GetDirectoryName(exe) ?? BaseDirectory;
         string espeakDir = Path.Combine(exeDir, "espeak-ng-data");
         string espeakArg = Directory.Exists(espeakDir) ? $"--espeak_data \"{espeakDir}\" " : "";
         // SpeechRate [-5..5] -> length_scale exponencial [~2.00..~0.50] (equivalente a Windows SAPI -5..+5)
         int clampedRate = Math.Clamp(speechRate, -5, 5);
         double lengthScale = Math.Clamp(Math.Pow(0.87, clampedRate), 0.50, 2.00);
+        string cleanLine = text.Replace("\r", " ").Replace("\n", " ").Trim();
         string tempWav = Path.Combine(Path.GetTempPath(), $"hudnopy_piper_{Guid.NewGuid():N}.wav");
+
+        await _synthLock.WaitAsync(ct);
+        try
+        {
+            // Fast path: persistent warm piper.exe daemon with ONNX model kept in RAM (~100-150 ms per sentence)
+            byte[]? daemonBytes = await TrySynthesizeWithDaemonAsync(exe, exeDir, modelPath, espeakArg, lengthScale, cleanLine, tempWav, ct);
+            if (daemonBytes is { Length: > 44 })
+                return daemonBytes;
+
+            // Safe fallback: one-shot piper.exe invocation if daemon failed or exited
+            return await TrySynthesizeOneShotAsync(exe, exeDir, modelPath, espeakArg, lengthScale, cleanLine, tempWav, ct);
+        }
+        finally
+        {
+            _synthLock.Release();
+            try { if (File.Exists(tempWav)) File.Delete(tempWav); } catch { }
+        }
+    }
+
+    private async Task<byte[]?> TrySynthesizeWithDaemonAsync(
+        string exe,
+        string exeDir,
+        string modelPath,
+        string espeakArg,
+        double lengthScale,
+        string cleanLine,
+        string tempWav,
+        CancellationToken ct)
+    {
+        string scaleStr = lengthScale.ToString("0.00", CultureInfo.InvariantCulture);
+        string desiredKey = $"{exe}|{modelPath}|{scaleStr}";
 
         try
         {
-            var psi = new ProcessStartInfo
+            if (_daemonProcess is null || _daemonProcess.HasExited || !string.Equals(_daemonKey, desiredKey, StringComparison.OrdinalIgnoreCase))
             {
-                FileName = exe,
-                Arguments = $"--model \"{modelPath}\" {espeakArg}--length_scale {lengthScale.ToString("0.00", CultureInfo.InvariantCulture)} --output_file \"{tempWav}\"",
-                WorkingDirectory = exeDir,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+                StopDaemonLocked();
+                SanitizeVoiceConfigJson(modelPath + ".json");
 
-            using var proc = Process.Start(psi);
+                var proc = Process.Start(CreatePiperStartInfo(exe, exeDir, modelPath, espeakArg, scaleStr, "--json-input"));
+                if (proc is null)
+                    return null;
+
+                // Drain stderr asynchronously so the pipe buffer never stalls piper.exe
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        while (!proc.HasExited)
+                        {
+                            string? errLine = await proc.StandardError.ReadLineAsync();
+                            if (errLine is null) break;
+                        }
+                    }
+                    catch { }
+                });
+
+                _daemonProcess = proc;
+                _daemonKey = desiredKey;
+            }
+
+            string jsonLine = JsonSerializer.Serialize(new { text = cleanLine, output_file = tempWav });
+            await _daemonProcess.StandardInput.WriteLineAsync(jsonLine);
+            await _daemonProcess.StandardInput.FlushAsync(ct);
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
+
+            while (true)
+            {
+                string? outLine = await _daemonProcess.StandardOutput.ReadLineAsync(timeoutCts.Token);
+                if (outLine is null)
+                {
+                    StopDaemonLocked();
+                    return null;
+                }
+                if (outLine.Trim().Equals(tempWav, StringComparison.OrdinalIgnoreCase) || File.Exists(tempWav))
+                    break;
+            }
+
+            if (!File.Exists(tempWav))
+                return null;
+
+            byte[] bytes = await File.ReadAllBytesAsync(tempWav, ct);
+            return bytes.Length > 44 ? bytes : null;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            StopDaemonLocked();
+            return null;
+        }
+    }
+
+    private async Task<byte[]?> TrySynthesizeOneShotAsync(
+        string exe,
+        string exeDir,
+        string modelPath,
+        string espeakArg,
+        double lengthScale,
+        string cleanLine,
+        string tempWav,
+        CancellationToken ct)
+    {
+        try
+        {
+            SanitizeVoiceConfigJson(modelPath + ".json");
+            string scaleStr = lengthScale.ToString("0.00", CultureInfo.InvariantCulture);
+            using var proc = Process.Start(CreatePiperStartInfo(exe, exeDir, modelPath, espeakArg, scaleStr, $"--output_file \"{tempWav}\""));
             if (proc is null)
             {
                 LastError = "No se pudo iniciar piper.exe.";
@@ -433,7 +532,6 @@ public sealed class PiperTtsService : IDisposable
             Task<string> stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
             Task<string> stderrTask = proc.StandardError.ReadToEndAsync(ct);
 
-            string cleanLine = text.Replace("\r", " ").Replace("\n", " ").Trim();
             await proc.StandardInput.WriteAsync(cleanLine + "\n");
             await proc.StandardInput.FlushAsync(ct);
             proc.StandardInput.Close();
@@ -461,15 +559,51 @@ public sealed class PiperTtsService : IDisposable
             LastError = $"Piper excepción: {ex.Message}";
             return null;
         }
-        finally
+    }
+
+    private static ProcessStartInfo CreatePiperStartInfo(
+        string exe,
+        string exeDir,
+        string modelPath,
+        string espeakArg,
+        string scaleStr,
+        string outputArg) => new()
         {
-            try { if (File.Exists(tempWav)) File.Delete(tempWav); } catch { }
+            FileName = exe,
+            Arguments = $"--model \"{modelPath}\" {espeakArg}--length_scale {scaleStr} {outputArg}",
+            WorkingDirectory = exeDir,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+    private void StopDaemonLocked()
+    {
+        if (_daemonProcess is null)
+            return;
+        try
+        {
+            if (!_daemonProcess.HasExited)
+            {
+                try { _daemonProcess.StandardInput.Close(); } catch { }
+                if (!_daemonProcess.WaitForExit(300))
+                    _daemonProcess.Kill(entireProcessTree: true);
+            }
         }
+        catch { }
+        try { _daemonProcess.Dispose(); } catch { }
+        _daemonProcess = null;
+        _daemonKey = "";
     }
 
     public void Dispose()
     {
+        StopDaemonLocked();
         _httpClient.Dispose();
         _downloadLock.Dispose();
+        _synthLock.Dispose();
     }
 }

@@ -48,7 +48,7 @@ public sealed class ApplicationServices
         FrontierCapi = new FrontierCapiService(Configuration, ShipState, GameEvents);
         GalaxyStatus = new GalaxyStatusService();
         Galnet = new GalnetService();
-        AiCopilot = new AiCopilotService(Configuration, ShipState, InputSimulator, SpanshSystemData, CommunitySync, Galnet, GalaxyStatus, AlertSpeech, GameEvents);
+        AiCopilot = new AiCopilotService(Configuration, ShipState, Bindings, InputSimulator, SpanshSystemData, CommunitySync, Galnet, GalaxyStatus, AlertSpeech, GameEvents);
         WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot, GalaxyStatus, Galnet);
     }
 }

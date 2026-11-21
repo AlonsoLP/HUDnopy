@@ -236,7 +236,7 @@ public class InputSimulatorService
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
-                    // Windows puede denegar información de procesos protegidos.
+                    // Windows may deny access to protected process information.
                 }
             }
         }

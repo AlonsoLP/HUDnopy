@@ -38,6 +38,7 @@ public sealed record WebNetworkInterfaceOption(string Id, string DisplayName, IP
 
 public class WebServerService : IDisposable
 {
+    private static readonly JsonSerializerOptions CamelCaseJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private readonly ConfigService _configService;
     private readonly EliteFileWatcherService _fileWatcher;
     private readonly BindingsService _bindingsService;
@@ -114,6 +115,8 @@ public class WebServerService : IDisposable
         try
         {
             string webUiHtml = WebUiDocument.Load();
+            string webUiCss = WebUiDocument.LoadAsset("styles.css");
+            string webUiJs = WebUiDocument.LoadAsset("app.js");
             string mode = _configService.Current.WebAccessMode;
             if (mode is not ("local" or "open" or "code" or "vpn"))
                 throw new InvalidOperationException("Modo de acceso web no válido.");
@@ -244,6 +247,18 @@ public class WebServerService : IDisposable
                 await context.Response.WriteAsync(webUiHtml);
             });
 
+            app.MapGet("/styles.css", async context =>
+            {
+                context.Response.ContentType = "text/css; charset=utf-8";
+                await context.Response.WriteAsync(webUiCss);
+            });
+
+            app.MapGet("/app.js", async context =>
+            {
+                context.Response.ContentType = "application/javascript; charset=utf-8";
+                await context.Response.WriteAsync(webUiJs);
+            });
+
             app.MapGet("/api/state", async context =>
             {
                 context.Response.ContentType = "application/json; charset=utf-8";
@@ -267,6 +282,15 @@ public class WebServerService : IDisposable
                     operationsView = BuildOperationsView(state, language),
                     carrierView = GetCarrierView(state.Carrier, language)
                 }));
+            });
+
+            app.MapGet("/api/spansh/nearest", async (HttpContext context) =>
+            {
+                context.Response.ContentType = "application/json; charset=utf-8";
+                string serviceKey = context.Request.Query["service"].ToString();
+                var st = _fileWatcher.State;
+                var (ok, results, msg) = await _spanshSystemDataService.SearchNearestServicesAsync(serviceKey, st.CurrentSystem, st.StarPos);
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = ok, message = msg, results }, CamelCaseJsonOptions));
             });
 
             app.MapPost("/api/ai/ask", async (HttpContext context) =>

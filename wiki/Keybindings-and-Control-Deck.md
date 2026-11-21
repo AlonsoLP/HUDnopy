@@ -17,7 +17,9 @@ When **Auto-context deck** is enabled, HUDnopy inspects live `Status.json` flags
 - **DSS (Detailed Surface Scanner)**
 - **SLF (Ship-Launched Fighter)**
 
-## Macros & Window Focus
+## Macros, Voice Macros & Window Focus
 
 - Supports multi-step **Deck Macros** (`DeckMacroDefinition`) combining sequential keybind actions with configurable delays.
+- Supports **Zero-LLM Voice Macros** (`Settings → AI Copilot`) that match custom spoken phrases locally in 0 ms and execute `.binds` + `DELAY` sequences without calling any AI provider.
+- Supports a system-wide **Global Push-to-Talk Hotkey** (default `Ctrl+Alt+V`) for COVAS voice input in fullscreen or VR without `Alt+Tab`.
 - When **Focus game window on input** is enabled, `InputSimulatorService` brings the Elite Dangerous window to the foreground before dispatching Windows `SendInput` scancodes, ensuring reliable execution from both the desktop deck and the remote Web HUD.

@@ -1,10 +1,10 @@
 # Web HUD and Security
 
-HUDnopy embeds an **ASP.NET Core Kestrel** HTTPS and WebSocket server that serves a responsive single-page MFD (`Web/index.html`) for tablets, phones, and secondary monitors.
+HUDnopy embeds an **ASP.NET Core Kestrel** HTTPS and WebSocket server that serves a modular responsive MFD (`Web/index.html`, `Web/styles.css`, `Web/app.js`) with **7 synchronized tabs** and a **Split MFD** mode for wide tablets and secondary monitors.
 
 ## Access Modes
 
-Configure the Web Server under **Settings → Connectivity & Integrations**:
+Configure the Web Server under **Settings → Web Server**:
 
 | Mode | Behavior | Recommended Use |
 |---|---|---|

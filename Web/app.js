@@ -1,0 +1,1787 @@
+// -----------------------------------------------------------------------------
+// Project:     HUDnopy — Elite Dangerous Telemetry HUD & Copilot
+// File:        Web/app.js
+// Author:      AlonsoLP
+// Copyright:   Copyright (c) 2026 AlonsoLP
+// License:     GPL-3.0-only (see LICENSE file in the repository root)
+// Description: Live WebSocket client, MFD rendering, Split MFD, and COVAS AI web UI.
+// -----------------------------------------------------------------------------
+
+  let lastPayload = null;
+  let lastDeckRenderKey = null;
+  let hasAlertSnapshot = false;
+  let sectionLanguage = null;
+  let sectionTranslations = {};
+  let dashboardTranslations = null;
+  let coreAlertTranslations = null;
+  let materialTranslations = null;
+  let flightTranslations = null;
+  let operationsTranslations = null;
+  let deckTranslations = null;
+  let explorationTranslations = null;
+  let inputTranslations = null;
+  let connectionKey = 'connecting';
+  const activeSectionByTab = new Map();
+  const seenAlertIds = new Set();
+  let alertToastTimer = null;
+  let alertToastId = null;
+  let lastSpanshRenderKey = null;
+  let lastCarrierRenderKey = null;
+  let lastHeaderModulesKey = null;
+  let lastStatusMatrixKey = null;
+  let cachedNumberFormatLang = null;
+  let cachedNumberFormatter = null;
+  function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('nav.tabs button').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+    btn.classList.add('active');
+    const sections = [...document.querySelectorAll(`#tab-${tabId} .module-section`)];
+    sections.forEach((section, index) => {
+      section.classList.toggle('active', index === 0);
+    });
+    activeSectionByTab.set(`tab-${tabId}`, sections[0]?.dataset.sectionTitle || null);
+    updateSectionTabs();
+  }
+
+  function updateSectionTabs() {
+    const activeTab = document.querySelector('.tab-view.active');
+    const sectionTabs = document.getElementById('sectionTabs');
+    sectionTabs.replaceChildren();
+    const sections = activeTab ? [...activeTab.querySelectorAll('.module-section')] : [];
+    const rememberedSection = activeSectionByTab.get(activeTab?.id);
+    const selectedSection = sections.find(section => section.dataset.sectionTitle === rememberedSection)
+      || sections.find(section => section.classList.contains('active'))
+      || sections[0];
+    sections.forEach((section, index) => {
+      section.classList.toggle('active', section === selectedSection);
+      const button = document.createElement('button');
+      button.type = 'button';
+      const key = section.dataset.sectionKey;
+      if (key && sectionLanguage && !Object.prototype.hasOwnProperty.call(sectionTranslations, key))
+        console.error(`Falta la traducción de la sección: ${key}`);
+      button.textContent = sectionTranslations[key] || section.dataset.sectionLabel || section.dataset.sectionTitle || `Sección ${index + 1}`;
+      if ((key && sectionTranslations[key]) || section.dataset.sectionLabel) button.lang = sectionLanguage;
+      button.classList.toggle('active', section.classList.contains('active'));
+      button.addEventListener('click', () => {
+        activeSectionByTab.set(activeTab.id, section.dataset.sectionTitle);
+        sections.forEach(item => item.classList.toggle('active', item === section));
+        sectionTabs.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+      });
+      sectionTabs.append(button);
+    });
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+  }
+
+  function renderTableRows(tableBodyId, items, columns, emptyText) {
+    const body = document.getElementById(tableBodyId);
+    body.replaceChildren();
+    if (!items.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = columns.length;
+      cell.textContent = emptyText;
+      row.append(cell);
+      body.append(row);
+      return;
+    }
+
+    for (const [index, item] of items.entries()) {
+      const row = document.createElement('tr');
+      for (const column of columns) {
+        const cell = document.createElement('td');
+        const value = column(item, index);
+        cell.textContent = value === null || value === undefined || value === '' ? '—' : String(value);
+        row.append(cell);
+      }
+      body.append(row);
+    }
+  }
+
+  function renderSpansh(view) {
+    if (!view) {
+      console.error('Falta la presentación de Spansh recibida del servidor.');
+      return;
+    }
+    const renderKey = JSON.stringify([sectionLanguage, view]);
+    if (renderKey === lastSpanshRenderKey) return;
+    lastSpanshRenderKey = renderKey;
+
+    document.getElementById('spanshTitle').textContent = view.Title;
+    document.getElementById('spanshStatus').textContent = view.Status;
+    document.getElementById('spanshSummary').textContent = view.Summary;
+    document.getElementById('spanshUpdated').textContent = view.Updated;
+    document.getElementById('spanshUpdated').hidden = !view.Updated;
+    document.getElementById('spanshSourceNote').textContent = view.SourceNote;
+    document.getElementById('spanshBodiesTitle').textContent = view.BodiesTitle;
+    document.getElementById('spanshStationsTitle').textContent = view.StationsTitle;
+
+    const headerLabels = {
+      body: view.BodyHeader,
+      type: view.TypeHeader,
+      arrival: view.ArrivalHeader,
+      landable: view.LandableHeader,
+      station: view.StationHeader,
+      stationBody: view.StationBodyHeader,
+      controllingFaction: view.FactionHeader
+    };
+    document.querySelectorAll('[data-spansh-key]').forEach(header => {
+      header.textContent = headerLabels[header.dataset.spanshKey] || '';
+      header.lang = sectionLanguage;
+    });
+
+    const renderRows = (bodyId, items, fields, emptyText) => {
+      const body = document.getElementById(bodyId);
+      body.replaceChildren();
+      if (!items.length) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = fields.length;
+        cell.textContent = emptyText;
+        row.append(cell);
+        body.append(row);
+        return;
+      }
+
+      items.forEach(item => {
+        const row = document.createElement('tr');
+        fields.forEach(field => {
+          const cell = document.createElement('td');
+          const value = item[field];
+          cell.textContent = value === null || value === undefined || value === '' ? '—' : String(value);
+          row.append(cell);
+        });
+        body.append(row);
+      });
+    };
+
+    renderRows('spanshBodiesTableBody', Array.isArray(view.Bodies) ? view.Bodies : [],
+      ['Name', 'Type', 'ArrivalDistance', 'Landable'], view.EmptyBodies);
+    renderRows('spanshStationsTableBody', Array.isArray(view.Stations) ? view.Stations : [],
+      ['Name', 'Type', 'BodyName', 'ArrivalDistance', 'ControllingFaction'], view.EmptyStations);
+  }
+
+  function renderCarrier(view) {
+    if (!view) {
+      console.error('Falta la presentación del portanaves recibida del servidor.');
+      return;
+    }
+    const renderKey = JSON.stringify([sectionLanguage, view]);
+    if (renderKey === lastCarrierRenderKey) return;
+    lastCarrierRenderKey = renderKey;
+    document.getElementById('carrierTitle').textContent = view.Title;
+    const status = document.getElementById('carrierStatus');
+    status.textContent = view.Status;
+    status.hidden = view.HasCarrier;
+    document.getElementById('carrierFieldHeader').textContent = view.FieldHeader;
+    document.getElementById('carrierValueHeader').textContent = view.ValueHeader;
+    const cards = document.getElementById('carrierCards');
+    cards.hidden = !view.HasCarrier;
+    cards.replaceChildren();
+    const addMetric = (parent, data, isFuel = false) => {
+      const metric = document.createElement('div');
+      metric.className = 'carrier-metric';
+      const header = document.createElement('div');
+      header.className = 'bar-header';
+      const heading = document.createElement('span');
+      heading.textContent = data.Title;
+      const values = document.createElement('span');
+      values.className = 'carrier-metric-values';
+      values.textContent = `${data.Left.Value} / ${data.Right.Value}`;
+      values.title = `${data.Left.Label}: ${data.Left.Value}; ${data.Right.Label}: ${data.Right.Value}`;
+      values.setAttribute('aria-label', values.title);
+      header.append(heading, values);
+      metric.append(header);
+      if (data.Percent != null) {
+        const bar = document.createElement('div');
+        bar.className = 'bar-track';
+        bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-valuemin', '0');
+        bar.setAttribute('aria-valuemax', '100');
+        bar.setAttribute('aria-valuenow', data.Percent);
+        bar.setAttribute('aria-label', data.Title);
+        const fill = document.createElement('div');
+        fill.className = isFuel ? 'bar-fill fuel' : 'bar-fill';
+        fill.style.width = `${Math.max(0, Math.min(100, data.Percent))}%`;
+        bar.append(fill);
+        metric.append(bar);
+      }
+      parent.append(metric);
+    };
+    if (view.HasCarrier) {
+      const summary = document.createElement('div');
+      summary.className = 'carrier-card carrier-metrics';
+      addMetric(summary, view.Space);
+      addMetric(summary, view.Finance);
+      addMetric(summary, view.Fuel, true);
+      cards.append(summary);
+      if (view.HasJump) {
+        const jump = document.createElement('div');
+        jump.className = 'carrier-card carrier-jump';
+        const heading = document.createElement('div');
+        heading.className = 'carrier-card-title';
+        heading.textContent = view.JumpTitle;
+        jump.append(heading);
+        view.Jump.forEach(row => {
+          const line = document.createElement('div');
+          const label = document.createElement('span');
+          const value = document.createElement('span');
+          line.className = 'carrier-card-row';
+          label.className = 'carrier-card-label';
+          value.className = 'carrier-card-value';
+          label.textContent = row.Label + ': ';
+          value.textContent = row.Value;
+          line.append(label, value);
+          jump.append(line);
+        });
+        cards.append(jump);
+      }
+    }
+    document.getElementById('carrierTableContainer').hidden = view.Rows.length === 0;
+    renderTableRows('carrierTableBody', view.Rows, [row => row.Label, row => row.Value], '');
+  }
+
+  const formatCount = value => {
+    const lang = sectionLanguage || 'en-GB';
+    if (cachedNumberFormatLang !== lang || !cachedNumberFormatter) {
+      cachedNumberFormatLang = lang;
+      cachedNumberFormatter = new Intl.NumberFormat(lang);
+    }
+    return cachedNumberFormatter.format(value ?? 0);
+  };
+
+  async function sendCmd(actionId) {
+    try {
+      const res = await fetch('/api/command/' + encodeURIComponent(actionId), { method: 'POST' });
+      const data = await res.json();
+      showToast(data.message || (inputTranslations ? inputTranslations.commandFallback.replace('{0}', actionId) : 'Comando: ' + actionId));
+      if (data.state && lastPayload && data.sectionLanguage === sectionLanguage) {
+        lastPayload.state = data.state;
+        lastPayload.onFootStatus = data.onFootStatus;
+        lastPayload.operationsView = data.operationsView;
+        lastPayload.carrierView = data.carrierView;
+        renderState(lastPayload);
+      }
+    } catch (e) {
+      console.error('Command request failed:', e);
+      showToast(inputTranslations ? inputTranslations.commandError : 'Error al enviar comando');
+    }
+  }
+
+  function renderHeaderModules(modules) {
+    const enabledModules = modules.filter(item => item.Enabled);
+    const renderKey = JSON.stringify(enabledModules);
+    if (renderKey === lastHeaderModulesKey) return;
+    lastHeaderModulesKey = renderKey;
+    const telemetry = document.getElementById('headerTelemetry');
+    telemetry.replaceChildren();
+    for (const module of enabledModules) {
+      const pill = document.createElement('div');
+      pill.className = 'telemetry-pill';
+      const label = document.createElement('span');
+      label.className = 'lbl';
+      label.textContent = module.Label;
+      const value = document.createElement('span');
+      value.className = 'val';
+      value.textContent = module.Value;
+      pill.append(label, value);
+      telemetry.append(pill);
+    }
+  }
+
+  function toggleSplitMfd() {
+    document.body.classList.toggle('split-mfd');
+    const btn = document.getElementById('btnSplitMfd');
+    if (btn) btn.classList.toggle('active', document.body.classList.contains('split-mfd'));
+  }
+
+  async function refreshWebGalnet() {
+    try { await fetch('/api/galnet/refresh', { method: 'POST' }); } catch {}
+  }
+
+  async function refreshWebGalaxyStatus() {
+    try { await fetch('/api/galaxy-status/refresh', { method: 'POST' }); } catch {}
+  }
+
+  function renderState(payload) {
+    lastPayload = payload;
+    if (payload.sectionLanguage && payload.sectionLanguage !== sectionLanguage) {
+      if (!payload.sectionTranslations || typeof payload.sectionTranslations !== 'object' || Array.isArray(payload.sectionTranslations)
+          || !payload.navigationTranslations || typeof payload.navigationTranslations !== 'object' || Array.isArray(payload.navigationTranslations)
+          || !payload.dashboardTranslations || typeof payload.dashboardTranslations !== 'object' || Array.isArray(payload.dashboardTranslations)
+          || !payload.coreAlertTranslations || typeof payload.coreAlertTranslations !== 'object' || Array.isArray(payload.coreAlertTranslations)
+          || !payload.tableHeaders || typeof payload.tableHeaders !== 'object' || Array.isArray(payload.tableHeaders)
+          || !payload.materialTranslations || typeof payload.materialTranslations !== 'object' || Array.isArray(payload.materialTranslations)
+          || !payload.flightTranslations || typeof payload.flightTranslations !== 'object' || Array.isArray(payload.flightTranslations)
+          || !payload.operationsTranslations || typeof payload.operationsTranslations !== 'object' || Array.isArray(payload.operationsTranslations)
+          || !payload.explorationTranslations || typeof payload.explorationTranslations !== 'object' || Array.isArray(payload.explorationTranslations)
+          || !payload.inputTranslations || typeof payload.inputTranslations !== 'object' || Array.isArray(payload.inputTranslations)
+          || !payload.deckTranslations || typeof payload.deckTranslations !== 'object' || Array.isArray(payload.deckTranslations)
+          || !Array.isArray(payload.deckBindings)
+          || !payload.languageSettings || typeof payload.languageSettings.partialWarning !== 'string') {
+        console.error('Faltan las traducciones de navegación recibidas del servidor.');
+        return;
+      } else {
+        sectionLanguage = payload.sectionLanguage;
+        document.documentElement.lang = sectionLanguage;
+        sectionTranslations = payload.sectionTranslations;
+        dashboardTranslations = payload.dashboardTranslations;
+        coreAlertTranslations = payload.coreAlertTranslations;
+        materialTranslations = payload.materialTranslations;
+        flightTranslations = payload.flightTranslations;
+        operationsTranslations = payload.operationsTranslations;
+        explorationTranslations = payload.explorationTranslations;
+        inputTranslations = payload.inputTranslations;
+        document.getElementById('connBadge').textContent = inputTranslations[connectionKey];
+        document.getElementById('sectionTabs').setAttribute('aria-label', inputTranslations.moduleSections);
+        deckTranslations = payload.deckTranslations;
+        const deckSearch = document.getElementById('deckSearch');
+        deckSearch.placeholder = deckTranslations.search;
+        deckSearch.setAttribute('aria-label', deckTranslations.search);
+        document.querySelectorAll('[data-operations-key]').forEach(element => {
+          const value = operationsTranslations[element.dataset.operationsKey];
+          if (typeof value !== 'string' || !value) {
+            console.error(`Falta la traducción de operaciones: ${element.dataset.operationsKey}`);
+            return;
+          }
+          element.textContent = value;
+          element.lang = sectionLanguage;
+        });
+        document.querySelectorAll('[data-flight-key]').forEach(element => {
+          const value = flightTranslations[element.dataset.flightKey];
+          if (typeof value !== 'string' || !value) {
+            console.error(`Falta la traducción de vuelo: ${element.dataset.flightKey}`);
+            return;
+          }
+          element.textContent = value;
+          element.lang = sectionLanguage;
+        });
+        document.getElementById('materialsTitle').textContent = materialTranslations.title;
+        for (const [prefix, searchKey] of [['market', 'marketSearch'], ['profile', 'profileSearch']]) {
+          const search = document.getElementById(prefix + 'Search');
+          search.placeholder = operationsTranslations[searchKey];
+          search.setAttribute('aria-label', operationsTranslations[searchKey]);
+          document.getElementById(prefix + 'CategoryFilter').setAttribute('aria-label', materialTranslations.categoryFilter);
+        }
+        const materialSearch = document.getElementById('materialSearch');
+        materialSearch.placeholder = materialTranslations.searchPlaceholder;
+        materialSearch.setAttribute('aria-label', materialTranslations.search);
+        const categoryFilter = document.getElementById('materialCategoryFilter');
+        categoryFilter.setAttribute('aria-label', materialTranslations.categoryFilter);
+        ['allCategories', 'raw', 'manufactured', 'encoded'].forEach((key, index) => {
+          categoryFilter.options[index].textContent = materialTranslations[key];
+        });
+        const rarityFilter = document.getElementById('materialRarityFilter');
+        rarityFilter.setAttribute('aria-label', materialTranslations.rarityFilter);
+        ['allRarities', 'veryCommon', 'common', 'standard', 'rare', 'veryRare', 'unclassified'].forEach((key, index) => {
+          rarityFilter.options[index].textContent = index >= 1 && index <= 5
+            ? `${materialTranslations[key]} (${index})` : materialTranslations[key];
+        });
+        document.querySelectorAll('th:not([data-spansh-key]):not([data-carrier-key])').forEach(header => {
+          if (!header.dataset.translationKey) {
+            const original = header.textContent.trim();
+            if (original === '#' || original === 'ID') return;
+            console.error(`Falta la clave del encabezado de tabla: ${original}`);
+            return;
+          }
+          const value = payload.tableHeaders[header.dataset.translationKey];
+          if (typeof value !== 'string' || !value) {
+            console.error(`Falta la traducción del encabezado: ${header.dataset.translationKey}`);
+            return;
+          }
+          header.textContent = value;
+          header.lang = sectionLanguage;
+        });
+        document.querySelectorAll('[data-dashboard-key]').forEach(element => {
+          const value = dashboardTranslations[element.dataset.dashboardKey];
+          if (typeof value !== 'string' || !value) {
+            console.error(`Falta la traducción del panel: ${element.dataset.dashboardKey}`);
+            return;
+          }
+          element.textContent = value;
+          element.lang = sectionLanguage;
+        });
+        const warning = document.getElementById('languageWarning');
+        warning.lang = sectionLanguage;
+        warning.textContent = payload.languageSettings.partialWarning;
+        warning.hidden = !payload.languageSettings.partialWarning;
+        document.querySelectorAll('nav.tabs button[data-nav-key]').forEach(button => {
+          const text = payload.navigationTranslations[button.dataset.navKey];
+          if (!text || !text.label || !text.accessibleName || !text.tooltip) {
+            console.error(`Falta la traducción de navegación: ${button.dataset.navKey}`);
+            return;
+          }
+          button.querySelector('.nav-label').textContent = text.label;
+          button.lang = sectionLanguage;
+          button.title = text.tooltip;
+          button.setAttribute('aria-label', text.accessibleName);
+        });
+        updateSectionTabs();
+      }
+    }
+    applyNavigationMenuPosition(payload.navigationMenuPosition);
+    document.body.classList.toggle('hide-nav-labels', payload.hideNavigationMenuText === true);
+    renderAlerts(payload);
+    document.getElementById('spanshSection').hidden = payload.spanshEnabled !== true;
+    if (payload.spanshEnabled === true) renderSpansh(payload.spanshView);
+    renderCarrier(payload.carrierView);
+    const s = payload.state;
+    if (!s) return;
+    const operations = operationsTranslations;
+    const view = payload.operationsView;
+    if (!view) {
+      console.error('Falta la presentación de operaciones recibida del servidor.');
+      return;
+    }
+    const formatOperation = (key, ...args) =>
+      operations[key].replace(/\{(\d+)\}/g, (_, index) => String(args[Number(index)]));
+
+    if (s.ThemeAccentHex) {
+      document.documentElement.style.setProperty('--hud-accent', s.ThemeAccentHex);
+    }
+
+    document.getElementById('onFootStatus').textContent = payload.onFootStatus;
+    const telemetry = (value, fractionDigits, multiplier, unit) => value == null
+      ? '---' : (value * multiplier).toLocaleString(sectionLanguage, { maximumFractionDigits: fractionDigits, useGrouping: false }) + unit;
+    document.getElementById('onFootOxygen').textContent = telemetry(s.Oxygen, 1, 100, '%');
+    document.getElementById('onFootHealth').textContent = telemetry(s.Health, 1, 100, '%');
+    document.getElementById('onFootTemperature').textContent = telemetry(s.TemperatureKelvin, 2, 1, ' K');
+    document.getElementById('onFootGravity').textContent = telemetry(s.Gravity, 2, 1, ' G');
+    document.getElementById('onFootWeapon').textContent = s.SelectedWeapon || '---';
+    document.getElementById('activeSuit').textContent = s.ActiveSuit || '---';
+    document.getElementById('activeSuitLoadout').textContent = s.ActiveSuitLoadout || '---';
+
+    const passengers = s.PassengerManifest || [];
+    document.getElementById('passengerStatus').textContent = passengers.length
+      ? formatOperation('passengersCount', passengers.length)
+      : operations.passengersEmpty;
+    renderTableRows('passengerTableBody', passengers, [
+      (_, index) => view.passengerTypes[index],
+      item => item.Count == null ? '—' : formatCount(item.Count),
+      item => item.DestinationSystem,
+      item => item.DestinationStation,
+      (_, index) => view.passengerExpiries[index],
+      item => item.MissionId
+    ], operations.passengersEmpty);
+
+    const backpack = s.BackpackInventory || [];
+    document.getElementById('backpackStatus').textContent = backpack.length
+      ? formatOperation('backpackCount', backpack.length)
+      : operations.backpackWaiting;
+    renderTableRows('backpackTableBody', backpack, [
+      item => item.DisplayName,
+      (_, index) => view.backpackTypes[index],
+      item => formatCount(item.Count)
+    ], operations.backpackEmpty);
+
+    renderMarket(payload);
+
+    document.getElementById('outfittingStatus').textContent = view.outfittingStatus;
+    renderTableRows('outfittingTableBody', s.Outfitting?.Items || [], [
+      item => item.Id,
+      item => item.DisplayName,
+      item => `${formatCount(item.BuyPrice)} CR`
+    ], operations.outfittingEmpty);
+
+    document.getElementById('shipyardStatus').textContent = view.shipyardStatus;
+    renderTableRows('shipyardTableBody', s.Shipyard?.Items || [], [
+      item => item.DisplayName,
+      item => `${formatCount(item.ShipPrice)} CR`
+    ], operations.shipyardEmpty);
+
+    renderProfile(payload);
+
+    const colonisation = s.Colonisation || {};
+    document.getElementById('colonisationStatus').textContent = view.constructionStatus;
+    document.getElementById('colonisationProgress').textContent = view.constructionProgress;
+    renderTableRows('colonisationTableBody', colonisation.Resources || [], [
+      item => item.DisplayName,
+      item => formatCount(item.RequiredAmount),
+      item => formatCount(item.ProvidedAmount),
+      item => `${formatCount(item.Payment)} CR`
+    ], operations.resourcesEmpty);
+
+    // Full v0.2.0 Desktop <-> Web parity rendering
+    const padBanner = document.getElementById('webLandingPadBanner');
+    if (padBanner) {
+      if (payload.landingPad) {
+        const lp = payload.landingPad;
+        padBanner.innerHTML = '';
+        const title = document.createElement('div');
+        title.textContent = `🛬 ${(lp.station || 'STARPORT').toUpperCase()} — ${lp.guidance}`;
+        const bay = document.createElement('div');
+        bay.style.cssText = 'font-family:Consolas,monospace;color:var(--hud-secondary);font-size:0.84rem;margin-top:4px;';
+        bay.textContent = lp.bayIndicator || '';
+        padBanner.appendChild(title);
+        padBanner.appendChild(bay);
+        padBanner.hidden = false;
+      } else {
+        padBanner.hidden = true;
+      }
+    }
+
+    // Galaxy Server Status + Last BGS Tick
+    const gs = payload.galaxyStatus || {};
+    const gsLine = document.getElementById('webGalaxyStatusLine');
+    const bgsLine = document.getElementById('webBgsTickInfo');
+    const serverMsg = gs.ServerMessage || '---';
+    let tickShort = '---';
+    let tickFull = (flightTranslations && flightTranslations.bgsTickUnavailable) || '---';
+    if (gs.LastBgsTickUtc) {
+      const tickDate = new Date(gs.LastBgsTickUtc);
+      if (!isNaN(tickDate.getTime())) {
+        const diffMin = Math.max(0, Math.floor((Date.now() - tickDate.getTime()) / 60000));
+        const elapsed = diffMin >= 60 ? `${Math.floor(diffMin / 60)}h ${String(diffMin % 60).padStart(2, '0')}m` : `${diffMin}m`;
+        const utcStr = tickDate.toISOString().slice(0, 16).replace('T', ' ');
+        const localStr = tickDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        tickShort = `${localStr} (${elapsed})`;
+        tickFull = (flightTranslations && flightTranslations.bgsTickInfo)
+          ? flightTranslations.bgsTickInfo.replace('{0}', utcStr).replace('{1}', localStr).replace('{2}', elapsed)
+          : `${utcStr} UTC (${localStr} · ${elapsed})`;
+      }
+    }
+    if (gsLine) {
+      gsLine.textContent = (flightTranslations && flightTranslations.galaxyServerStatus)
+        ? flightTranslations.galaxyServerStatus.replace('{0}', serverMsg).replace('{1}', tickShort)
+        : `Elite Servers: ${serverMsg} · BGS Tick: ${tickShort}`;
+    }
+    if (bgsLine) bgsLine.textContent = tickFull;
+
+    // EDSY / Coriolis ship loadout links
+    const loadoutRow = document.getElementById('webLoadoutExportRow');
+    if (loadoutRow) {
+      const links = payload.loadoutLinks;
+      if (links && (links.edsyUrl || links.coriolisUrl)) {
+        const edsy = document.getElementById('webEdsyLink');
+        const cor = document.getElementById('webCoriolisLink');
+        if (edsy && links.edsyUrl) edsy.href = links.edsyUrl;
+        if (cor && links.coriolisUrl) cor.href = links.coriolisUrl;
+        loadoutRow.hidden = false;
+      } else {
+        loadoutRow.hidden = true;
+      }
+    }
+
+    // Carrier countdown, financial runway & cAPI cargo
+    const fcCountdown = document.getElementById('webCarrierCountdown');
+    if (fcCountdown) {
+      const depRaw = s.Carrier && s.Carrier.DepartureTime;
+      if (depRaw) {
+        const remSec = Math.floor((new Date(depRaw).getTime() - Date.now()) / 1000);
+        if (remSec > 0) {
+          const m = Math.floor(remSec / 60);
+          const sec = remSec % 60;
+          fcCountdown.textContent = `⏱ T-${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+          fcCountdown.hidden = false;
+        } else {
+          fcCountdown.hidden = true;
+        }
+      } else {
+        fcCountdown.hidden = true;
+      }
+    }
+    const fcRunway = document.getElementById('webCarrierUpkeepRunway');
+    if (fcRunway) {
+      const bal = s.Carrier && s.Carrier.Balance;
+      if (bal && bal > 0) {
+        const wksBase = Math.floor(bal / 5000000);
+        const wksTyp = Math.floor(bal / 15000000);
+        const mosTyp = (wksTyp / 4.345).toFixed(1);
+        fcRunway.textContent = (flightTranslations && flightTranslations.carrierUpkeepRunway)
+          ? flightTranslations.carrierUpkeepRunway.replace('{0}', formatCount(wksBase)).replace('{1}', formatCount(wksTyp)).replace('{2}', mosTyp)
+          : `~${wksBase} wks (5M/wk) · ~${wksTyp} wks / ${mosTyp} mos (15M/wk)`;
+      } else {
+        fcRunway.textContent = '';
+      }
+    }
+    const fcCargoSec = document.getElementById('webCarrierCargoSection');
+    const fcCargo = Array.isArray(s.CarrierCargo) ? s.CarrierCargo : [];
+    if (fcCargoSec) {
+      fcCargoSec.hidden = fcCargo.length === 0;
+      if (fcCargo.length > 0) {
+        renderTableRows('webCarrierCargoTableBody', fcCargo, [
+          item => item.Commodity,
+          item => formatCount(item.Quantity),
+          item => item.OriginSystem || '---'
+        ], '');
+      }
+    }
+
+    // Cargo instant sell value + colonisation cross-reference
+    const cargoProfitEl = document.getElementById('webCargoTradeProfit');
+    if (cargoProfitEl) {
+      const cargoList = Array.isArray(s.CargoInventory) ? s.CargoInventory : [];
+      const marketItems = (s.Market && Array.isArray(s.Market.Items)) ? s.Market.Items : [];
+      const notes = [];
+      if (cargoList.length > 0 && marketItems.length > 0) {
+        let totalSell = 0, totalProfit = 0;
+        for (const c of cargoList) {
+          const m = marketItems.find(x => (x.DisplayName || '').toLowerCase() === (c.Name || '').toLowerCase() || (x.Name || '').toLowerCase() === (c.Name || '').toLowerCase());
+          if (m && m.SellPrice > 0) {
+            totalSell += m.SellPrice * c.Count;
+            if (m.MeanPrice > 0 && m.SellPrice > m.MeanPrice) totalProfit += (m.SellPrice - m.MeanPrice) * c.Count;
+          }
+        }
+        if (totalSell > 0) {
+          notes.push((operations && operations.cargoMarketSummary)
+            ? operations.cargoMarketSummary.replace('{0}', formatCount(totalSell)).replace('{1}', formatCount(totalProfit)).replace('{2}', '')
+            : `${formatCount(totalSell)} CR (+${formatCount(totalProfit)} CR)`);
+        }
+      }
+      const colRes = (s.Colonisation && Array.isArray(s.Colonisation.Resources)) ? s.Colonisation.Resources : [];
+      if (cargoList.length > 0 && colRes.length > 0) {
+        const matches = cargoList
+          .filter(c => colRes.some(r => r.RequiredAmount > r.ProvidedAmount && (r.DisplayName || '').toLowerCase() === (c.Name || '').toLowerCase()))
+          .map(c => `${c.Name} (${c.Count} t)`);
+        if (matches.length > 0) {
+          notes.push((operations && operations.cargoColonisationMatches)
+            ? operations.cargoColonisationMatches.replace('{0}', matches.join(', '))
+            : `★ ${matches.join(', ')}`);
+        }
+      }
+      cargoProfitEl.textContent = notes.join('  |  ');
+      cargoProfitEl.hidden = notes.length === 0;
+    }
+
+    // Missions grouped by system + missing cargo warning
+    const mGroupEl = document.getElementById('webMissionsGrouped');
+    const mWarnEl = document.getElementById('webMissionsCargoWarning');
+    if (mGroupEl && mWarnEl) {
+      const missions = Array.isArray(s.ActiveMissions) ? s.ActiveMissions : [];
+      const bySys = new Map();
+      const reqByComm = new Map();
+      for (const m of missions) {
+        if (m.DestinationSystem) {
+          const k = m.DestinationSystem;
+          const prev = bySys.get(k) || { count: 0, cr: 0, tons: 0 };
+          prev.count++;
+          prev.cr += m.Reward || 0;
+          if (m.Commodity && m.Count) prev.tons += m.Count;
+          bySys.set(k, prev);
+        }
+        if (m.Commodity && m.Count > 0 && m.PassengerMission !== true) {
+          const ck = m.Commodity.trim().toLowerCase();
+          const prev = reqByComm.get(ck) || { name: m.Commodity.trim(), req: 0 };
+          prev.req += m.Count;
+          reqByComm.set(ck, prev);
+        }
+      }
+      if (bySys.size > 0) {
+        const parts = [...bySys.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5)
+          .map(([sys, v]) => `${sys} (${v.count} · ${v.cr >= 1e6 ? (v.cr / 1e6).toFixed(1) + 'M CR' : formatCount(v.cr) + ' CR'}${v.tons > 0 ? ' · ' + v.tons + ' t' : ''})`);
+        mGroupEl.textContent = (operations && operations.missionsBySystem)
+          ? operations.missionsBySystem.replace('{0}', parts.join('  |  '))
+          : parts.join('  |  ');
+        mGroupEl.hidden = false;
+      } else {
+        mGroupEl.hidden = true;
+      }
+      const cargoList = Array.isArray(s.CargoInventory) ? s.CargoInventory : [];
+      const missing = [];
+      for (const [, info] of reqByComm) {
+        const carried = cargoList.filter(c => (c.Name || '').trim().toLowerCase() === info.name.toLowerCase()).reduce((acc, c) => acc + (c.Count || 0), 0);
+        if (carried < info.req) missing.push(`${info.name} (${carried}/${info.req} t)`);
+      }
+      if (missing.length > 0) {
+        mWarnEl.textContent = (operations && operations.missionsMissingCargo)
+          ? operations.missionsMissingCargo.replace('{0}', missing.slice(0, 4).join(', '))
+          : `⚠ ${missing.slice(0, 4).join(', ')}`;
+        mWarnEl.hidden = false;
+      } else {
+        mWarnEl.hidden = true;
+      }
+    }
+
+    // Engineering Wishlist (live)
+    const wishSec = document.getElementById('webWishlistSection');
+    const wishRows = Array.isArray(payload.engineeringWishlist) ? payload.engineeringWishlist : [];
+    if (wishSec) {
+      wishSec.hidden = wishRows.length === 0;
+      if (wishRows.length > 0) {
+        renderTableRows('webWishlistTableBody', wishRows, [
+          r => r.MaterialName,
+          r => r.Category,
+          r => formatCount(r.Required),
+          r => formatCount(r.Owned),
+          r => r.StatusDisplay
+        ], '');
+      }
+    }
+
+    // Frontier cAPI Stored Ships, Community Goals & Dashboard summary
+    const ships = Array.isArray(s.StoredShips) ? s.StoredShips : [];
+    const cgs = Array.isArray(s.CommunityGoals) ? s.CommunityGoals : [];
+    const storedSec = document.getElementById('webStoredShipsSection');
+    if (storedSec) {
+      storedSec.hidden = ships.length === 0;
+      if (ships.length > 0) {
+        renderTableRows('webStoredShipsTableBody', ships, [
+          x => x.ShipType,
+          x => x.ShipName || '---',
+          x => x.StarSystem || '---',
+          x => x.StationName || '---',
+          x => x.ValueDisplay || `${formatCount(x.Value)} CR`
+        ], '');
+      }
+    }
+    const cgSec = document.getElementById('webCommunityGoalsSection');
+    if (cgSec) {
+      cgSec.hidden = cgs.length === 0;
+      if (cgs.length > 0) {
+        renderTableRows('webCommunityGoalsTableBody', cgs, [
+          g => g.Title,
+          g => g.StarSystem || '---',
+          g => g.StationName || '---',
+          g => g.ProgressDisplay || formatCount(g.CurrentTotal),
+          g => g.ExpiryDisplay || '---'
+        ], '');
+      }
+    }
+    const capiCard = document.getElementById('webCapiSummaryCard');
+    const capiBody = document.getElementById('webCapiSummary');
+    if (capiCard && capiBody) {
+      if (ships.length > 0 || cgs.length > 0) {
+        const parts = [];
+        if (ships.length > 0) parts.push(`Stored Ships: ${ships.length} (${ships.slice(0, 4).map(x => x.ShipType + (x.StarSystem ? ' @ ' + x.StarSystem : '')).join(', ')})`);
+        if (cgs.length > 0) parts.push(`Community Goals: ${cgs.map(g => `${g.Title} [${g.StarSystem}]`).join(' · ')}`);
+        capiBody.textContent = parts.join('  |  ');
+        capiCard.hidden = false;
+      } else {
+        capiCard.hidden = true;
+      }
+    }
+
+    // GalNet News (tab-activity -> galnet)
+    const galnetTbody = document.getElementById('webGalnetTableBody');
+    const galnetBodyEl = document.getElementById('webGalnetBody');
+    const articles = Array.isArray(payload.galnetArticles) ? payload.galnetArticles : [];
+    if (galnetTbody) {
+      galnetTbody.innerHTML = '';
+      if (articles.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 2;
+        td.style.color = 'var(--hud-muted)';
+        td.textContent = '---';
+        tr.appendChild(td);
+        galnetTbody.appendChild(tr);
+      } else {
+        articles.forEach((art, idx) => {
+          const tr = document.createElement('tr');
+          tr.style.cursor = 'pointer';
+          tr.onclick = () => { if (galnetBodyEl) galnetBodyEl.textContent = `${art.Title}\n(${art.Date})\n\n${art.Body || ''}`; };
+          const tdDate = document.createElement('td');
+          tdDate.textContent = art.Date || '';
+          const tdTitle = document.createElement('td');
+          tdTitle.textContent = art.Title || '';
+          tr.appendChild(tdDate);
+          tr.appendChild(tdTitle);
+          galnetTbody.appendChild(tr);
+          if (idx === 0 && galnetBodyEl && !galnetBodyEl.textContent) {
+            galnetBodyEl.textContent = `${art.Title}\n(${art.Date})\n\n${art.Body || ''}`;
+          }
+        });
+      }
+    }
+
+    function renderAlerts(payload) {
+      const alerts = payload.alerts || [];
+      const activeAlerts = payload.activeAlerts || [];
+      const activeBanner = document.getElementById('activeAlertBanner');
+      if (activeAlerts.length > 0) {
+        const current = activeAlerts[0];
+        const severityName = ['information', 'warning', 'critical'][current.Severity] || 'information';
+        activeBanner.className = `alert-${severityName}`;
+        const args = activeAlerts.length === 1 ? [current.Title] : [activeAlerts.length, current.Title];
+        const template = activeAlerts.length === 1 ? coreAlertTranslations.activeOne : coreAlertTranslations.activeMany;
+        document.getElementById('activeAlertBannerTitle').textContent = template.replace(/\{(\d+)\}/g, (_, index) => args[Number(index)]);
+        document.getElementById('activeAlertBannerMessage').textContent = current.Message || '';
+        activeBanner.hidden = false;
+      } else {
+        activeBanner.hidden = true;
+      }
+
+      const list = document.getElementById('alertList');
+      list.replaceChildren();
+      const currentToast = alerts.find(alert => alert.Id === alertToastId);
+      if (currentToast && document.getElementById('alertToast').classList.contains('show')) {
+        document.getElementById('alertToastTitle').textContent = currentToast.Title || inputTranslations.alertFallback;
+        document.getElementById('alertToastMessage').textContent = currentToast.Message;
+      }
+      if (alerts.length === 0) {
+        list.textContent = dashboardTranslations.noAlerts;
+        hasAlertSnapshot = true;
+        return;
+      }
+
+      alerts.slice(0, 8).forEach(alert => {
+        const item = document.createElement('div');
+        const severity = ['information', 'warning', 'critical'][alert.Severity] || 'information';
+        item.className = `alert-item alert-${severity}`;
+        const heading = document.createElement('div');
+        heading.className = 'alert-item-title';
+        heading.textContent = alert.Title || inputTranslations.alertFallback;
+        const time = document.createElement('span');
+        time.className = 'alert-time';
+        time.textContent = new Date(alert.Timestamp).toLocaleTimeString(sectionLanguage);
+        heading.append(time);
+        const message = document.createElement('div');
+        message.className = 'alert-item-message';
+        message.textContent = alert.Message || '';
+        item.append(heading, message);
+        list.append(item);
+
+        if (!seenAlertIds.has(alert.Id)) {
+          seenAlertIds.add(alert.Id);
+          if (hasAlertSnapshot && alerts[0].Id === alert.Id)
+            showAlertToast(alert);
+        }
+      });
+      hasAlertSnapshot = true;
+    }
+
+    function showAlertToast(alert) {
+      alertToastId = alert.Id;
+      document.getElementById('alertToastTitle').textContent = alert.Title || inputTranslations.alertFallback;
+      document.getElementById('alertToastMessage').textContent = alert.Message || '';
+      const toast = document.getElementById('alertToast');
+      const severity = ['information', 'warning', 'critical'][alert.Severity] || 'information';
+      toast.className = `alert-${severity}`;
+      toast.classList.add('show');
+      clearTimeout(alertToastTimer);
+      alertToastTimer = setTimeout(() => { toast.classList.remove('show'); alertToastId = null; }, 12000);
+    }
+
+    if (s.ThemeSecondaryHex) {
+      document.documentElement.style.setProperty('--hud-secondary', s.ThemeSecondaryHex);
+    }
+
+    function applyNavigationMenuPosition(position) {
+      const workspace = document.getElementById('workspace');
+      const allowedPositions = ['left', 'right', 'top', 'bottom'];
+      const safePosition = allowedPositions.includes(position) ? position : 'left';
+      workspace.classList.remove(...allowedPositions.map(value => `layout-${value}`));
+      workspace.classList.add(`layout-${safePosition}`);
+    }
+
+    const hasSessionData = s.CommanderName && s.CommanderName !== 'CMDR DESCONOCIDO';
+    const text = dashboardTranslations;
+    const shipName = !hasSessionData && s.ShipName === 'SIN SEÑAL' ? text.noSignal : (s.ShipName || '---');
+    const oneDecimal = value => Number(value).toLocaleString(sectionLanguage, {minimumFractionDigits: 1, maximumFractionDigits: 1});
+    renderHeaderModules(payload.headerModules);
+    document.getElementById('shipTitle').textContent = `${shipName} [${s.ShipIdent || '---'}]`;
+    document.getElementById('shipSubHeader').textContent = `${s.ShipType || '---'} // ${text.profile}: ${payload.presetName || 'ED'}`;
+    const modeLabel = s.IsGameDetected ? text.online : text.inactive;
+    document.getElementById('modeBadge').textContent = modeLabel;
+    document.getElementById('simBadge').textContent = modeLabel;
+    document.getElementById('dashCommander').textContent = hasSessionData ? s.CommanderName : text.unknownCommander;
+    document.getElementById('dashShip').textContent = `${shipName} [${s.ShipIdent || '---'}] · ${s.ShipType || '---'}`;
+    document.getElementById('dashSystem').textContent = s.CurrentSystem || '---';
+    document.getElementById('dashLocation').textContent = s.DestinationName
+      ? `${text.destination}: ${s.DestinationName}`
+      : s.StationName
+        ? `${text.station}: ${s.StationName}`
+        : s.BodyName
+          ? `${text.body}: ${s.BodyName}`
+          : hasSessionData ? text.deepSpace : '---';
+    const fuelSummary = s.HasFuelCapacity && s.FuelMax > 0
+      ? `${oneDecimal(s.FuelMain || 0)}/${oneDecimal(s.FuelMax)} T (${oneDecimal(Math.max(0, Math.min(100, s.FuelMain / s.FuelMax * 100)))}%)`
+      : s.HasStatusTelemetry
+        ? `${oneDecimal(s.FuelMain || 0)} T (${text.capacityUnconfirmed})`
+        : '---';
+    const hullSummary = s.HasHullTelemetry
+      ? `${text.hull} ${oneDecimal(Math.max(0, Math.min(100, s.HullHealth || 0)))}%`
+      : `${text.hull} ---`;
+    document.getElementById('dashResources').textContent = `${hullSummary} · ${text.fuel} ${fuelSummary}`;
+    document.getElementById('dashCargo').textContent = s.CargoCapacity > 0
+      ? `${text.cargo} ${s.CargoUsed || 0} / ${s.CargoCapacity} T`
+      : hasSessionData ? `${text.cargo} ${s.CargoUsed || 0} T` : `${text.cargo} ---`;
+    const waypoints = s.NavRoute || [];
+    const currentWaypointIndex = waypoints.findIndex(waypoint => waypoint.IsCurrentSystem);
+    const nextWaypoint = currentWaypointIndex >= 0
+      ? waypoints[currentWaypointIndex + 1]
+      : waypoints.find(waypoint => !waypoint.IsCurrentSystem);
+    const remainingJumps = Math.max(0, waypoints.length - 1 - Math.max(0, currentWaypointIndex));
+    document.getElementById('dashRoute').textContent = nextWaypoint
+      ? `${nextWaypoint.StarSystem} · ${oneDecimal(nextWaypoint.StepDistanceLy)} ${text.lightYears} · ${text.remainingJumps}: ${remainingJumps}`
+      : text.noNextJump;
+    const recentEvents = view.journalEvents;
+    document.getElementById('dashActivity').textContent = recentEvents.length > 0
+      ? `${recentEvents[0].Timestamp} · ${recentEvents[0].EventType}: ${recentEvents[0].Summary}`
+      : text.waitingEvents;
+
+    const hull = Math.max(0, Math.min(100, s.HullHealth || 0));
+    document.getElementById('lblHull').textContent = s.HasHullTelemetry ? oneDecimal(hull) + '%' : '---';
+    document.getElementById('barHull').style.width = hull + '%';
+    const shieldBarTrack = document.getElementById('shieldBarTrack');
+    const hasShieldTelemetry = s.HasShieldTelemetry === true;
+    document.getElementById('lblShield').textContent = !hasShieldTelemetry
+      ? '---'
+      : s.HasLoadoutTelemetry && !s.HasShieldGenerator
+        ? flightTranslations.noGenerator
+        : s.ShieldsUp ? flightTranslations.shieldUp : flightTranslations.shieldDown;
+    shieldBarTrack.style.display = hasShieldTelemetry ? '' : 'none';
+    document.getElementById('barShield').style.width = s.ShieldsUp ? '100%' : '0%';
+
+    const hasFuelCapacity = s.HasFuelCapacity && s.FuelMax > 0;
+    const fuelMax = hasFuelCapacity ? s.FuelMax : 0;
+    const fuelPct = hasFuelCapacity ? Math.max(0, Math.min(100, (s.FuelMain / fuelMax) * 100)) : 0;
+    document.getElementById('lblFuel').textContent = hasFuelCapacity
+      ? `${oneDecimal(s.FuelMain || 0)} / ${oneDecimal(fuelMax)} T · ${oneDecimal(fuelPct)}%`
+      : s.HasStatusTelemetry
+        ? `${oneDecimal(s.FuelMain || 0)} T · ${text.capacityUnconfirmed}`
+        : '---';
+    document.getElementById('barFuel').style.width = fuelPct + '%';
+
+    const cargoCap = s.CargoCapacity;
+    const cargoPct = cargoCap > 0 ? Math.max(0, Math.min(100, ((s.CargoUsed || 0) / cargoCap) * 100)) : 0;
+    document.getElementById('lblCargo').textContent = cargoCap > 0
+      ? `${s.CargoUsed || 0} / ${cargoCap} T`
+      : s.HasStatusTelemetry ? `${s.CargoUsed || 0} T · ${text.capacityUnconfirmed}` : '---';
+    document.getElementById('barCargo').style.width = cargoPct + '%';
+
+    document.getElementById('pipSys').textContent = s.HasStatusTelemetry ? oneDecimal(s.PipsSys) : '---';
+    document.getElementById('pipEng').textContent = s.HasStatusTelemetry ? oneDecimal(s.PipsEng) : '---';
+    document.getElementById('pipWep').textContent = s.HasStatusTelemetry ? oneDecimal(s.PipsWep) : '---';
+
+    const copilotItems = [];
+    if (s.JumpTargetSystem) {
+      const starNote = s.JumpTargetIsHazardous
+        ? flightTranslations.copilotJumpHazard
+        : s.JumpTargetIsScoopable
+          ? flightTranslations.copilotJumpScoopable
+          : flightTranslations.copilotJumpNonScoopable;
+      copilotItems.push(flightTranslations.copilotJumpTarget
+        .replace('{0}', s.JumpTargetSystem)
+        .replace('{1}', s.JumpTargetStarClass || '')
+        .replace('{2}', starNote));
+    }
+    if (typeof s.ApproachBodyGravityG === 'number' && s.ApproachBodyGravityG >= 1.5) {
+      copilotItems.push(flightTranslations.copilotHighGravity.replace('{0}', oneDecimal(s.ApproachBodyGravityG)));
+    }
+    if (s.HasLimpetController) {
+      copilotItems.push(s.LimpetCount === 0
+        ? flightTranslations.copilotNoLimpets
+        : flightTranslations.copilotLimpets.replace('{0}', s.LimpetCount));
+    }
+    if (typeof s.FsdHealthPercent === 'number') {
+      if (s.FsdHealthPercent < 80)
+        copilotItems.push(flightTranslations.copilotFsdWear.replace('{0}', Math.round(s.FsdHealthPercent)));
+      else if (s.IsFsdSupercharged)
+        copilotItems.push(flightTranslations.copilotFsdSupercharged.replace('{0}', Math.round(s.FsdHealthPercent)));
+    }
+    if (s.SupercruiseOverdriveActive) copilotItems.push(flightTranslations.copilotScoActive);
+    if (!s.Docked && !s.Landed && !s.Supercruise && s.HasStatusTelemetry) {
+      const blockers = [];
+      if (s.LandingGearDown) blockers.push(flightTranslations.gear);
+      if (s.CargoScoopDeployed) blockers.push(flightTranslations.scoop);
+      if (s.HardpointsDeployed) blockers.push(flightTranslations.hardpoints);
+      if (blockers.length > 0) copilotItems.push(flightTranslations.copilotBlockers.replace('{0}', blockers.join(', ')));
+    }
+    document.getElementById('copilotTacticalStatus').textContent = copilotItems.length > 0
+      ? copilotItems.join('  ·  ')
+      : flightTranslations.copilotNominal;
+
+    const targetBox = document.getElementById('webTargetCard');
+    const target = s.CurrentTarget;
+    if (target && target.Ship) {
+      const rankPart = target.PilotRank ? ` [${target.PilotRank}]` : '';
+      const pilotPart = target.PilotName ? ` · ${target.PilotName}${rankPart}` : '';
+      document.getElementById('webTargetHeader').textContent = `${target.Ship}${pilotPart}`;
+      const legal = target.IsWanted ? flightTranslations.targetWanted : (target.LegalStatus || flightTranslations.targetClean);
+      const bountyPart = target.Bounty > 0 ? ` · ${flightTranslations.targetBounty.replace('{0}', formatCount(target.Bounty))}` : '';
+      const factionPart = target.Faction ? ` · ${target.Faction}` : '';
+      const stEl = document.getElementById('webTargetStatus');
+      stEl.textContent = `${legal}${bountyPart}${factionPart}`;
+      stEl.style.color = target.IsWanted ? 'var(--hud-danger)' : 'var(--hud-text)';
+      const shTxt = target.ShieldHealth != null ? `${oneDecimal(target.ShieldHealth)}%` : '—';
+      const huTxt = target.HullHealth != null ? `${oneDecimal(target.HullHealth)}%` : '—';
+      let vitals = flightTranslations.targetShieldHull.replace('{0}', shTxt).replace('{1}', huTxt);
+      if (target.Subsystem) {
+        const subH = target.SubsystemHealth != null ? `${oneDecimal(target.SubsystemHealth)}%` : '—';
+        vitals += ` · ${flightTranslations.targetSubsystem.replace('{0}', target.Subsystem).replace('{1}', subH)}`;
+      }
+      document.getElementById('webTargetVitals').textContent = vitals;
+      targetBox.hidden = false;
+    } else {
+      targetBox.hidden = true;
+    }
+
+    const vehicleBox = document.getElementById('vehicleTelemetryBox');
+    if (s.InSRV || s.InFighter) {
+      const vParts = [];
+      if (s.InSRV) {
+        vParts.push(flightTranslations.vehicleSrv);
+        vParts.push(`${flightTranslations.srvHandbrake}: ${s.SrvHandbrake ? flightTranslations.active : flightTranslations.inactive}`);
+        vParts.push(`${flightTranslations.srvDriveAssist}: ${s.SrvDriveAssist ? flightTranslations.active : flightTranslations.inactive}`);
+        vParts.push(`${flightTranslations.srvTurret}: ${s.SrvUsingTurretView ? flightTranslations.active : (s.SrvTurretRetracted ? flightTranslations.srvRetracted : flightTranslations.inactive)}`);
+        if (s.SrvHighBeam) vParts.push(flightTranslations.srvHighBeam);
+      }
+      if (s.InFighter) vParts.push(flightTranslations.vehicleFighter);
+      document.getElementById('vehicleStatusText').textContent = vParts.join('  ·  ');
+      vehicleBox.hidden = false;
+    } else {
+      vehicleBox.hidden = true;
+    }
+
+    const shipModules = s.ShipModules || [];
+    const totalPower = shipModules.filter(m => m.On && m.PowerDrawMw > 0).reduce((a, m) => a + m.PowerDrawMw, 0);
+    const byPrio = [1, 2, 3, 4, 5].map(p => {
+      const pw = shipModules.filter(m => m.On && m.Priority === p && m.PowerDrawMw > 0).reduce((a, m) => a + m.PowerDrawMw, 0);
+      return pw > 0 ? `P${p}: ${pw.toFixed(2)} MW (${totalPower > 0 ? Math.round(pw / totalPower * 100) : 0}%)` : null;
+    }).filter(Boolean);
+    document.getElementById('modulesPowerSummary').textContent = shipModules.length === 0
+      ? flightTranslations.modulesWaiting
+      : (byPrio.length > 0
+          ? flightTranslations.modulesPowerSummary.replace('{0}', totalPower.toFixed(2)).replace('{1}', byPrio.join(' · '))
+          : flightTranslations.modulesCount.replace('{0}', shipModules.length));
+    const ammoList = shipModules.filter(m => m.AmmoInClip != null || m.AmmoInHopper != null).slice(0, 8).map(m => `${m.DisplayName}: ${m.AmmoDisplay}`);
+    document.getElementById('modulesAmmoSummary').textContent = ammoList.length > 0
+      ? flightTranslations.modulesAmmoSummary.replace('{0}', ammoList.join(' · '))
+      : '';
+    renderTableRows('shipModulesTableBody', shipModules, [
+      m => m.Slot, m => m.DisplayName, m => m.HealthDisplay, m => m.PriorityDisplay, m => m.PowerDisplay, m => m.AmmoDisplay, m => m.Engineering || '—'
+    ], flightTranslations.modulesWaiting);
+
+    const shipLocker = s.ShipLockerInventory || [];
+    document.getElementById('shipLockerStatus').textContent = shipLocker.length === 0
+      ? operations.shipLockerWaiting
+      : formatOperation('shipLockerCount', shipLocker.length);
+    renderTableRows('shipLockerTableBody', shipLocker, [
+      i => i.DisplayName, i => i.Type, i => formatCount(i.Count)
+    ], operations.shipLockerWaiting);
+
+    const engineers = s.Engineers || [];
+    document.getElementById('engineersStatus').textContent = engineers.length === 0
+      ? operations.engineersWaiting
+      : formatOperation('engineersCount', engineers.length);
+    renderTableRows('engineersTableBody', engineers, [
+      e => e.Name, e => e.Progress || '—', e => e.RankDisplay || '—'
+    ], operations.engineersWaiting);
+
+    const asteroid = s.LastProspectedAsteroid;
+    document.getElementById('webProspectorSummary').textContent = asteroid
+      ? `${asteroid.Timestamp} · ${asteroid.SummaryDisplay} (${oneDecimal(asteroid.Remaining)}%)`
+      : operations.prospectorWaiting;
+    const mining = s.MiningSession || {};
+    const nonLimpet = Math.max(0, (s.CargoUsed || 0) - (s.LimpetCount || 0));
+    const fillPct = s.CargoCapacity > 0 ? Math.min(100, Math.round(nonLimpet * 100 / s.CargoCapacity)) : 0;
+    document.getElementById('webMiningSessionStats').textContent = operations.miningSessionSummary
+      .replace('{0}', mining.TotalRefinedTons || 0)
+      .replace('{1}', oneDecimal(mining.TonsPerHour || 0))
+      .replace('{2}', mining.AsteroidsProspected || 0)
+      .replace('{3}', fillPct);
+    renderTableRows('miningRefinedTableBody', mining.RefinedByMineral || [], [
+      m => m.Mineral, m => formatCount(m.Tons)
+    ], operations.prospectorWaiting);
+
+    const combat = s.CombatSession || {};
+    document.getElementById('webCombatSessionStats').textContent = operations.combatSessionSummary
+      .replace('{0}', formatCount(combat.TotalKills || 0))
+      .replace('{1}', formatCount(combat.PendingCredits || 0))
+      .replace('{2}', formatCount(combat.CreditsPerHour || 0));
+    renderTableRows('combatFactionsTableBody', combat.ByFaction || [], [
+      f => f.Faction, f => formatCount(f.Kills), f => `${formatCount(f.PendingCredits)} CR`
+    ], operations.massacreEmpty);
+    const stacks = s.MassacreStacks || [];
+    if (stacks.length === 0) {
+      document.getElementById('webMassacreSummary').textContent = operations.massacreEmpty;
+    } else {
+      const totalM = stacks.reduce((a, m) => a + (m.MissionCount || 0), 0);
+      const byTarget = {};
+      stacks.forEach(m => {
+        const k = (m.TargetFaction || '').toLowerCase();
+        byTarget[k] = Math.max(byTarget[k] || 0, m.RequiredKills || 0);
+      });
+      const effKills = Object.values(byTarget).reduce((a, b) => a + b, 0);
+      const totalR = stacks.reduce((a, m) => a + (m.TotalReward || 0), 0);
+      document.getElementById('webMassacreSummary').textContent = operations.massacreSummary
+        .replace('{0}', formatCount(totalM))
+        .replace('{1}', formatCount(effKills))
+        .replace('{2}', formatCount(totalR));
+    }
+    renderTableRows('massacreStacksTableBody', stacks, [
+      m => m.IssuingFaction, m => m.TargetFaction, m => formatCount(m.MissionCount), m => formatCount(m.RequiredKills), m => `${formatCount(m.TotalReward)} CR`
+    ], operations.massacreEmpty);
+
+    const sess = s.SessionStats || {};
+    const netSign = (sess.NetCredits || 0) >= 0 ? '+' : '';
+    const dashT = payload.dashboardTranslations || {};
+    if (dashT.sessionStatsSummary) {
+      document.getElementById('webSessionStatsSummary').textContent = dashT.sessionStatsSummary
+        .replace('{0}', `${netSign}${formatCount(sess.NetCredits || 0)}`)
+        .replace('{1}', formatCount(sess.CreditsPerHour || 0))
+        .replace('{2}', formatCount(sess.SystemsVisited || 0))
+        .replace('{3}', oneDecimal(sess.TotalDistanceLy || 0))
+        .replace('{4}', formatCount(sess.BodiesScanned || 0))
+        .replace('{5}', formatCount(sess.OrganicsAnalysed || 0))
+        .replace('{6}', formatCount(sess.MissionsCompleted || 0));
+    }
+
+    const noteCard = document.getElementById('webSystemNoteCard');
+    if (s.CurrentSystemNote) {
+      document.getElementById('webSystemNoteText').textContent = s.CurrentSystemNote;
+      noteCard.hidden = false;
+    } else {
+      noteCard.hidden = true;
+    }
+
+    document.getElementById('webPowerplaySummary').textContent = s.PowerplaySummary
+      ? flightTranslations.bgsPowerplay.replace('{0}', s.PowerplaySummary)
+      : flightTranslations.bgsNoPowerplay;
+    renderTableRows('webSystemFactionsTableBody', s.SystemFactions || [], [
+      f => f.Name, f => f.InfluenceDisplay, f => f.FactionState || '—', f => f.Government || '—', f => f.ReputationDisplay
+    ], flightTranslations.bgsNoPowerplay);
+
+    const routeLy = parseFloat(document.getElementById('webCarrierRouteLy')?.value);
+    const tritEl = document.getElementById('webCarrierTritiumResult');
+    if (Number.isFinite(routeLy) && routeLy > 0) {
+      const cap = s.Carrier?.Capacity || 0, free = s.Carrier?.FreeSpace || 0;
+      const usedCapacity = cap > 0 ? Math.max(0, cap - free) : (s.Carrier?.Cargo || 0);
+      const fuel = Math.max(0, s.Carrier?.Fuel || 0);
+      const initialExtraMass = usedCapacity + fuel;
+      const jumps = Math.ceil(routeLy / 500);
+      let rem = routeLy, totalT = 0, simFuel = fuel;
+      for (let i = 0; i < jumps; i++) {
+        const leg = Math.min(500, rem);
+        rem -= leg;
+        const stepCost = Math.round(5 + (leg / 4) * (1 + (usedCapacity + simFuel) / 25000));
+        totalT += stepCost;
+        simFuel = Math.max(0, simFuel - stepCost);
+      }
+      let depotJumps = 0, depotFuel = fuel;
+      while (depotFuel > 0) {
+        const legCost = Math.round(5 + (500 / 4) * (1 + (usedCapacity + depotFuel) / 25000));
+        if (depotFuel < legCost) break;
+        depotFuel -= legCost;
+        depotJumps++;
+      }
+      tritEl.textContent = flightTranslations.tritiumResult
+        .replace('{0}', jumps)
+        .replace('{1}', formatCount(totalT))
+        .replace('{2}', formatCount(fuel))
+        .replace('{3}', depotJumps)
+        .replace('{4}', formatCount(initialExtraMass));
+    } else {
+      tritEl.textContent = flightTranslations.tritiumPrompt;
+    }
+
+    const fcMats = s.CarrierMaterials || [];
+    document.getElementById('webCarrierMaterialsStatus').textContent = fcMats.length === 0
+      ? flightTranslations.fcMaterialsWaiting
+      : flightTranslations.fcMaterialsCount.replace('{0}', s.CarrierMaterialsStation || 'Carrier').replace('{1}', fcMats.length);
+    renderTableRows('webCarrierMaterialsTableBody', fcMats, [
+      m => m.DisplayName, m => `${formatCount(m.Price)} CR`, m => formatCount(m.Stock), m => formatCount(m.Demand)
+    ], flightTranslations.fcMaterialsWaiting);
+
+    document.getElementById('surfaceLiveCoords').textContent = s.HasLatLong
+      ? `${s.BodyName || s.CurrentSystem || '---'} · LAT: ${Number(s.Latitude).toFixed(4)}° · LON: ${Number(s.Longitude).toFixed(4)}° · ALT: ${oneDecimal(s.Altitude)} m · ${flightTranslations.heading}: ${Math.round(s.Heading)}°`
+      : flightTranslations.noSurface;
+    const tLat = parseFloat(document.getElementById('webTargetLat')?.value);
+    const tLon = parseFloat(document.getElementById('webTargetLon')?.value);
+    const guideEl = document.getElementById('webSurfaceGuidance');
+    if (Number.isFinite(tLat) && Number.isFinite(tLon) && s.HasLatLong) {
+      const toRad = Math.PI / 180;
+      const lat1 = s.Latitude * toRad, lat2 = tLat * toRad, dLon = (tLon - s.Longitude) * toRad, dLat = (tLat - s.Latitude) * toRad;
+      const y = Math.sin(dLon) * Math.cos(lat2), x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      const bearing = Math.round(((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360) % 360;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      const distM = (s.PlanetRadius || 0) * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+      const distStr = distM >= 1000 ? `${(distM / 1000).toFixed(2)} km` : `${Math.round(distM)} m`;
+      guideEl.textContent = flightTranslations.surfaceGuidanceResult.replace('{0}', bearing).replace('{1}', distStr);
+    } else {
+      guideEl.textContent = flightTranslations.surfaceGuidancePrompt;
+    }
+    renderTableRows('surfaceEventsTableBody', s.RecentSurfaceEvents || [], [
+      e => e.Timestamp, e => e.EventType, e => e.BodyName || '—', e => e.Details || '—', e => e.CoordinatesDisplay || '—'
+    ], flightTranslations.noSurface);
+
+    const matrixKey = `${sectionLanguage}:${s.RawFlags}`;
+    if (matrixKey !== lastStatusMatrixKey) {
+      lastStatusMatrixKey = matrixKey;
+      const flags = [
+        { name: flightTranslations.gear, on: s.LandingGearDown },
+        { name: flightTranslations.lights, on: s.LightsOn },
+        { name: flightTranslations.nightVision, on: s.NightVision },
+        { name: flightTranslations.scoop, on: s.CargoScoopDeployed },
+        { name: flightTranslations.hardpoints, on: s.HardpointsDeployed },
+        { name: flightTranslations.supercruiseStatus, on: s.Supercruise },
+        { name: flightTranslations.flightAssist, on: s.FlightAssistOff, danger: true },
+        { name: flightTranslations.analysisMode, on: s.AnalysisMode },
+        { name: flightTranslations.silentRunning, on: s.SilentRunning, danger: true },
+        { name: flightTranslations.shieldsOnline, on: s.ShieldsUp },
+        { name: flightTranslations.massLock, on: s.FsdMassLocked, danger: true },
+        { name: flightTranslations.docked, on: s.Docked }
+      ];
+
+      const matrixEl = document.getElementById('statusMatrix');
+      matrixEl.innerHTML = flags.map(f => `
+        <div class="flag-btn ${f.on ? 'on' : ''} ${f.danger ? 'danger' : ''}">
+          <div style="font-weight:700;font-size:0.84rem;">${f.name}</div>
+          <div class="state-dot">${f.on ? '● ' + flightTranslations.active : '○ ' + flightTranslations.inactive}</div>
+        </div>
+      `).join('');
+    }
+
+    // Navegación
+    document.getElementById('navSys').textContent = s.CurrentSystem || '---';
+    document.getElementById('navSec').textContent = s.SecurityLevel || '---';
+    document.getElementById('navEco').textContent = s.Economy || '---';
+    document.getElementById('navAll').textContent = s.AllegianceIsFallback ? flightTranslations.independent : (s.Allegiance || '---');
+    document.getElementById('navBody').textContent = s.StationName || s.BodyName || '---';
+    const surfaceNumber = (value, digits) => value.toLocaleString(sectionLanguage, {
+      minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false
+    });
+    document.getElementById('navCoords').textContent = s.HasLatLong
+      ? `LAT: ${surfaceNumber(s.Latitude, 4)}° | LON: ${surfaceNumber(s.Longitude, 4)}° | ALT: ${surfaceNumber(s.Altitude, 1)} m | ${flightTranslations.heading}: ${surfaceNumber(s.Heading, 0)}°`
+      : flightTranslations.noSurface;
+
+    const route = s.NavRoute || [];
+    let routeLabel = route.length > 0 ? flightTranslations.remaining.replace('{0}', Math.max(0, route.length - 1)) : flightTranslations.noRoute;
+    if (route.length > 1) {
+      if (s.RouteHasNoFuelStar)
+        routeLabel += '  ·  ⚠ ' + flightTranslations.routeNoFuelStar;
+      else if (typeof s.JumpsToNextFuelStar === 'number' && s.JumpsToNextFuelStar > 1)
+        routeLabel += '  ·  ' + flightTranslations.routeNextFuelStar.replace('{0}', s.JumpsToNextFuelStar);
+    }
+    document.getElementById('routeCount').textContent = routeLabel;
+    renderTableRows('routeTableBody', route, [
+      r => r.Index, r => r.StarSystem, r => r.StarClass, r => r.IsFuelStar ? '✓' : '✕',
+      r => `${oneDecimal(r.StepDistanceLy)} ${text.lightYears}`,
+      r => `${oneDecimal(r.DistanceFromStartLy)} ${text.lightYears}`
+    ], flightTranslations.noRouteFile);
+    route.forEach((r, index) => {
+      const row = document.getElementById('routeTableBody').rows[index];
+      row.classList.toggle('current-system', !!r.IsCurrentSystem);
+      [0, 2, 3].forEach(column => row.cells[column].classList.add('route-centered'));
+      const indicator = document.createElement('span');
+      indicator.className = `route-fuel-indicator ${r.IsFuelStar ? 'route-fuel-yes' : 'route-fuel-no'}`;
+      indicator.textContent = r.IsFuelStar ? '✓' : '✕';
+      row.cells[3].replaceChildren(indicator);
+    });
+    if (route.length === 0)
+      document.querySelector('#routeTableBody td').style.color = 'var(--hud-muted)';
+
+    // Bodega
+    const cargo = s.CargoInventory || [];
+    renderTableRows('cargoTableBody', cargo, [
+      item => item.DisplayName,
+      item => `${formatCount(item.Count)} T`,
+      (_, index) => view.cargoStates[index]
+    ], operations.cargoEmpty);
+    cargo.forEach((item, index) => {
+      const row = document.getElementById('cargoTableBody').rows[index];
+      if (!row) return;
+      row.cells[1].style.fontWeight = '700';
+      row.cells[1].style.color = 'var(--hud-accent)';
+      if (item.Stolen > 0) row.cells[2].style.color = 'var(--hud-danger)';
+    });
+
+    renderMaterials(s);
+
+    const missionsBody = document.getElementById('missionsTableBody');
+    missionsBody.replaceChildren();
+    const missions = s.ActiveMissions || [];
+    document.getElementById('missionsStatus').textContent = missions.length === 0
+      ? operations.missionsEmpty
+      : formatOperation('missionsWeb', missions.length, payload.missionExpiryWarningHours ?? 24, payload.missionExpiryCriticalHours ?? 1);
+    if (missions.length === 0) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 6;
+      cell.textContent = operations.missionsNone;
+      row.append(cell);
+      missionsBody.append(row);
+    } else {
+      missions.forEach((mission, index) => {
+        const row = document.createElement('tr');
+        const expiry = mission.Expiry ? new Date(mission.Expiry) : null;
+        const remainingMs = expiry ? expiry.getTime() - Date.now() : null;
+        const values = [
+          view.missions[index].name,
+          mission.DestinationSystem,
+          mission.DestinationStation,
+          mission.ObjectiveDisplay,
+          view.missions[index].expiry,
+          view.missions[index].remaining
+        ];
+        values.forEach(value => {
+          const cell = document.createElement('td');
+          cell.textContent = value ?? '';
+          row.append(cell);
+        });
+        if (remainingMs !== null && remainingMs <= (payload.missionExpiryCriticalHours ?? 1) * 3600000)
+          row.style.color = 'var(--hud-danger)';
+        else if (remainingMs !== null && remainingMs <= (payload.missionExpiryWarningHours ?? 24) * 3600000)
+          row.style.color = 'var(--hud-secondary)';
+        missionsBody.append(row);
+      });
+    }
+
+    // Diario
+    const events = view.journalEvents;
+    const explorationBodies = s.ExplorationBodies || [];
+    const exploration = explorationTranslations;
+    document.getElementById('explorationBodiesStatus').textContent = explorationBodies.length === 0
+      ? exploration.empty
+      : exploration.bodyCount.replace('{0}', explorationBodies.length).replace('{1}', explorationBodies[0].SystemName);
+    const portfolioEl = document.getElementById('explorationPortfolio');
+    const summaryParts = [];
+    if (typeof s.SystemTotalBodies === 'number' && s.SystemTotalBodies > 0) {
+      summaryParts.push(s.SystemAllBodiesFound
+        ? exploration.fssProgressComplete.replace('{0}', s.SystemTotalBodies)
+        : exploration.fssProgress.replace('{0}', s.SystemScannedBodies || 0).replace('{1}', s.SystemTotalBodies));
+    }
+    if ((s.UnsoldCartographyCredits || 0) > 0 || (s.UnsoldExobiologyCredits || 0) > 0) {
+      summaryParts.push(exploration.unsoldPortfolio
+        .replace('{0:N0}', Number(s.UnsoldCartographyCredits || 0).toLocaleString(sectionLanguage))
+        .replace('{1:N0}', Number(s.UnsoldExobiologyCredits || 0).toLocaleString(sectionLanguage)));
+    }
+    portfolioEl.textContent = summaryParts.join('  ·  ');
+    portfolioEl.hidden = summaryParts.length === 0;
+
+    const exoCard = document.getElementById('exobiologyTracker');
+    const exo = s.ExobiologyTracker;
+    if (exo && exo.SamplesCollected > 0 && exo.SamplesCollected < 3) {
+      const pct = exo.RequiredDistanceMeters > 0
+        ? Math.max(0, Math.min(100, (exo.CurrentDistanceMeters / exo.RequiredDistanceMeters) * 100))
+        : 0;
+      document.getElementById('exoTrackerTitle').textContent = exploration.exoTrackerTitle
+        .replace('{0}', exo.Species || exploration.organicSpeciesFallback)
+        .replace('{1}', exo.SamplesCollected);
+      document.getElementById('exoTrackerDist').textContent = (exo.CanSampleNext ? exploration.exoTrackerReady : exploration.exoTrackerDistance)
+        .replace('{0:N0}', Math.round(exo.CurrentDistanceMeters || 0).toLocaleString(sectionLanguage))
+        .replace('{1:N0}', Number(exo.RequiredDistanceMeters || 500).toLocaleString(sectionLanguage));
+      document.getElementById('exoTrackerBar').style.width = pct + '%';
+      exoCard.hidden = false;
+    } else {
+      exoCard.hidden = true;
+    }
+    const explorationBodiesBody = document.getElementById('explorationBodiesTableBody');
+    explorationBodiesBody.replaceChildren();
+    if (explorationBodies.length === 0) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 17;
+      cell.textContent = exploration.emptyTable;
+      row.append(cell);
+      explorationBodiesBody.append(row);
+    } else {
+      explorationBodies.forEach((body, index) => {
+        const row = document.createElement('tr');
+        const presentation = view.explorationBodies[index];
+        [
+          body.HierarchyName || body.BodyName,
+          body.BodyType,
+          presentation.Radius,
+          presentation.Gravity,
+          presentation.Temperature,
+          body.AtmosphereDisplay,
+          presentation.Materials,
+          presentation.Composition,
+          presentation.AtmosphereComposition,
+          presentation.Orbital,
+          body.RingsDisplay,
+          presentation.Interest,
+          body.GenusesDisplay,
+          body.AnalysedSpeciesDisplay
+        ].forEach(value => {
+          const cell = document.createElement('td');
+          cell.textContent = value || '—';
+          row.append(cell);
+        });
+        [
+          body.WasDiscovered,
+          body.WasMapped
+        ].forEach((value, index) => {
+          const cell = document.createElement('td');
+          const indicator = document.createElement('span');
+          indicator.className = 'exploration-status';
+          indicator.textContent = value === true ? '✓' : value === false ? '✗' : '—';
+          indicator.style.color = value === true
+            ? 'var(--hud-ok)'
+            : value === false
+              ? 'var(--hud-danger)'
+              : 'var(--hud-muted)';
+          indicator.title = index === 0 ? presentation.Discovery : presentation.Mapping;
+          cell.append(indicator);
+          row.append(cell);
+        });
+        const estimateCell = document.createElement('td');
+        estimateCell.textContent = presentation.Estimate;
+        row.append(estimateCell);
+        explorationBodiesBody.append(row);
+      });
+    }
+
+    const explorationEvents = new Set([
+      'FSSDiscoveryScan',
+      'FSSAllBodiesFound',
+      'SAAScanComplete',
+      'ScanOrganic',
+      'CodexEntry',
+      'SellExplorationData',
+      'MultiSellExplorationData'
+    ]);
+    const milestones = events.filter(ev => explorationEvents.has(ev.EventType));
+    const eventColumns = [ev => ev.Timestamp, ev => ev.EventType, ev => ev.Summary];
+    renderTableRows('explorationTableBody', milestones, eventColumns, exploration.milestonesEmpty);
+    renderTableRows('journalTableBody', events, eventColumns, exploration.journalEmpty);
+    for (const id of ['explorationTableBody', 'journalTableBody']) {
+      for (const row of document.getElementById(id).rows) {
+        if (row.cells.length !== 3) continue;
+        row.cells[0].style.fontFamily = 'Consolas,monospace';
+        row.cells[0].style.color = 'var(--hud-muted)';
+        row.cells[1].style.color = 'var(--hud-accent)';
+        row.cells[1].style.fontWeight = '700';
+      }
+    }
+
+    // Deck de controles
+    if (payload.deckBindings) {
+      renderDeck(payload.deckBindings, payload.hideUnassignedBindings);
+    }
+    document.body.classList.add('localized');
+  }
+
+  const filterCategoryKey = value => value && value.trim() ? value : '\u0001';
+  const marketCategoryKey = item => filterCategoryKey(item.Category?.trim() ? item.Category : item.DisplayCategory);
+
+  function updateFilterCategories(id, entries) {
+    const select = document.getElementById(id);
+    const selected = select.value;
+    const oldLabel = select.selectedOptions[0]?.textContent;
+    const categories = new Map();
+    entries.forEach(([key, label]) => {
+      if (!categories.has(key)) categories.set(key, label || '—');
+    });
+    if (selected && !categories.has(selected) && oldLabel) categories.set(selected, oldLabel);
+    const options = [[ '', materialTranslations.allCategories ], ...Array.from(categories)
+      .sort((a, b) => a[1].localeCompare(b[1], sectionLanguage))];
+    if (select.options.length === options.length &&
+        options.every(([value, label], index) => select.options[index].value === value && select.options[index].textContent === label))
+      return;
+    select.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+    select.value = selected;
+  }
+
+  function renderMarket(payload) {
+    const items = payload.state.Market?.Items || [];
+    document.getElementById('marketStatus').textContent = payload.operationsView.marketStatus;
+    updateFilterCategories('marketCategoryFilter', items.map(item =>
+      [marketCategoryKey(item), item.DisplayCategory]));
+    const search = document.getElementById('marketSearch').value.trim().toLocaleLowerCase(sectionLanguage);
+    const category = document.getElementById('marketCategoryFilter').value;
+    const filtered = items.map((item, index) => ({ item, index })).filter(({ item }) =>
+      (!search || [item.Name, item.DisplayName].some(value => (value || '').toLocaleLowerCase(sectionLanguage).includes(search))) &&
+      (!category || marketCategoryKey(item) === category));
+    document.getElementById('marketFilterStatus').textContent =
+      operationsTranslations.filterCount.replace('{0}', filtered.length).replace('{1}', items.length);
+    renderTableRows('marketTableBody', filtered, [
+      row => row.item.DisplayName,
+      row => row.item.DisplayCategory,
+      row => `${formatCount(row.item.BuyPrice)} CR`,
+      row => `${formatCount(row.item.SellPrice)} CR`,
+      row => `${formatCount(row.item.MeanPrice)} CR`,
+      row => formatCount(row.item.Stock),
+      row => row.item.StockBracket > 0 ? row.item.StockBracket : '—',
+      row => formatCount(row.item.Demand),
+      row => row.item.DemandBracket > 0 ? row.item.DemandBracket : '—',
+      row => row.item.ColonisationNeeded > 0 ? `🏗 ${formatCount(row.item.ColonisationNeeded)} t` : '—',
+      row => payload.operationsView.marketFlags[row.index]
+    ], items.length ? operationsTranslations.filterNoMatches : operationsTranslations.marketEmpty);
+  }
+
+  function renderProfile(payload) {
+    const rows = payload.operationsView.profile;
+    document.getElementById('profileStatus').textContent = rows.length
+      ? operationsTranslations.profileCount.replace('{0}', rows.length) : operationsTranslations.profileWaiting;
+    updateFilterCategories('profileCategoryFilter', rows.map(row => [filterCategoryKey(row.CategoryId), row.Category]));
+    const search = document.getElementById('profileSearch').value.trim().toLocaleLowerCase(sectionLanguage);
+    const category = document.getElementById('profileCategoryFilter').value;
+    const filtered = rows.filter(row =>
+      (!search || [row.Category, row.Name, row.Value, row.SearchName]
+        .some(value => (value || '').toLocaleLowerCase(sectionLanguage).includes(search))) &&
+      (!category || filterCategoryKey(row.CategoryId) === category));
+    document.getElementById('profileFilterStatus').textContent =
+      operationsTranslations.filterCount.replace('{0}', filtered.length).replace('{1}', rows.length);
+    renderTableRows('commanderProfileTableBody', filtered, [
+      item => item.Category, item => item.Name, item => item.Value
+    ], rows.length ? operationsTranslations.filterNoMatches : operationsTranslations.profileEmpty);
+  }
+
+  function renderMaterials(state) {
+    const body = document.getElementById('materialsTableBody');
+    const materials = state.MaterialsInventory || [];
+    body.replaceChildren();
+
+    const text = materialTranslations;
+    document.getElementById('materialsStatus').textContent = !state.HasMaterialsTelemetry
+      ? text.waiting
+      : materials.length === 0
+        ? text.empty
+        : text.inventory.replace('{0}', materials.length);
+
+    const search = document.getElementById('materialSearch').value.trim().toLocaleLowerCase();
+    const category = document.getElementById('materialCategoryFilter').value;
+    const rarity = document.getElementById('materialRarityFilter').value;
+    const filtered = materials.filter(material => {
+      const name = `${material.DisplayName || ''} ${material.Name || ''}`.toLocaleLowerCase();
+      if (search && !name.includes(search))
+        return false;
+      if (category && material.Category !== category)
+        return false;
+      if (rarity === 'unknown' && material.Grade != null)
+        return false;
+      if (rarity && rarity !== 'unknown' && Number(material.Grade) !== Number(rarity))
+        return false;
+      return true;
+    });
+
+    document.getElementById('materialsFilterStatus').textContent =
+      text.filtered.replace('{0}', filtered.length).replace('{1}', materials.length);
+
+    if (!state.HasMaterialsTelemetry || materials.length === 0 || filtered.length === 0) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 4;
+      cell.textContent = !state.HasMaterialsTelemetry
+        ? text.unavailable
+        : materials.length === 0
+          ? text.emptyInventory
+          : text.noMatches;
+      row.append(cell);
+      body.append(row);
+      return;
+    }
+
+    const categoryNames = new Map([
+      ['En bruto', text.raw], ['Manufacturados', text.manufactured], ['Datos codificados', text.encoded]
+    ]);
+    filtered.forEach(material => {
+      const row = document.createElement('tr');
+      const values = [
+        material.DisplayName,
+        categoryNames.get(material.Category) ?? material.Category,
+        [text.unclassified, text.veryCommon, text.common, text.standard, text.rare, text.veryRare][material.Grade] ?? text.unclassified,
+        material.Count
+      ];
+      values.forEach(value => {
+        const cell = document.createElement('td');
+        cell.textContent = value ?? '';
+        row.append(cell);
+      });
+      body.append(row);
+    });
+  }
+
+  function renderDeck(bindings, hideUnassigned) {
+    const groups = new Map();
+    const search = document.getElementById('deckSearch').value.trim().toLocaleLowerCase();
+    const renderKey = JSON.stringify([sectionLanguage, bindings, hideUnassigned, search]);
+    if (renderKey === lastDeckRenderKey) return;
+    lastDeckRenderKey = renderKey;
+    const filteredBindings = (bindings || [])
+      .filter(b => !hideUnassigned || b.IsAssigned)
+      .filter(b => !search || `${b.DisplayName || ''} ${b.Category || ''} ${b.FormattedBind || ''} ${b.SourceDisplayName || ''} ${b.SourceCategory || ''} ${b.SourceFormattedBind || ''} ${b.ActionId || ''}`.toLocaleLowerCase().includes(search));
+    filteredBindings.forEach(b => {
+        const cat = b.CategoryId;
+        if (!groups.has(cat)) groups.set(cat, []);
+        groups.get(cat).push(b);
+      });
+
+    const container = document.getElementById('deckContainer');
+    container.replaceChildren();
+    if (filteredBindings.length === 0) {
+      const card = document.createElement('div');
+      card.className = 'hud-card module-section active';
+      card.dataset.sectionTitle = 'Controles';
+      card.dataset.sectionLabel = deckTranslations.emptyTitle;
+      const title = document.createElement('h3');
+      title.textContent = deckTranslations.emptyTitle;
+      const message = document.createElement('p');
+      message.style.color = 'var(--hud-muted)';
+      message.textContent = search ? deckTranslations.noSearch : deckTranslations.noBindings;
+      card.append(title, message);
+      container.append(card);
+      updateSectionTabs();
+      return;
+    }
+    for (const [categoryId, items] of groups) {
+      const section = document.createElement('div');
+      section.className = 'deck-category module-section';
+      section.classList.toggle('active', activeSectionByTab.get('tab-deck') === categoryId);
+      section.dataset.sectionTitle = categoryId;
+      section.dataset.sectionLabel = items[0].Category;
+      const title = document.createElement('h4');
+      title.textContent = items[0].Category;
+      const grid = document.createElement('div');
+      grid.className = 'deck-grid';
+      for (const binding of items) {
+        const button = document.createElement('button');
+        button.className = 'deck-button';
+        button.addEventListener('click', () => sendCmd(binding.ActionId));
+        for (const [className, value] of [['deck-icon', binding.IconGlyph || '⚙'], ['deck-title', binding.DisplayName], ['deck-bind', binding.FormattedBind]]) {
+          const span = document.createElement('span');
+          span.className = className;
+          span.textContent = value;
+          button.append(span);
+        }
+        grid.append(button);
+      }
+      section.append(title, grid);
+      container.append(section);
+    }
+    updateSectionTabs();
+  }
+
+  function connectWs() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${location.host}/ws`);
+    const badge = document.getElementById('connBadge');
+
+    ws.onopen = () => {
+      connectionKey = 'connected';
+      badge.textContent = inputTranslations ? inputTranslations[connectionKey] : 'WEB CONECTADA';
+      badge.style.color = 'var(--hud-accent)';
+      badge.style.borderColor = 'var(--hud-accent)';
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        renderState(data);
+      } catch (e) { console.error('Invalid state update:', e); }
+    };
+    ws.onclose = () => {
+      connectionKey = 'reconnecting';
+      badge.textContent = inputTranslations ? inputTranslations[connectionKey] : 'RECONECTANDO';
+      badge.style.color = 'var(--hud-danger)';
+      badge.style.borderColor = 'var(--hud-danger)';
+      fetch('/api/state', { cache: 'no-store' }).then(response => {
+        if (response.status === 401)
+          location.replace('/login');
+        else
+          setTimeout(connectWs, 2500);
+      }, () => setTimeout(connectWs, 2500));
+    };
+  }
+
+  fetch('/api/state').then(r => r.json()).then(renderState).catch(error => console.error('Unable to load state:', error));
+  ['materialSearch', 'materialCategoryFilter', 'materialRarityFilter'].forEach(id => {
+    document.getElementById(id).addEventListener(id === 'materialSearch' ? 'input' : 'change', () => {
+      if (lastPayload && lastPayload.state)
+        renderMaterials(lastPayload.state);
+    });
+  });
+  for (const [prefix, render] of [['market', renderMarket], ['profile', renderProfile]]) {
+    for (const [suffix, event] of [['Search', 'input'], ['CategoryFilter', 'change']]) {
+      document.getElementById(prefix + suffix).addEventListener(event, () => {
+        if (lastPayload?.state && lastPayload.operationsView) render(lastPayload);
+      });
+    }
+  }
+  document.getElementById('deckSearch').addEventListener('input', () => {
+    if (lastPayload && lastPayload.bindings)
+      renderDeck(lastPayload.deckBindings, lastPayload.hideUnassignedBindings);
+  });
+
+  function sendWebAiPreFlight() {
+    sendWebAiPrompt('Run a concise tactical pre-flight check (fuel, limpets, FSD health, hull, missing mission cargo, route fuel stars) and give launch clearance or warnings.');
+  }
+
+  function exportWebAiChat() {
+    const log = document.getElementById('webAiChatLog');
+    if (!log || !log.textContent.trim()) return;
+    const blob = new Blob(['# HUDnopy COVAS Chat Log\n\n' + log.textContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `HUDnopy-COVAS-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function sendWebAiPrompt(overrideText) {
+    const input = document.getElementById('webAiPrompt');
+    const prompt = (overrideText ?? input.value).trim();
+    if (!prompt) return;
+    input.value = '';
+    const log = document.getElementById('webAiChatLog');
+    const append = (who, msg) => {
+      log.textContent += `[${new Date().toLocaleTimeString()}] ${who}: ${msg}\n\n`;
+      log.scrollTop = log.scrollHeight;
+    };
+    append('CMDR', prompt);
+    const btn = document.getElementById('btnWebAiSend');
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/api/ai/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      const data = await resp.json();
+      append('COVAS', data.reply || '---');
+    } catch (err) {
+      append('COVAS', String(err));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  let webAiRecognition = null;
+  function toggleWebAiVoice() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showToast('Web Speech API no soportada en este navegador'); return; }
+    const btn = document.getElementById('btnWebAiMic');
+    if (webAiRecognition) {
+      webAiRecognition.stop();
+      return;
+    }
+    webAiRecognition = new SR();
+    webAiRecognition.lang = sectionLanguage || 'en-GB';
+    webAiRecognition.interimResults = false;
+    btn.textContent = '⏹';
+    webAiRecognition.onresult = e => {
+      const transcript = e.results?.[0]?.[0]?.transcript || '';
+      if (transcript) sendWebAiPrompt(transcript);
+    };
+    webAiRecognition.onend = () => {
+      webAiRecognition = null;
+      btn.textContent = '🎤';
+    };
+    webAiRecognition.onerror = () => {
+      webAiRecognition = null;
+      btn.textContent = '🎤';
+    };
+    webAiRecognition.start();
+  }
+
+  async function searchWebSpanshService(serviceKey) {
+    const status = document.getElementById('webSpanshServiceStatus');
+    const tbody = document.getElementById('webSpanshServiceTableBody');
+    if (status) status.textContent = 'Buscando en Spansh...';
+    if (tbody) tbody.innerHTML = '';
+    try {
+      const resp = await fetch(`/api/spansh/nearest?service=${encodeURIComponent(serviceKey)}`);
+      const data = await resp.json();
+      if (status) status.textContent = data.message || '';
+      if (tbody && Array.isArray(data.results)) {
+        tbody.innerHTML = data.results.map(r =>
+          `<tr><td>${escapeHtml(r.systemName || '')}</td><td>${escapeHtml(r.stationName || '')}</td><td>${escapeHtml(r.distanceDisplay || '')}</td><td>${escapeHtml(r.landingPad || '')}</td></tr>`
+        ).join('');
+      }
+    } catch (err) {
+      if (status) status.textContent = String(err);
+    }
+  }
+
+  updateSectionTabs();
+  connectWs();

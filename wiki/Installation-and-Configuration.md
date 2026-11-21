@@ -14,10 +14,11 @@ cd HUDnopy
 dotnet run --project HUDnopy.csproj
 ```
 
-To build without launching:
+To build and run the automated regression test suite (15 suites):
 
 ```powershell
 dotnet build HUDnopy.csproj -c Release
+dotnet run --project HUDnopy.Tests/HUDnopy.Tests.csproj -c Release
 ```
 
 ## Runtime Files & Locations
@@ -42,17 +43,14 @@ Open **Settings → Game, Files & Controls**:
 
 Open **Settings → Appearance & Window**:
 
+- **Interface Language:** Defaults to **English (`en-GB`)** with 100% key-verified translations in Spanish (`es-ES`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`). Base ISO-639 codes (`en`, `es`, `pt`) and regional variants (`en-US`, `es-MX`, `pt-PT`) are normalized automatically.
 - **Accent Theme:** Choose a preset or enter a custom hex accent color; the theme propagates dynamically to both the desktop UI and the Web HUD.
 - **Navigation Position & Font Scaling:** Place the navigation bar on any edge, optionally hide menu text labels, and scale desktop typography with `Ctrl + Mouse Wheel` or the slider.
 - **Header Modules:** Choose which telemetry widgets appear in the top header bar (mirrored in the Web HUD).
-- **Mini-HUD (`📌`):** Toggle a compact, translucent, always-on-top overlay for single-monitor flying.
+- **Contextual Mini-HUD (`📌`):** Toggle a compact, translucent, always-on-top overlay that automatically highlights the highest-priority live strip (Assigned Landing Pad, Active Combat Target, Exobiology/Surface Compass, or Next Route Jump).
 - **System Tray:** Optionally start minimized to the Windows notification area.
 
-## Alerts & Custom Sound Libraries
+## Alerts, Voice & Custom Sound Libraries
 
-Open **Settings → Alerts**:
-
-- **Core Thresholds:** Configure low/critical fuel percentages, critical hull threshold, and mission expiry warning/critical hours.
-- **Main Menu Protection:** HUDnopy automatically suppresses false fuel/shield alerts while Elite Dangerous is on the main menu or loading screen (`Flags == 0 && Flags2 == 0`).
-- **Custom Sound Folders:** Link one or more local folders containing audio files (`WAV`, `MP3`, `AIFF`, and Windows-decoded `M4A`/`AAC`/`WMA`/`FLAC`) and click **Refresh Sounds**. Unlinking a folder preserves your files on disk and marks missing assignments cleanly.
-- **Speech Queue & Rate:** Choose between `tactical`, `immediate`, and `sequential` speech queues, and adjust speech speed from `-5` (slowest) to `+5` (fastest) — unified across both Windows SAPI and Piper Neural TTS.
+- **Settings → Alerts:** Configure low/critical fuel percentages, critical hull threshold, mission expiry warning/critical hours, and the per-channel alert matrix. HUDnopy automatically suppresses false fuel/shield alerts while Elite Dangerous is on the main menu or loading screen (`Flags == 0 && Flags2 == 0`).
+- **Settings → Voice & Audio:** Configure **Piper Neural TTS** or **Windows SAPI**, speech queue mode (`tactical`, `immediate`, `sequential`), unified speech rate (`-5` to `+5`), master volume, and custom sound folders (`WAV`, `MP3`, `AIFF`, `M4A`/`AAC`/`WMA`/`FLAC`). Unlinking a folder preserves your files on disk and marks missing assignments cleanly.

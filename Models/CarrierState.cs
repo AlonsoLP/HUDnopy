@@ -97,7 +97,7 @@ internal static class CarrierJournal
             existing = existing.Snapshot();
         }
 
-        // Si el jugador está atracado en este mismo portanaves y aún no tenemos su sistema, usar CurrentSystem
+        // If the commander is docked at this carrier and its system is not yet known, fall back to CurrentSystem
         if (string.IsNullOrWhiteSpace(existing.System) &&
             !string.IsNullOrWhiteSpace(state.CurrentSystem) &&
             !string.IsNullOrWhiteSpace(state.StationName) &&

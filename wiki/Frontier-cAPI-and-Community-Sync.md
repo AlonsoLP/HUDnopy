@@ -1,6 +1,6 @@
 # Frontier cAPI and Community Sync
 
-All external integrations are opt-in and live under **Settings → Connectivity & Integrations**.
+All external integrations are opt-in and live under **Settings → Integrations**.
 
 ---
 
@@ -15,9 +15,9 @@ HUDnopy integrates with Frontier's official Companion API (`https://companion.or
 - Tokens refresh automatically before expiration.
 
 ### Data Enriched by Frontier cAPI
-- **`/profile`:** Live credits and your full **Stored Ships** fleet (displayed in **Operations → Shipyard** and injected into COVAS AI context).
+- **`/profile`:** Live credits and your full **Stored Ships** fleet (displayed in **Inventory → Shipyard** and injected into COVAS AI context).
 - **`/fleetcarrier`:** Complete Fleet Carrier telemetry (name, callsign, location, fuel, space, finances) plus the **Fleet Carrier Cargo Hold** table in **Navigation → Fleet Carrier**, without needing to open the in-game Carrier Management menu.
-- **`/communitygoals`:** Active **Community Goals**, location, global progress, personal contribution, and expiry (displayed in **Activity → Milestones** and injected into COVAS AI context).
+- **`/communitygoals`:** Active **Community Goals**, location, global progress, personal contribution, and expiry (displayed in **Operations → Missions** and injected into COVAS AI context).
 - **`/market` & `/shipyard`:** Enriches docked station market and shipyard snapshots when `Docked`.
 
 ### Sync Behavior
@@ -39,6 +39,7 @@ Each community service has an independent toggle and collapsible configuration p
 ### EDSM (Elite Dangerous Star Map)
 - Batches live Journal events to `POST https://www.edsm.net/api-journal-v1`, dynamically honoring `/api-journal-v1/discard` and retrying on network/5xx errors.
 - Bidirectional system intelligence in **Navigation → Current System**: fetches system traffic, PvP deaths, and personal system comments (`get-comment` / `set-comment`).
+- **Automatic EDSM Shipyard Fallback:** Works around the Elite Dangerous Odyssey `Shipyard.json` bug (where `PriceList` contains 0 or 1 ship) by automatically fetching the full station shipyard catalog from EDSM (`api-system-v1/stations/shipyard`) when docked, without letting subsequent 1-ship updates overwrite the loaded catalog.
 - Leaving the Commander Name blank automatically uses your live Journal commander name.
 
 ### Inara

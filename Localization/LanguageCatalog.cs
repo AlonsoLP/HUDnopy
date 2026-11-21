@@ -21,13 +21,20 @@ namespace HUDnopy.Localization;
 internal static class LanguageCatalog
 {
     public static IReadOnlyList<string> Languages { get; } =
-        Array.AsReadOnly(new[] { "es-ES", "en-GB", "fr-FR", "de-DE", "ru-RU", "pt-BR" });
+        Array.AsReadOnly(new[] { "en-GB", "es-ES", "fr-FR", "de-DE", "ru-RU", "pt-BR" });
 
     private static readonly IReadOnlyDictionary<string, JsonElement> Documents = Load();
 
     public static bool TryNormalize(string? language, out string normalized)
     {
-        string? match = Languages.FirstOrDefault(item => string.Equals(item, language, StringComparison.OrdinalIgnoreCase));
+        string clean = (language ?? "").Trim().Replace('_', '-');
+        string? match = Languages.FirstOrDefault(item => string.Equals(item, clean, StringComparison.OrdinalIgnoreCase));
+        if (match is null && clean.Length >= 2)
+        {
+            // Also accept base ISO-639 codes ("en", "es", "fr", "de", "ru", "pt") and any regional variant ("en-US", "es-MX", "pt-PT")
+            string prefix = clean[..2];
+            match = Languages.FirstOrDefault(item => item.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase));
+        }
         normalized = match ?? "";
         return match is not null;
     }
@@ -36,9 +43,9 @@ internal static class LanguageCatalog
     {
         ArgumentNullException.ThrowIfNull(language);
         if (!Documents.TryGetValue(language, out var document))
-            throw new ArgumentException($"Idioma no compatible: {language}", nameof(language));
+            throw new ArgumentException($"Unsupported language: {language}", nameof(language));
         if (!document.TryGetProperty(section, out var value) || value.ValueKind != JsonValueKind.Object)
-            throw new InvalidDataException($"Falta la sección {section} en el catálogo {language}.");
+            throw new InvalidDataException($"Missing section '{section}' in language catalog '{language}'.");
         return value;
     }
 
@@ -49,10 +56,10 @@ internal static class LanguageCatalog
         {
             string resourceName = $"HUDnopy.Resources.Languages.{language}.json";
             using Stream stream = typeof(LanguageCatalog).Assembly.GetManifestResourceStream(resourceName)
-                ?? throw new InvalidDataException($"No se encontró el catálogo de traducciones para {language}.");
+                ?? throw new InvalidDataException($"Translation catalog not found for '{language}'.");
             using var document = JsonDocument.Parse(stream);
             if (document.RootElement.ValueKind != JsonValueKind.Object)
-                throw new InvalidDataException($"El catálogo {language} no es un objeto JSON.");
+                throw new InvalidDataException($"Language catalog '{language}' is not a JSON object.");
             documents.Add(language, document.RootElement.Clone());
         }
         return documents;

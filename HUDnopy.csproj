@@ -10,15 +10,20 @@
     <RootNamespace>HUDnopy</RootNamespace>
     <AssemblyName>HUDnopy</AssemblyName>
     <Product>HUDnopy</Product>
-    <Version>0.1.0-alpha</Version>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.0</FileVersion>
-    <InformationalVersion>0.1.0-alpha</InformationalVersion>
+    <Version>0.2.0</Version>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
+    <FileVersion>0.2.0.0</FileVersion>
+    <InformationalVersion>0.2.0</InformationalVersion>
     <Authors>AlonsoLP</Authors>
     <Copyright>Copyright (c) 2026 AlonsoLP</Copyright>
     <Description>Elite Dangerous telemetry HUD, Web MFD, Fleet Carrier manager, and AI copilot (early preview).</Description>
     <ApplicationIcon>HUDnopy.ico</ApplicationIcon>
+    <DefaultItemExcludes>$(DefaultItemExcludes);HUDnopy.Tests\**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HUDnopy.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -29,7 +34,7 @@
   <ItemGroup>
     <Resource Include="HUDnopy.ico" />
     <EmbeddedResource Include="Resources\Languages\*.json" />
-    <Content Include="Web\index.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Web\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Audio\alert-sound-library.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

@@ -38,7 +38,7 @@ namespace HUDnopy;
 public partial class MainWindow
 {
     // =========================================================================
-    // Copiloto IA (COVAS) — Configuración y Chat (Fase 1)
+    // AI Copilot (COVAS) — Configuration and Chat (Phase 1)
     // =========================================================================
 
     private void ChkEnableAiCopilot_Click(object sender, RoutedEventArgs e)
@@ -81,6 +81,16 @@ public partial class MainWindow
         }
     }
 
+    private void CmbAiThinkingMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null) return;
+        if (CmbAiThinkingMode.SelectedValue is string mode)
+        {
+            _configService.Current.AiThinkingMode = mode;
+            _configService.Save();
+        }
+    }
+
     private void ChkAiRequireWakeWord_Click(object sender, RoutedEventArgs e)
     {
         if (_suppressEvents || _configService is null) return;
@@ -102,6 +112,72 @@ public partial class MainWindow
         if (_suppressEvents || _configService is null) return;
         _configService.Current.AiSystemArrivalBriefing = ChkAiArrivalBriefing.IsChecked == true;
         _configService.Save();
+    }
+
+    private void ChkAiTacticalOption_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null) return;
+        var cfg = _configService.Current;
+        cfg.AiTacticalHighGravity = ChkAiTacticalHighGravity?.IsChecked == true;
+        cfg.AiTacticalValuableSignals = ChkAiTacticalValuableSignals?.IsChecked == true;
+        cfg.AiTacticalMiningProspector = ChkAiTacticalMiningProspector?.IsChecked == true;
+        cfg.AiTacticalRadioChatter = ChkAiTacticalRadioChatter?.IsChecked == true;
+        cfg.AiVoiceMacrosEnabled = ChkAiVoiceMacrosEnabled?.IsChecked == true;
+        _configService.Save();
+    }
+
+    private void RefreshAiVoiceMacrosUi()
+    {
+        if (LstAiVoiceMacros is null || _configService is null)
+            return;
+        var macros = _configService.Current.AiVoiceMacros ??= VoiceMacroDefinition.CreateDefaults();
+        LstAiVoiceMacros.ItemsSource = macros
+            .Select(static m => $"«{m.TriggerPhrase}» → {m.Steps}{(string.IsNullOrWhiteSpace(m.SpokenConfirmation) ? "" : $" ({m.SpokenConfirmation})")}")
+            .ToList();
+    }
+
+    private void BtnAddVoiceMacro_Click(object sender, RoutedEventArgs e)
+    {
+        if (_configService is null) return;
+        string trigger = (TxtVoiceMacroTrigger?.Text ?? "").Trim();
+        string steps = (TxtVoiceMacroSteps?.Text ?? "").Trim();
+        string confirm = (TxtVoiceMacroConfirm?.Text ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(trigger) || string.IsNullOrWhiteSpace(steps))
+            return;
+
+        _configService.Current.AiVoiceMacros ??= new List<VoiceMacroDefinition>();
+        _configService.Current.AiVoiceMacros.Add(new VoiceMacroDefinition
+        {
+            TriggerPhrase = trigger,
+            Steps = steps,
+            SpokenConfirmation = confirm
+        });
+        _configService.Save();
+        if (TxtVoiceMacroTrigger is not null) TxtVoiceMacroTrigger.Clear();
+        if (TxtVoiceMacroSteps is not null) TxtVoiceMacroSteps.Clear();
+        if (TxtVoiceMacroConfirm is not null) TxtVoiceMacroConfirm.Clear();
+        RefreshAiVoiceMacrosUi();
+    }
+
+    private void BtnRemoveVoiceMacro_Click(object sender, RoutedEventArgs e)
+    {
+        if (_configService is null || LstAiVoiceMacros is null) return;
+        int idx = LstAiVoiceMacros.SelectedIndex;
+        var list = _configService.Current.AiVoiceMacros;
+        if (list is null || idx < 0 || idx >= list.Count)
+            return;
+
+        list.RemoveAt(idx);
+        _configService.Save();
+        RefreshAiVoiceMacrosUi();
+    }
+
+    private void BtnResetVoiceMacros_Click(object sender, RoutedEventArgs e)
+    {
+        if (_configService is null) return;
+        _configService.Current.AiVoiceMacros = VoiceMacroDefinition.CreateDefaults();
+        _configService.Save();
+        RefreshAiVoiceMacrosUi();
     }
 
     private void ChkAiGlobalPttHotkey_Click(object sender, RoutedEventArgs e)
@@ -203,6 +279,7 @@ public partial class MainWindow
         cfg.AiSpeakReplies = ChkAiSpeakReplies.IsChecked == true;
         cfg.AiAllowActions = ChkAiAllowActions.IsChecked == true;
         cfg.AiVerbosity = CmbAiVerbosity?.SelectedValue as string ?? "normal";
+        cfg.AiThinkingMode = CmbAiThinkingMode?.SelectedValue as string ?? "auto";
         cfg.AiCustomPersonality = (TxtAiCustomPersonality?.Text ?? "").Trim();
         cfg.AiRequireWakeWord = ChkAiRequireWakeWord?.IsChecked == true;
         cfg.AiWakeWord = string.IsNullOrWhiteSpace(TxtAiWakeWord?.Text) ? "COVAS" : TxtAiWakeWord.Text.Trim();
@@ -290,22 +367,38 @@ public partial class MainWindow
         _ = SendAiPromptAsync(OperationsTranslations.ForLanguage(_uiLanguage)["aiQuickStatusPrompt"]);
     }
 
-    private async void BtnAiSummarizeGalnet_Click(object sender, RoutedEventArgs e)
+    private void BtnAiSummarizeGalnet_Click(object sender, RoutedEventArgs e)
     {
-        SetAiBusy(true);
-        AppendAiChatLine("CMDR", OperationsTranslations.ForLanguage(_uiLanguage)["aiSummarizeGalnet"]);
-        var (_, reply) = await _aiCopilot.SummarizeGalnetAsync();
-        AppendAiChatLine("COVAS", reply);
-        SetAiBusy(false);
+        _ = RunAiQuickActionAsync(
+            OperationsTranslations.ForLanguage(_uiLanguage)["aiSummarizeGalnet"],
+            GetCovasSpeakerLabel(),
+            () => _aiCopilot.SummarizeGalnetAsync());
     }
 
-    private async void BtnAiSummarizeSession_Click(object sender, RoutedEventArgs e)
+    private void BtnAiSummarizeSession_Click(object sender, RoutedEventArgs e)
+    {
+        _ = RunAiQuickActionAsync(
+            OperationsTranslations.ForLanguage(_uiLanguage)["aiSummarizeSession"],
+            GetCovasSpeakerLabel(),
+            () => _aiCopilot.SummarizeSessionAsync());
+    }
+
+    private async Task RunAiQuickActionAsync(string? userPromptLabel, string replySpeaker, Func<Task<(bool Success, string Reply)>> action)
     {
         SetAiBusy(true);
-        AppendAiChatLine("CMDR", OperationsTranslations.ForLanguage(_uiLanguage)["aiSummarizeSession"]);
-        var (_, reply) = await _aiCopilot.SummarizeSessionAsync();
-        AppendAiChatLine("COVAS", reply);
-        SetAiBusy(false);
+        _aiStreamLineOpen = false;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(userPromptLabel))
+                AppendAiChatLine("CMDR", userPromptLabel);
+            var (_, reply) = await action();
+            FinishAiStreamOrAppend(replySpeaker, reply);
+            UpdateAiLatencyStatusBar();
+        }
+        finally
+        {
+            SetAiBusy(false);
+        }
     }
 
     private void BtnAiClearChat_Click(object sender, RoutedEventArgs e)
@@ -322,9 +415,11 @@ public partial class MainWindow
 
         TxtAiPrompt.Clear();
         SetAiBusy(true);
+        _aiStreamLineOpen = false;
         AppendAiChatLine("CMDR", trimmed);
         var (_, reply) = await _aiCopilot.AskAsync(trimmed);
-        AppendAiChatLine("COVAS", reply);
+        FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
+        UpdateAiLatencyStatusBar();
         SetAiBusy(false);
     }
 
@@ -367,7 +462,7 @@ public partial class MainWindow
             return;
         }
 
-        // Detener grabación y enviar al Copiloto IA
+        // Stop recording and send to AI Copilot
         byte[] wavBytes = Array.Empty<byte>();
         try
         {
@@ -390,11 +485,17 @@ public partial class MainWindow
             return;
 
         SetAiBusy(true);
+        _aiStreamLineOpen = false;
+        DateTime sentAt = DateTime.Now;
+        bool isGeminiVoice = string.Equals(_configService.Current.AiActiveProvider, "gemini", StringComparison.OrdinalIgnoreCase);
+        if (isGeminiVoice)
+            AppendAiChatLine("CMDR", "🎤 [Comando de voz]", sentAt);
         TxtStatusBarLeft.Text = ops["aiVoiceProcessing"];
         var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes);
-        if (!string.IsNullOrWhiteSpace(transcript))
-            AppendAiChatLine("CMDR", transcript);
-        AppendAiChatLine("COVAS", reply);
+        if (!isGeminiVoice && !string.IsNullOrWhiteSpace(transcript))
+            AppendAiChatLine("CMDR", transcript, sentAt);
+        FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
+        UpdateAiLatencyStatusBar();
         SetAiBusy(false);
     }
 
@@ -537,13 +638,25 @@ public partial class MainWindow
                     _vadSilenceFrames++;
                 }
 
-                // Enviar automáticamente tras 1.3 s de silencio (13 bloques de 100 ms) o límite de 15 s
-                bool endedBySilence = _vadSilenceFrames >= 13;
+                // Auto-send after 0.9 s of silence (9 x 100 ms chunks) or 15 s limit
+                bool endedBySilence = _vadSilenceFrames >= 9;
                 bool maxDurationReached = (_vadUtterancePcm?.Length ?? 0) >= 16000 * 2 * 15;
                 if (endedBySilence || maxDurationReached)
                 {
                     if (_vadSpeechFrames >= 4 && _vadUtterancePcm is not null)
-                        readyPcm = _vadUtterancePcm.ToArray();
+                    {
+                        byte[] rawPcm = _vadUtterancePcm.ToArray();
+                        // Trim excess trailing silence (keep ~200 ms tail = 6,400 bytes at 16 kHz 16-bit mono) to shrink WAV upload
+                        if (endedBySilence && _vadSilenceFrames > 2)
+                        {
+                            int trimBytes = Math.Max(0, (_vadSilenceFrames - 2) * 3200);
+                            int keepLen = Math.Max(6400, rawPcm.Length - trimBytes);
+                            keepLen -= keepLen % 2; // maintain 16-bit sample alignment
+                            if (keepLen < rawPcm.Length)
+                                rawPcm = rawPcm[..keepLen];
+                        }
+                        readyPcm = rawPcm;
+                    }
 
                     _vadUtterancePcm?.Dispose();
                     _vadUtterancePcm = null;
@@ -577,12 +690,21 @@ public partial class MainWindow
         try
         {
             SetAiBusy(true);
+            _aiStreamLineOpen = false;
+            DateTime sentAt = DateTime.Now;
+            bool showCmdrImmediately = string.Equals(_configService.Current.AiActiveProvider, "gemini", StringComparison.OrdinalIgnoreCase)
+                && !_configService.Current.AiRequireWakeWord;
+            if (showCmdrImmediately)
+                AppendAiChatLine("CMDR", "🎤 [Comando de voz]", sentAt);
             TxtStatusBarLeft.Text = ops["aiVoiceProcessing"];
             var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes, isHandsFree: true);
-            if (!string.IsNullOrWhiteSpace(transcript))
-                AppendAiChatLine("CMDR", transcript);
+            if (!showCmdrImmediately && !string.IsNullOrWhiteSpace(transcript))
+                AppendAiChatLine("CMDR", transcript, sentAt);
             if (!string.IsNullOrWhiteSpace(reply))
-                AppendAiChatLine("COVAS", reply);
+                FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
+            else if (_aiStreamLineOpen)
+                CloseAiStreamLine();
+            UpdateAiLatencyStatusBar();
         }
         finally
         {
@@ -632,11 +754,75 @@ public partial class MainWindow
         protected override void Dispose(bool disposing) { /* No cerrar inner MemoryStream */ }
     }
 
-    private void AppendAiChatLine(string speaker, string message)
+    private bool _aiStreamLineOpen;
+
+    private string GetCovasSpeakerLabel()
+    {
+        if (string.Equals(_configService.Current.AiThinkingMode, "auto", StringComparison.OrdinalIgnoreCase))
+            return _aiCopilot.LastThinkingUsed ? "COVAS 🧠" : "COVAS ⚡";
+        return "COVAS";
+    }
+
+    private void UpdateAiLatencyStatusBar()
+    {
+        if (_aiCopilot.LastResponseLatencyMs <= 0)
+            return;
+
+        string ttft = _aiCopilot.LastFirstTokenLatencyMs > 0
+            ? $" (1ª palabra: {_aiCopilot.LastFirstTokenLatencyMs / 1000.0:0.0} s)"
+            : "";
+        string thinkTag = string.Equals(_configService.Current.AiThinkingMode, "auto", StringComparison.OrdinalIgnoreCase)
+            ? (_aiCopilot.LastThinkingUsed ? " · 🧠 Thinking" : " · ⚡ Rápido")
+            : "";
+        TxtStatusBarLeft.Text = $"COVAS: {_aiCopilot.LastResponseLatencyMs / 1000.0:0.0} s{ttft}{thinkTag} · {_aiCopilot.GetActiveProviderSummary()}";
+    }
+
+    private void AppendAiStreamChunk(string chunk)
+    {
+        if (string.IsNullOrEmpty(chunk) || TxtAiChatHistory is null)
+            return;
+        if (!_aiStreamLineOpen)
+        {
+            _aiStreamLineOpen = true;
+            TxtAiChatHistory.AppendText($"[{DateTime.Now:HH:mm:ss}] {GetCovasSpeakerLabel()}: ");
+        }
+        TxtAiChatHistory.AppendText(chunk);
+        TxtAiChatHistory.ScrollToEnd();
+    }
+
+    private void CloseAiStreamLine()
+    {
+        if (!_aiStreamLineOpen || TxtAiChatHistory is null)
+            return;
+        _aiStreamLineOpen = false;
+        TxtAiChatHistory.AppendText("\n\n");
+        TxtAiChatHistory.ScrollToEnd();
+    }
+
+    private void FinishAiStreamOrAppend(string speaker, string fullReply)
+    {
+        if (_aiStreamLineOpen)
+        {
+            // Append any trailing action log lines (e.g., ⚡ / 🛰 / 📝) that were produced after the streamed prose
+            int sep = fullReply?.IndexOf("\n\n", StringComparison.Ordinal) ?? -1;
+            if (sep >= 0 && fullReply is not null)
+            {
+                string extra = fullReply[(sep + 2)..].Trim();
+                if (!string.IsNullOrWhiteSpace(extra))
+                    TxtAiChatHistory.AppendText($"\n{extra}");
+            }
+            CloseAiStreamLine();
+            return;
+        }
+        AppendAiChatLine(speaker, fullReply);
+    }
+
+    private void AppendAiChatLine(string speaker, string message, DateTime? timestamp = null)
     {
         if (string.IsNullOrWhiteSpace(message))
             return;
-        string block = $"[{DateTime.Now:HH:mm:ss}] {speaker}:\n{message}\n\n";
+        DateTime ts = timestamp ?? DateTime.Now;
+        string block = $"[{ts:HH:mm:ss}] {speaker}: {message}\n\n";
         TxtAiChatHistory.AppendText(block);
         TxtAiChatHistory.ScrollToEnd();
     }
@@ -725,18 +911,9 @@ public partial class MainWindow
             SwitchView(tabIndex.Value);
     }
 
-    private async void BtnAiPreFlightCheck_Click(object sender, RoutedEventArgs e)
+    private void BtnAiPreFlightCheck_Click(object sender, RoutedEventArgs e)
     {
-        SetAiBusy(true);
-        try
-        {
-            var (_, reply) = await _aiCopilot.RunPreFlightCheckAsync();
-            AppendAiChatLine("COVAS (Pre-Flight)", reply);
-        }
-        finally
-        {
-            SetAiBusy(false);
-        }
+        _ = RunAiQuickActionAsync(null, "COVAS (Pre-Flight)", () => _aiCopilot.RunPreFlightCheckAsync());
     }
 
     private void HandleAiSpanshMining(string mineral)

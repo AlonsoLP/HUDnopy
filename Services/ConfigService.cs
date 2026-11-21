@@ -62,7 +62,7 @@ public class ConfigService
         }
         catch
         {
-            // Usar configuración por defecto si falla la lectura
+            // Fall back to default configuration if reading fails
         }
 
         Current = new AppConfig();
@@ -263,7 +263,7 @@ public class ConfigService
             }
             catch
             {
-                // Color inválido, mantener el actual
+                // Invalid color, keep the current one
             }
         });
     }

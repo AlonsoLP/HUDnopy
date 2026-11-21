@@ -113,7 +113,7 @@ public partial class EliteFileWatcherService
             pendingLine.Write(buffer, start, bytesRead - start);
             bufferStart += bytesRead;
         }
-        // La última línea sin salto queda pendiente hasta que el juego la complete.
+        // The trailing incomplete line without a newline remains pending until the game finishes writing it.
     }
 
     private void SyncPassengerManifest()
@@ -1111,7 +1111,7 @@ public partial class EliteFileWatcherService
         }
         catch
         {
-            // Ignorar línea malformada
+            // Ignore malformed line
         }
     }
 
@@ -1478,19 +1478,8 @@ public partial class EliteFileWatcherService
             .ToList();
     }
 
-    private static string FormatModuleDisplayName(string rawItem)
-    {
-        if (string.IsNullOrWhiteSpace(rawItem))
-            return "";
-        string cleaned = rawItem
-            .Replace("$", "", StringComparison.Ordinal)
-            .Replace("_name;", "", StringComparison.OrdinalIgnoreCase)
-            .Replace("int_", "", StringComparison.OrdinalIgnoreCase)
-            .Replace("hpt_", "", StringComparison.OrdinalIgnoreCase)
-            .Replace("_", " ", StringComparison.Ordinal)
-            .Trim();
-        return cleaned.Length > 0 ? char.ToUpperInvariant(cleaned[0]) + cleaned[1..] : rawItem;
-    }
+    private string FormatModuleDisplayName(string rawItem) =>
+        ModuleDisplayCatalog.Format(rawItem, _configService.Current.InterfaceLanguage);
 
     private void ParseProspectedAsteroid(JsonElement data, string ts)
     {
@@ -1797,7 +1786,7 @@ public partial class EliteFileWatcherService
                 }
                 catch
                 {
-                    // Ignorar línea malformada
+                    // Ignore malformed line
                 }
             }
         }

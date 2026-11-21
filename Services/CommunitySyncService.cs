@@ -101,7 +101,7 @@ public sealed class CommunitySyncService : IDisposable
         gameEvents.JournalEventReceived += OnJournalEventReceived;
         fileWatcher.SnapshotFileUpdated += OnSnapshotFileUpdated;
 
-        // Cola con lotes cada 35 s (cumple límite oficial de Inara: máx. 2 peticiones/min)
+        // Batched queue every 35 s (complies with official Inara rate limit: max 2 requests/min)
         _flushTimer = new System.Timers.Timer(35_000);
         _flushTimer.AutoReset = true;
         _flushTimer.Elapsed += (_, _) => _ = FlushQueuesAsync(forceInara: false);
@@ -110,7 +110,7 @@ public sealed class CommunitySyncService : IDisposable
 
     private void OnJournalEventReceived(GameJournalEvent gameEvent)
     {
-        // Prioridad 1: nunca re-enviar el historial leído al arrancar
+        // Priority 1: never re-send historical journal events loaded on startup
         if (gameEvent.IsHistorical)
             return;
 
@@ -627,7 +627,7 @@ public sealed class CommunitySyncService : IDisposable
         if (mapped.Count == 0)
             return;
 
-        // Dirty tracking estilo EDDI: evitar reenviar Materials/Loadout idénticos
+        // EDDI-style dirty tracking: avoid re-sending identical Materials/Loadout payloads
         mapped = mapped.Where(ev =>
         {
             string name = ev["eventName"] as string ?? "";
@@ -997,7 +997,7 @@ public sealed class CommunitySyncService : IDisposable
         var cfg = _configService.Current;
         var state = _fileWatcher.State;
 
-        // Si el usuario pulsa "Sincronizar ahora" y la cola de Inara está vacía, añadir ubicación/créditos actuales
+        // If the user clicks "Sync Now" and the Inara queue is empty, enqueue current location/credits
         if (cfg.EnableInaraSync && !string.IsNullOrWhiteSpace(cfg.InaraApiKey) && !state.IsLegacyGalaxy)
         {
             lock (_queueLock)
