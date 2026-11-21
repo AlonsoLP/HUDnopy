@@ -28,7 +28,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="System.Speech" Version="10.0.14" />
+    <PackageReference Include="System.Speech" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>
