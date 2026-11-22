@@ -287,9 +287,9 @@ public class BindingsService
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Keep current values if the XML file is currently being written
+            AppDiagnosticsLogger.Warn("Bindings", $"Failed to parse '{Path.GetFileName(filePath)}': {ex.Message}");
         }
     }
 

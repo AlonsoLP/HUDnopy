@@ -1010,6 +1010,8 @@
                      "scanUnhandled":  "🔍 Scan current files",
                      "copyUnhandled":  "📋 Copy JSON",
                      "openUnhandledFile":  "📂 Open file",
+                     "openLogsFolder":  "📋 Open logs folder",
+                     "exportSupportBundle":  "📦 Export Support ZIP",
                      "clearUnhandled":  "🗑 Clear",
                      "unhandledStatus":  "{0} unhandled event types ({1} total messages received) · Showing {2}",
                      "unhandledEmpty":  "No unhandled messages recorded. Click \u0027Scan current files\u0027 or start the game.",

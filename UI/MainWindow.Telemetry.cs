@@ -501,16 +501,17 @@ public partial class MainWindow
         TxtStatusBarLeft.Text = string.Format(FlightTranslations.ForLanguage(_uiLanguage)["noteSaved"], sys);
     }
 
-    private async void BtnFetchEdsmIntel_Click(object sender, RoutedEventArgs e)
-    {
-        string sys = _fileWatcher.State.CurrentSystem;
-        if (string.IsNullOrWhiteSpace(sys))
-            return;
-        _lastEdsmIntelSystem = sys;
-        var intel = await _communitySync.FetchEdsmSystemIntelAsync(sys);
-        if (intel is not null)
-            ApplyEdsmSystemIntel(intel);
-    }
+    private async void BtnFetchEdsmIntel_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("EDSM Intel", async () =>
+        {
+            string sys = _fileWatcher.State.CurrentSystem;
+            if (string.IsNullOrWhiteSpace(sys))
+                return;
+            _lastEdsmIntelSystem = sys;
+            var intel = await _communitySync.FetchEdsmSystemIntelAsync(sys);
+            if (intel is not null)
+                ApplyEdsmSystemIntel(intel);
+        });
 
     private void ApplyEdsmSystemIntel(EdsmSystemIntel intel)
     {

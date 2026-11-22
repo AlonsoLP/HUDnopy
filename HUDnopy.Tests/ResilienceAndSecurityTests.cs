@@ -95,6 +95,75 @@ internal static partial class Program
                 _ = AiCopilotService.IsSilenceVoiceCommand(input);
                 _ = AiCopilotService.IsScreenVisionPrompt(input, "COVAS");
             }
+
+            // 4. AppDiagnosticsLogger writes daily rolling log, redacts secrets, formats AggregateException/HResult, and prunes old logs
+            string logsDir = Path.Combine(tempDir, "diag-logs");
+            string prevLogsDir = AppDiagnosticsLogger.LogsDirectory;
+            try
+            {
+                Directory.CreateDirectory(logsDir);
+                string staleLog = Path.Combine(logsDir, "hudnopy-2020-01-01.log");
+                File.WriteAllText(staleLog, "old");
+                AppDiagnosticsLogger.LogsDirectory = logsDir;
+
+                AppDiagnosticsLogger.LogStartupBanner(cfgSvc.Current);
+                AppDiagnosticsLogger.RecordBreadcrumb("UI", "TestAction");
+                for (int r = 0; r < 5; r++)
+                    AppDiagnosticsLogger.Warn("StormTest", "Repeated transient warning");
+                var aggEx = new AggregateException(new InvalidOperationException(@"Webhook failed at https://discord.com/api/webhooks/123456/SUPER_SECRET_TOKEN in C:\Users\PrivateUser\Saved Games with apiKey=MY_PRIVATE_KEY and Bearer eyJhbGciOi.secret"));
+                AppDiagnosticsLogger.Error("TestSuite", "Synthetic diagnostic error apiKey=TOPSECRET", aggEx);
+
+                string todayLog = AppDiagnosticsLogger.CurrentLogFilePath;
+                Assert(File.Exists(todayLog), "Expected AppDiagnosticsLogger to write today's rolling log file.");
+                string logContent = File.ReadAllText(todayLog);
+                Assert(logContent.Contains("Synthetic diagnostic error", StringComparison.Ordinal) &&
+                       logContent.Contains("HResult=0x", StringComparison.Ordinal) &&
+                       logContent.Contains("AggregateException (1 inner):", StringComparison.Ordinal) &&
+                       logContent.Contains("Recent breadcrumbs:", StringComparison.Ordinal) &&
+                       logContent.Contains("[UI] TestAction", StringComparison.Ordinal) &&
+                       logContent.Contains("Suppressed 4 identical repeated log message(s)", StringComparison.Ordinal),
+                    "Expected enriched HResult, flattened AggregateException, breadcrumbs, and storm deduplication in diagnostic log.");
+                Assert(!logContent.Contains("SUPER_SECRET_TOKEN", StringComparison.Ordinal) &&
+                       !logContent.Contains("MY_PRIVATE_KEY", StringComparison.Ordinal) &&
+                       !logContent.Contains("TOPSECRET", StringComparison.Ordinal) &&
+                       !logContent.Contains("eyJhbGciOi.secret", StringComparison.Ordinal) &&
+                       !logContent.Contains("PrivateUser", StringComparison.Ordinal) &&
+                       logContent.Contains("[REMOVED]", StringComparison.Ordinal) &&
+                       logContent.Contains("[USER]", StringComparison.Ordinal),
+                    "AppDiagnosticsLogger failed to strip secrets or Windows username from log output.");
+                Assert(!File.Exists(staleLog), "Expected AppDiagnosticsLogger to prune logs older than 7 days.");
+
+                // 5. Support ZIP bundle export must use strict allowlist (zero personal info, commander names, memories, notes, or keys)
+                cfgSvc.Current.EdsmCommanderName = "CMDR_PRIVATE_IDENTITY";
+                cfgSvc.Current.EdsmApiKey = "EDSM_SUPER_SECRET_KEY";
+                cfgSvc.Current.InaraCommanderName = "INARA_PRIVATE_NAME";
+                cfgSvc.Current.DiscordWebhookUrl = "https://discord.com/api/webhooks/999/WEBHOOK_SECRET";
+                cfgSvc.Current.AiCommanderMemory.Add("My secret home address");
+                cfgSvc.Current.SystemNotes["Sol"] = "Private commander note";
+                cfgSvc.Current.EliteBgsWatchedFactions = "Secret Squadron Faction";
+                string zipPath = AppDiagnosticsLogger.ExportSupportBundle(cfgSvc.Current, Path.Combine(tempDir, "support.zip"));
+                Assert(File.Exists(zipPath), "Expected Support ZIP bundle to be created.");
+                using var zip = ZipFile.OpenRead(zipPath);
+                var cfgEntry = zip.GetEntry("config.sanitized.json");
+                Assert(zip.GetEntry("environment.txt") is not null && cfgEntry is not null,
+                    "Support ZIP missing environment.txt or config.sanitized.json.");
+                using var cfgReader = new StreamReader(cfgEntry!.Open(), Encoding.UTF8);
+                string safeCfg = cfgReader.ReadToEnd();
+                string[] forbiddenInZip =
+                [
+                    "CMDR_PRIVATE_IDENTITY", "EDSM_SUPER_SECRET_KEY", "INARA_PRIVATE_NAME",
+                    "WEBHOOK_SECRET", "My secret home address", "Private commander note", "Secret Squadron Faction"
+                ];
+                foreach (string secret in forbiddenInZip)
+                    Assert(!safeCfg.Contains(secret, StringComparison.Ordinal),
+                        $"Support ZIP leaked personal/private data '{secret}' in config.sanitized.json.");
+                Assert(safeCfg.Contains("\"HasEdsmCredentials\": true", StringComparison.Ordinal),
+                    "Expected sanitized config to preserve boolean diagnostic flags.");
+            }
+            finally
+            {
+                AppDiagnosticsLogger.LogsDirectory = prevLogsDir;
+            }
         }
         finally
         {

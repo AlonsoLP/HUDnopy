@@ -30,11 +30,12 @@ Services/Telemetry/EliteFileWatcherService (partial classes)
 
 | Directory | Responsibility |
 |---|---|
-| `HUDnopy.Tests/` | Zero-dependency automated regression test suite (15 suites) executed on every push/PR and release via GitHub Actions. |
-| `Localization/` | Strongly-typed translation catalogs backed by embedded JSON resources (`en-GB` default) with startup parity and placeholder checks. |
-| `Models/` | Immutable-friendly state snapshots and domain models split by gameplay area (`ShipState`, `ExplorationModels`, `OperationsModels`, `CombatMiningModels`, `FleetAndGoalsModels`, `CarrierState`, `ModuleDisplayCatalog`, `AppConfig`). |
+| `HUDnopy.Tests/` | Zero-dependency automated regression test suite (30 suites, including WebSocket, Journal replay, mocked HTTP, fuzzing, property-based invariants, concurrency, EDDN privacy, and LAN security) with optional `--junit` XML output executed on every push/PR and release via GitHub Actions. |
+| `Localization/` | Strongly-typed `FrozenDictionary` translation catalogs backed by embedded JSON resources (`en-GB` default) with startup parity and placeholder checks. |
+| `Models/` | Immutable-friendly state snapshots and domain models split by gameplay area (`ShipState`, `ExplorationModels`, `OperationsModels`, `CombatMiningModels`, `FleetAndGoalsModels`, `CarrierState`, `ModuleDisplayCatalog`, `AppConfig` with `System.Text.Json` source generation). |
 | `Resources/Languages/` | Complete JSON translation packs for `en-GB`, `es-ES`, `fr-FR`, `de-DE`, `ru-RU`, and `pt-BR`. |
-| `Services/` | Independent domain services (Alerts, Audio, Piper TTS, Bindings, Input Simulation, Frontier cAPI, Community Sync, Spansh, Galaxy Status, GalNet, Web Server). |
+| `Services/` | Independent domain services (Alerts, NAudio 3.3 `AudioPlaybackHelper`, Piper TTS, `AppDiagnosticsLogger`, Bindings, Input Simulation, Frontier cAPI, Community Sync, Spansh, Galaxy Status, GalNet, Brotli/GZip Kestrel Web Server). |
+| `Services/Integrations/` | Strictly opt-in external integrations: `DiscordIntegrationService` (async Named Pipe IPC + Webhooks), `EliteBgsWatchlistService`, `ArdentMarketService`, and `EdastroCanonnService`. |
 | `Services/AiCopilot/` | Modular `partial class AiCopilotService` split into Core, Prompt, Queries (ReAct & actions), and Providers (SSE streaming & TTS normalization). |
 | `Services/Telemetry/` | Modular `partial class EliteFileWatcherService` with dirty-checked publishing and automatic EDSM Shipyard fallback. |
 | `UI/` | Modular `partial class MainWindow` files separated by feature area (`Telemetry`, `Operations`, `Spansh`, `AiCopilot`, `Integrations`, `Localization`, `SettingsAndAlerts`). |

@@ -340,7 +340,7 @@ public sealed class DiscordIntegrationService : IDisposable
 
         try
         {
-            if (!EnsureIpcConnected())
+            if (!await EnsureIpcConnectedAsync(ct))
                 return;
 
             var cmd = new
@@ -445,7 +445,7 @@ public sealed class DiscordIntegrationService : IDisposable
         return frame;
     }
 
-    private bool EnsureIpcConnected()
+    private async Task<bool> EnsureIpcConnectedAsync(CancellationToken ct)
     {
         if (_ipcPipe is { IsConnected: true } && _ipcHandshaked)
             return true;
@@ -454,16 +454,17 @@ public sealed class DiscordIntegrationService : IDisposable
 
         for (int i = 0; i < 10; i++)
         {
+            NamedPipeClientStream? pipe = null;
             try
             {
-                var pipe = new NamedPipeClientStream(".", $"discord-ipc-{i}", PipeDirection.InOut, PipeOptions.Asynchronous);
-                pipe.Connect(150);
+                pipe = new NamedPipeClientStream(".", $"discord-ipc-{i}", PipeDirection.InOut, PipeOptions.Asynchronous);
+                await pipe.ConnectAsync(150, ct);
 
                 string handshakeJson = JsonSerializer.Serialize(new { v = 1, client_id = DefaultDiscordAppId });
                 byte[] frame = BuildIpcFrame(0, handshakeJson);
-                pipe.Write(frame, 0, frame.Length);
-                pipe.Flush();
-                DrainIpcResponseSync(pipe);
+                await pipe.WriteAsync(frame, ct);
+                await pipe.FlushAsync(ct);
+                await DrainIpcResponseAsync(pipe, ct);
 
                 _ipcPipe = pipe;
                 _ipcHandshaked = true;
@@ -471,6 +472,7 @@ public sealed class DiscordIntegrationService : IDisposable
             }
             catch
             {
+                try { pipe?.Dispose(); } catch { }
                 // Try next discord-ipc slot.
             }
         }
@@ -507,9 +509,6 @@ public sealed class DiscordIntegrationService : IDisposable
             // Non-fatal: timeout or closed pipe while draining ACK frame.
         }
     }
-
-    private static void DrainIpcResponseSync(NamedPipeClientStream pipe) =>
-        _ = DrainIpcResponseAsync(pipe, CancellationToken.None).Wait(300);
 
     public void DisconnectIpc()
     {

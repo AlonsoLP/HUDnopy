@@ -27,14 +27,7 @@ public sealed class SpanshSystemDataService : IDisposable
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(6);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(15);
     private const int MaxDisplayedRecords = 100;
-    private static readonly JsonSerializerOptions ApiJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-    private static readonly JsonSerializerOptions CacheJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
+    private static readonly JsonSerializerOptions SharedJsonOptions = HttpClientHeaderDefaults.CaseInsensitiveJsonOptions;
 
     private readonly ConfigService _configService;
     private readonly EliteFileWatcherService _fileWatcher;
@@ -174,7 +167,7 @@ public sealed class SpanshSystemDataService : IDisposable
             response.EnsureSuccessStatusCode();
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             var dump = await JsonSerializer.DeserializeAsync<SpanshApiDump>(
-                stream, ApiJsonOptions, cancellationToken);
+                stream, SharedJsonOptions, cancellationToken);
             if (dump?.System is null ||
                 dump.System.Id64.HasValue && dump.System.Id64.Value != id64)
                 throw new InvalidDataException("Spansh returned a system dump with a mismatched ID64.");
@@ -246,7 +239,7 @@ public sealed class SpanshSystemDataService : IDisposable
                 _cachePath, FileMode.Open, FileAccess.Read, FileShare.Read,
                 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
             SpanshSystemSnapshot? snapshot = await JsonSerializer.DeserializeAsync<SpanshSystemSnapshot>(
-                stream, CacheJsonOptions, cancellationToken);
+                stream, SharedJsonOptions, cancellationToken);
             return snapshot?.Id64 == id64 ? snapshot : null;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
@@ -270,7 +263,7 @@ public sealed class SpanshSystemDataService : IDisposable
                 temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None,
                 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
-                await JsonSerializer.SerializeAsync(stream, snapshot, CacheJsonOptions, cancellationToken);
+                await JsonSerializer.SerializeAsync(stream, snapshot, SharedJsonOptions, cancellationToken);
                 await stream.FlushAsync(cancellationToken);
             }
             File.Move(temporaryPath, _cachePath, overwrite: true);

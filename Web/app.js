@@ -32,6 +32,43 @@
   let cachedNumberFormatLang = null;
   let cachedNumberFormatter = null;
   let selectedGalnetIndex = 0;
+  let webErrorReportsSent = 0;
+
+  function reportWebClientError(message, source, stack) {
+    if (webErrorReportsSent >= 10) return;
+    webErrorReportsSent++;
+    try {
+      const cleanStack = String(stack || '').replace(/https?:\/\/[^/\s)]+/gi, '').slice(0, 800);
+      fetch('/api/client-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: String(message || 'Unknown error').slice(0, 300),
+          source: String(source || '').slice(0, 160),
+          stack: cleanStack
+        })
+      }).catch(() => {});
+    } catch { }
+  }
+
+  window.addEventListener('error', (event) => {
+    let srcPath = '';
+    try { srcPath = event?.filename ? new URL(event.filename).pathname : ''; } catch { srcPath = ''; }
+    reportWebClientError(
+      event?.message || 'Uncaught script error',
+      `${srcPath}:${event?.lineno || 0}:${event?.colno || 0}`,
+      event?.error?.stack || ''
+    );
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event?.reason;
+    reportWebClientError(
+      reason?.message || String(reason || 'Unhandled promise rejection'),
+      'unhandledrejection',
+      reason?.stack || ''
+    );
+  });
 
   function escapeHtml(value) {
     return String(value ?? '')

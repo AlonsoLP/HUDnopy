@@ -23,6 +23,9 @@ public sealed class GameEventHub : IGameEventSource
 
     public void Publish(GameJournalEvent gameEvent)
     {
+        if (!gameEvent.IsHistorical && gameEvent.EventType is "LoadGame" or "FSDJump" or "Docked" or "Undocked" or "CarrierJump")
+            AppDiagnosticsLogger.RecordBreadcrumb("Journal", gameEvent.EventType);
+
         var handlers = JournalEventReceived?.GetInvocationList();
         if (handlers == null) return;
 
@@ -34,7 +37,8 @@ public sealed class GameEventHub : IGameEventSource
             }
             catch (Exception ex)
             {
-                Trace.TraceError($"El suscriptor de eventos del juego falló: {ex}");
+                Trace.TraceError($"Game event subscriber failed: {ex}");
+                AppDiagnosticsLogger.Error("GameEventHub", $"Subscriber failed on event '{gameEvent.EventType}'.", ex);
             }
         }
     }

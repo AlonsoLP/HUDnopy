@@ -74,16 +74,17 @@ public partial class MainWindow
         ApplyDesktopFontScale(_desktopFontScale, ItemsControlDeck);
     }
 
-    private async void ChkHideUnassignedBindings_Click(object sender, RoutedEventArgs e)
-    {
-        if (NavControls.IsChecked == true)
-            BuildBindingCategoryNavigation();
-        else
-            FilterBindingsDeck();
-        _configService.Current.HideUnassignedBindings = ChkHideUnassignedBindings.IsChecked == true;
-        _configService.Save();
-        await _webServer.BroadcastStateAsync();
-    }
+    private async void ChkHideUnassignedBindings_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Hide Unassigned Bindings", async () =>
+        {
+            if (NavControls.IsChecked == true)
+                BuildBindingCategoryNavigation();
+            else
+                FilterBindingsDeck();
+            _configService.Current.HideUnassignedBindings = ChkHideUnassignedBindings.IsChecked == true;
+            _configService.Save();
+            await _webServer.BroadcastStateAsync();
+        });
 
 
     private List<BackpackItem>? _lastShipLockerSource;
@@ -787,17 +788,18 @@ public partial class MainWindow
         ApplyDesktopFontScale(_desktopFontScale, CockpitSystemsGrid);
     }
 
-    private async void BtnAction_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement el && el.Tag is string actionId && !string.IsNullOrEmpty(actionId))
+    private async void BtnAction_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Deck Action", async () =>
         {
-            var (success, message) = await _inputSimulator.ExecuteActionAsync(actionId);
-            TxtStatusBarLeft.Text = $"[{DateTime.Now:HH:mm:ss}] {message}";
-            TxtStatusBarLeft.Foreground = success
-                ? (System.Windows.Media.Brush)FindResource("HudAccentBrush")
-                : (System.Windows.Media.Brush)FindResource("HudDangerBrush");
-        }
-    }
+            if (sender is FrameworkElement el && el.Tag is string actionId && !string.IsNullOrEmpty(actionId))
+            {
+                var (success, message) = await _inputSimulator.ExecuteActionAsync(actionId);
+                TxtStatusBarLeft.Text = $"[{DateTime.Now:HH:mm:ss}] {message}";
+                TxtStatusBarLeft.Foreground = success
+                    ? (System.Windows.Media.Brush)FindResource("HudAccentBrush")
+                    : (System.Windows.Media.Brush)FindResource("HudDangerBrush");
+            }
+        });
 
     private void NavRadio_Checked(object sender, RoutedEventArgs e)
     {
@@ -1195,7 +1197,7 @@ public partial class MainWindow
     }
 
     private async void BtnRestartWebServer_Click(object sender, RoutedEventArgs e) =>
-        await ApplyWebSettingsAsync(useEditedPort: true);
+        await RunUiAsync("Web Server Restart", () => ApplyWebSettingsAsync(useEditedPort: true));
 
     private async Task ApplyWebSettingsAsync(bool useEditedPort)
     {
@@ -1773,6 +1775,45 @@ public partial class MainWindow
         {
             var text = SettingsTranslations.ForLanguage(_uiLanguage);
             TxtStatusBarLeft.Text = string.Format(text["clipboardError"], ex.Message);
+        }
+    }
+
+    private void BtnOpenLogsFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string dir = AppDiagnosticsLogger.LogsDirectory;
+            Directory.CreateDirectory(dir);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = dir,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("UI", $"Failed to open logs folder: {ex.Message}");
+            TxtStatusBarLeft.Text = ex.Message;
+        }
+    }
+
+    private void BtnExportSupportBundle_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string zipPath = AppDiagnosticsLogger.ExportSupportBundle(_configService.Current);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{zipPath}\"",
+                UseShellExecute = true
+            });
+            TxtStatusBarLeft.Text = $"📦 {Path.GetFileName(zipPath)}";
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Error("UI", "Failed to export support bundle.", ex);
+            TxtStatusBarLeft.Text = ex.Message;
         }
     }
 

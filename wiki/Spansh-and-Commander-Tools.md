@@ -9,6 +9,8 @@ HUDnopy integrates directly with the **Spansh** API (`https://spansh.co.uk/api/`
   - **Road to Riches** (`/api/riches/route`)
   - **Exomastery** (`/api/exomastery/route`)
   - **Fleet Carrier Router** (`/api/fleetcarrier/route`)
+  - **Ammonia Worlds, Tourist & Galaxy Routers** (`/api/ammonia/route`, `/api/tourist/route`, `/api/generic/route`)
+- **Spansh Deep Search:** Search landable bodies by surface materials (`/api/bodies/search`) and nearby Fleet Carriers by required service (`/api/stations/search`), plus **EDAstro DSSA** nearest deep-space carriers and **Ardent Insight** live commodity markets.
 - **CSV Import:** Import any exported Spansh CSV route directly into the route table.
 - **Auto-Advance & Auto-Copy Next Jump:** As you jump (`FSDJump`), HUDnopy automatically advances the active route index and copies the next waypoint system name to your Windows clipboard for instant pasting into the Galaxy Map.
 

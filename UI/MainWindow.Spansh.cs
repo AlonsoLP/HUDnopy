@@ -37,32 +37,33 @@ namespace HUDnopy;
 /// </summary>
 public partial class MainWindow
 {
-    private async void BtnSearchSpanshService_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not System.Windows.Controls.Button btn || btn.Tag is not string serviceKey)
-            return;
-
-        var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        TxtSpanshServicesStatus.Text = flight["spanshServicesSearching"];
-        var state = _fileWatcher.State;
-        var (success, results, message) = await _spanshSystemDataService.SearchNearestServicesAsync(
-            serviceKey,
-            state.CurrentSystem,
-            state.StarPos);
-
-        if (success && results.Count > 0)
+    private async void BtnSearchSpanshService_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Spansh Services", async () =>
         {
-            GridSpanshServices.ItemsSource = results;
-            GridSpanshServices.Visibility = Visibility.Visible;
-            TxtSpanshServicesStatus.Text = string.Format(flight["spanshServicesFound"], results.Count);
-        }
-        else
-        {
-            GridSpanshServices.ItemsSource = null;
-            GridSpanshServices.Visibility = Visibility.Collapsed;
-            TxtSpanshServicesStatus.Text = success ? flight["spanshServicesEmpty"] : message;
-        }
-    }
+            if (sender is not System.Windows.Controls.Button btn || btn.Tag is not string serviceKey)
+                return;
+
+            var flight = FlightTranslations.ForLanguage(_uiLanguage);
+            TxtSpanshServicesStatus.Text = flight["spanshServicesSearching"];
+            var state = _fileWatcher.State;
+            var (success, results, message) = await _spanshSystemDataService.SearchNearestServicesAsync(
+                serviceKey,
+                state.CurrentSystem,
+                state.StarPos);
+
+            if (success && results.Count > 0)
+            {
+                GridSpanshServices.ItemsSource = results;
+                GridSpanshServices.Visibility = Visibility.Visible;
+                TxtSpanshServicesStatus.Text = string.Format(flight["spanshServicesFound"], results.Count);
+            }
+            else
+            {
+                GridSpanshServices.ItemsSource = null;
+                GridSpanshServices.Visibility = Visibility.Collapsed;
+                TxtSpanshServicesStatus.Text = success ? flight["spanshServicesEmpty"] : message;
+            }
+        });
 
     private void GridSpanshServices_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
@@ -79,14 +80,15 @@ public partial class MainWindow
         }
     }
 
-    private async void BtnRefreshGalnet_Click(object sender, RoutedEventArgs e)
-    {
-        var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-        TxtGalnetStatus.Text = ops["galnetLoading"];
-        var (success, msg) = await _galnetService.RefreshAsync(_uiLanguage);
-        if (!success)
-            TxtGalnetStatus.Text = msg;
-    }
+    private async void BtnRefreshGalnet_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("GalNet Refresh", async () =>
+        {
+            var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+            TxtGalnetStatus.Text = ops["galnetLoading"];
+            var (success, msg) = await _galnetService.RefreshAsync(_uiLanguage);
+            if (!success)
+                TxtGalnetStatus.Text = msg;
+        });
 
     private void RefreshGalnetUi()
     {
@@ -120,34 +122,35 @@ public partial class MainWindow
         _alertSpeechService.StopSpeaking();
     }
 
-    private async void BtnSearchSpanshItem_Click(object sender, RoutedEventArgs e)
-    {
-        string query = TxtSpanshItemQuery.Text.Trim();
-        if (string.IsNullOrWhiteSpace(query))
-            return;
-
-        bool isShip = (CmbSpanshItemType.SelectedItem as ComboBoxItem)?.Tag as string == "ship";
-        bool lyr = ChkSpanshLyrDiscount.IsChecked == true;
-        var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        TxtSpanshServicesStatus.Text = flight["spanshServicesSearching"];
-
-        var state = _fileWatcher.State;
-        var (success, results, message) = await _spanshSystemDataService.SearchShipOrModuleAsync(
-            query, isShip, lyr, state.CurrentSystem, state.StarPos);
-
-        if (success && results.Count > 0)
+    private async void BtnSearchSpanshItem_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Spansh Item Search", async () =>
         {
-            GridSpanshServices.ItemsSource = results;
-            GridSpanshServices.Visibility = Visibility.Visible;
-            TxtSpanshServicesStatus.Text = string.Format(flight["spanshServicesFound"], results.Count);
-        }
-        else
-        {
-            GridSpanshServices.ItemsSource = null;
-            GridSpanshServices.Visibility = Visibility.Collapsed;
-            TxtSpanshServicesStatus.Text = success ? flight["spanshServicesEmpty"] : message;
-        }
-    }
+            string query = TxtSpanshItemQuery.Text.Trim();
+            if (string.IsNullOrWhiteSpace(query))
+                return;
+
+            bool isShip = (CmbSpanshItemType.SelectedItem as ComboBoxItem)?.Tag as string == "ship";
+            bool lyr = ChkSpanshLyrDiscount.IsChecked == true;
+            var flight = FlightTranslations.ForLanguage(_uiLanguage);
+            TxtSpanshServicesStatus.Text = flight["spanshServicesSearching"];
+
+            var state = _fileWatcher.State;
+            var (success, results, message) = await _spanshSystemDataService.SearchShipOrModuleAsync(
+                query, isShip, lyr, state.CurrentSystem, state.StarPos);
+
+            if (success && results.Count > 0)
+            {
+                GridSpanshServices.ItemsSource = results;
+                GridSpanshServices.Visibility = Visibility.Visible;
+                TxtSpanshServicesStatus.Text = string.Format(flight["spanshServicesFound"], results.Count);
+            }
+            else
+            {
+                GridSpanshServices.ItemsSource = null;
+                GridSpanshServices.Visibility = Visibility.Collapsed;
+                TxtSpanshServicesStatus.Text = success ? flight["spanshServicesEmpty"] : message;
+            }
+        });
 
     private async void BtnPlotSpanshRoute_Click(object sender, RoutedEventArgs e)
     {
@@ -265,33 +268,34 @@ public partial class MainWindow
         CopySystemToClipboard(wp.SystemName);
     }
 
-    private async void BtnPlotSpanshTrade_Click(object sender, RoutedEventArgs e)
-    {
-        var state = _fileWatcher.State;
-        var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-        TxtSpanshTradeStatus.Text = ops["spanshTradeSearching"];
-
-        var (success, hops, message) = await _spanshSystemDataService.PlotTradeRouteAsync(
-            state.CurrentSystem,
-            state.StationName,
-            state.CargoCapacity,
-            state.Credits,
-            30,
-            requireLargePad: state.CargoCapacity >= 200);
-
-        if (success && hops.Count > 0)
+    private async void BtnPlotSpanshTrade_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Spansh Trade", async () =>
         {
-            GridSpanshTrade.ItemsSource = hops;
-            GridSpanshTrade.Visibility = Visibility.Visible;
-            TxtSpanshTradeStatus.Text = string.Format(ops["spanshTradeFound"], hops.Count);
-        }
-        else
-        {
-            GridSpanshTrade.ItemsSource = null;
-            GridSpanshTrade.Visibility = Visibility.Collapsed;
-            TxtSpanshTradeStatus.Text = success ? ops["spanshTradeEmpty"] : message;
-        }
-    }
+            var state = _fileWatcher.State;
+            var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+            TxtSpanshTradeStatus.Text = ops["spanshTradeSearching"];
+
+            var (success, hops, message) = await _spanshSystemDataService.PlotTradeRouteAsync(
+                state.CurrentSystem,
+                state.StationName,
+                state.CargoCapacity,
+                state.Credits,
+                30,
+                requireLargePad: state.CargoCapacity >= 200);
+
+            if (success && hops.Count > 0)
+            {
+                GridSpanshTrade.ItemsSource = hops;
+                GridSpanshTrade.Visibility = Visibility.Visible;
+                TxtSpanshTradeStatus.Text = string.Format(ops["spanshTradeFound"], hops.Count);
+            }
+            else
+            {
+                GridSpanshTrade.ItemsSource = null;
+                GridSpanshTrade.Visibility = Visibility.Collapsed;
+                TxtSpanshTradeStatus.Text = success ? ops["spanshTradeEmpty"] : message;
+            }
+        });
 
     private void GridSpanshTrade_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
@@ -300,29 +304,30 @@ public partial class MainWindow
         CopySystemToClipboard(hop.ToSystem);
     }
 
-    private async void BtnSearchMiningRings_Click(object sender, RoutedEventArgs e)
-    {
-        string mineral = (CmbSpanshMiningMineral.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Platinum";
-        var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-        TxtSpanshMiningStatus.Text = ops["spanshMiningSearching"];
-
-        var state = _fileWatcher.State;
-        var (success, results, message) = await _spanshSystemDataService.SearchMiningRingsAsync(
-            mineral, state.CurrentSystem, state.StarPos);
-
-        if (success && results.Count > 0)
+    private async void BtnSearchMiningRings_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Spansh Mining", async () =>
         {
-            GridSpanshMiningRings.ItemsSource = results;
-            GridSpanshMiningRings.Visibility = Visibility.Visible;
-            TxtSpanshMiningStatus.Text = string.Format(ops["spanshMiningFound"], results.Count, mineral);
-        }
-        else
-        {
-            GridSpanshMiningRings.ItemsSource = null;
-            GridSpanshMiningRings.Visibility = Visibility.Collapsed;
-            TxtSpanshMiningStatus.Text = success ? ops["spanshMiningEmpty"] : message;
-        }
-    }
+            string mineral = (CmbSpanshMiningMineral.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Platinum";
+            var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+            TxtSpanshMiningStatus.Text = ops["spanshMiningSearching"];
+
+            var state = _fileWatcher.State;
+            var (success, results, message) = await _spanshSystemDataService.SearchMiningRingsAsync(
+                mineral, state.CurrentSystem, state.StarPos);
+
+            if (success && results.Count > 0)
+            {
+                GridSpanshMiningRings.ItemsSource = results;
+                GridSpanshMiningRings.Visibility = Visibility.Visible;
+                TxtSpanshMiningStatus.Text = string.Format(ops["spanshMiningFound"], results.Count, mineral);
+            }
+            else
+            {
+                GridSpanshMiningRings.ItemsSource = null;
+                GridSpanshMiningRings.Visibility = Visibility.Collapsed;
+                TxtSpanshMiningStatus.Text = success ? ops["spanshMiningEmpty"] : message;
+            }
+        });
 
     private void GridSpanshMiningRings_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {

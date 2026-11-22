@@ -22,6 +22,9 @@ Configure the Web Server under **Settings → Web Server**:
 - Because the certificate is self-signed, browsers display a security warning on first connection. Click the **Certificate Info** button in HUDnopy Settings and verify the **SHA-256 fingerprint** before trusting the connection.
 - Access the Web HUD using `localhost` or a direct IP address (custom hostnames are rejected to mitigate DNS rebinding attacks).
 
-## QR Code Pairing
+## QR Code Pairing & Transport Optimizations
 
-When the Web Server is running, HUDnopy renders a native QR code (`QrCodeGenerator.cs`) for the selected URL so you can scan and open the Web HUD on a tablet or phone without typing IP addresses or ports.
+- **ISO-Standard QR Pairing:** When the Web Server is running, HUDnopy renders a native vector QR code (`QrCodeGenerator.cs`, ISO/IEC 18004 4-module quiet zone) for the selected URL so you can scan and open the Web HUD on a tablet or phone without typing IP addresses or ports.
+- **Pre-Compressed Brotli / GZip Assets:** `index.html`, `styles.css`, and `app.js` are pre-compressed once at startup into in-memory Brotli and GZip buffers (`Content-Encoding: br/gzip`, `Vary: Accept-Encoding`) for fast mobile loading with zero per-request CPU overhead.
+- **Parallel WebSocket Broadcasts & Frame Deduplication:** Broadcasts run in parallel across connected clients with per-socket locks, 5-second per-client send timeouts, UTF-8 `SequenceEqual` frame deduplication, and RFC 6455 clean close handshakes.
+- **Security Hardening & Client Error Telemetry:** All POST endpoints and `/ws` enforce same-origin `Origin` CSRF validation, strict `Content-Security-Policy` / `nosniff` / `no-store` headers, and LAN brute-force `429 Too Many Requests` lockouts. Unexpected HTTP 500 errors and browser JavaScript errors (`POST /api/client-error`, with host/LAN IP stripped) are logged cleanly to `%LocalAppData%\HUDnopy\logs\`.

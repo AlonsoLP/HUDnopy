@@ -8,7 +8,7 @@ body:
     attributes:
       label: HUDnopy Version
       description: Which release or commit are you running?
-      placeholder: "e.g. v0.2.0"
+      placeholder: "e.g. v0.3.0"
     validations:
       required: true
   - type: dropdown
@@ -20,7 +20,7 @@ body:
         - Web HUD / MFD
         - Telemetry / Journal Parsing
         - COVAS AI Copilot / TTS
-        - Spansh / GalNet / EDSM / Inara / Frontier cAPI
+        - Spansh / GalNet / EDSM / Inara / Frontier cAPI / Discord / BGS / Ardent / EDAstro
         - Controls (.binds) / Input Simulator
         - Localization
         - Installer / Build
@@ -46,7 +46,9 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: Relevant Logs / Screenshots
-      description: Paste any error messages or diagnostics (remove API keys/tokens first).
+      label: Support ZIP / Logs / Screenshots
+      description: |
+        In HUDnopy, open **Settings → Diagnostics → 📦 Export Support ZIP** and drag-and-drop the generated `.zip` file here (or paste error details below).
+        **Privacy:** Your personal information — including API keys, OAuth tokens, Discord webhook URLs, passwords, and your Windows user folder path — is **automatically removed** before the logs and Support ZIP are created.
     validations:
       required: false

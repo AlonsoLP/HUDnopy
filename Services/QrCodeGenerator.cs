@@ -28,8 +28,7 @@ internal static class QrCodeGenerator
         new(2, 25, 34, 10, new[] { 6, 18 }),
         new(3, 29, 55, 15, new[] { 6, 22 }),
         new(4, 33, 80, 20, new[] { 6, 26 }),
-        new(5, 37, 108, 26, new[] { 6, 30 }),
-        new(6, 41, 136, 18, new[] { 6, 34 })
+        new(5, 37, 108, 26, new[] { 6, 30 })
     };
 
     public static DrawingImage? CreateQrImage(string text)
@@ -41,7 +40,7 @@ internal static class QrCodeGenerator
         VersionSpec? chosen = null;
         foreach (var spec in Specs)
         {
-            if (spec.Version <= 5 && payload.Length + 2 <= spec.DataCodewords)
+            if (payload.Length + 2 <= spec.DataCodewords)
             {
                 chosen = spec;
                 break;
@@ -52,7 +51,7 @@ internal static class QrCodeGenerator
 
         bool[,] matrix = EncodeMatrix(payload, chosen.Value);
         int size = chosen.Value.Size;
-        int quiet = 2;
+        int quiet = 4; // ISO/IEC 18004 standard 4-module quiet zone for reliable scanning on dark HUD themes
         int total = size + quiet * 2;
 
         var group = new DrawingGroup();

@@ -217,10 +217,27 @@ internal static partial class Program
         string tempDir = Path.Combine(Path.GetTempPath(), $"hudnopy_mockhttp_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         int spanshPollCount = 0;
+        int transientGetAttempts = 0;
+        int post503Attempts = 0;
 
+        HttpClientHeaderDefaults.RetryTimeProvider = new InstantTimeProvider();
         HttpClientHeaderDefaults.TestHttpHandlerFactory = () => new FakeHttpMessageHandler(req =>
         {
             string url = req.RequestUri?.ToString() ?? "";
+
+            // 0. Transient 503 retry verification: GET retries automatically, POST never duplicates
+            if (url.Contains("transient-get.test", StringComparison.OrdinalIgnoreCase))
+            {
+                transientGetAttempts++;
+                return transientGetAttempts == 1
+                    ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                    : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("recovered") };
+            }
+            if (url.Contains("non-idempotent-post.test", StringComparison.OrdinalIgnoreCase))
+            {
+                post503Attempts++;
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            }
 
             // 1. Spansh galaxy route POST -> job id, then poll queued -> ok with float fuel_used
             if (url.Contains("spansh.co.uk/api/generic/route", StringComparison.OrdinalIgnoreCase))
@@ -306,10 +323,20 @@ internal static partial class Program
             var (aOk, offers, aMsg) = await ardent.SearchCommodityAsync("Low Temperature Diamonds", "sell", "Sol");
             Assert(aOk && offers.Count == 1 && offers[0].Price == 510000,
                 $"Expected Ardent 404 fallback to return 1 offer at 510,000 CR, got ok={aOk}, count={offers.Count}, msg='{aMsg}'.");
+
+            // TransientHttpRetryHandler: GET recovers from 503 automatically; POST never duplicates
+            using var retryClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(5));
+            using var getResp = await retryClient.GetAsync("https://transient-get.test/ping");
+            Assert(getResp.StatusCode == HttpStatusCode.OK && transientGetAttempts == 2,
+                $"Expected GET to recover from transient 503 on attempt 2, got {getResp.StatusCode} ({transientGetAttempts} attempts).");
+            using var postResp = await retryClient.PostAsync("https://non-idempotent-post.test/upload", new StringContent("{}"));
+            Assert(postResp.StatusCode == HttpStatusCode.ServiceUnavailable && post503Attempts == 1,
+                $"Expected POST not to retry on 503 (1 attempt), got {post503Attempts} attempts.");
         }
         finally
         {
             HttpClientHeaderDefaults.TestHttpHandlerFactory = null;
+            HttpClientHeaderDefaults.RetryTimeProvider = TimeProvider.System;
             try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }

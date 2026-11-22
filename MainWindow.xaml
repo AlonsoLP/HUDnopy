@@ -2589,6 +2589,8 @@
                                     <Button x:Name="BtnScanUnhandledFiles" Content="🔍 Analizar ficheros actuales" local:UiText.Key="scanUnhandled" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnScanUnhandledFiles_Click" />
                                     <Button x:Name="BtnCopyUnhandledJson" Content="📋 Copiar JSON" local:UiText.Key="copyUnhandled" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnCopyUnhandledJson_Click" />
                                     <Button x:Name="BtnOpenUnhandledFile" Content="📂 Abrir fichero" local:UiText.Key="openUnhandledFile" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnOpenUnhandledFile_Click" />
+                                    <Button x:Name="BtnOpenLogsFolder" Content="📋 Abrir carpeta de logs" local:UiText.Key="openLogsFolder" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnOpenLogsFolder_Click" />
+                                    <Button x:Name="BtnExportSupportBundle" Content="📦 Exportar ZIP de soporte" local:UiText.Key="exportSupportBundle" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnExportSupportBundle_Click" />
                                     <Button x:Name="BtnClearUnhandledEvents" Content="🗑 Limpiar" local:UiText.Key="clearUnhandled" Style="{StaticResource HudButtonStyle}" Margin="0,0,0,6" Padding="10,5" Click="BtnClearUnhandledEvents_Click" />
                                 </WrapPanel>
                                 <TextBlock x:Name="TxtUnhandledStatus" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,2,0,8" />

@@ -94,19 +94,21 @@ public partial class MainWindow
         WebQrContainer.Visibility = ImgWebQrCode.Source is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private async void CmbWebAccessMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        UpdateVpnOptionsVisibility();
-        if (!_suppressEvents && !_applyingWebSettings && CmbWebAccessMode.SelectedValue is string)
-            await ApplyWebSettingsAsync(useEditedPort: false);
-    }
+    private async void CmbWebAccessMode_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        await RunUiAsync("Web Access Mode", async () =>
+        {
+            UpdateVpnOptionsVisibility();
+            if (!_suppressEvents && !_applyingWebSettings && CmbWebAccessMode.SelectedValue is string)
+                await ApplyWebSettingsAsync(useEditedPort: false);
+        });
 
-    private async void CmbWebVpnInterface_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_suppressEvents && !_refreshingVpnInterfaces && !_applyingWebSettings &&
-            CmbWebAccessMode.SelectedValue as string == "vpn" && CmbWebVpnInterface.SelectedValue is string)
-            await ApplyWebSettingsAsync(useEditedPort: false);
-    }
+    private async void CmbWebVpnInterface_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        await RunUiAsync("Web VPN Interface", async () =>
+        {
+            if (!_suppressEvents && !_refreshingVpnInterfaces && !_applyingWebSettings &&
+                CmbWebAccessMode.SelectedValue as string == "vpn" && CmbWebVpnInterface.SelectedValue is string)
+                await ApplyWebSettingsAsync(useEditedPort: false);
+        });
 
     private void UpdateVpnOptionsVisibility()
     {
@@ -234,12 +236,13 @@ public partial class MainWindow
         TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["communitySyncSaved"];
     }
 
-    private async void BtnTestCommunitySync_Click(object sender, RoutedEventArgs e)
-    {
-        BtnSaveCommunitySync_Click(sender, e);
-        var (_, summary) = await _communitySync.SyncCommanderAsync();
-        TxtStatusBarLeft.Text = summary;
-    }
+    private async void BtnTestCommunitySync_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Community Sync Test", async () =>
+        {
+            BtnSaveCommunitySync_Click(sender, e);
+            var (_, summary) = await _communitySync.SyncCommanderAsync();
+            TxtStatusBarLeft.Text = summary;
+        });
 
     private void RefreshCommunitySyncStatus()
     {
@@ -502,23 +505,40 @@ public partial class MainWindow
         _configService.Save();
     }
 
-    private async void BtnFetchInaraProfile_Click(object sender, RoutedEventArgs e)
+    private async Task RunUiAsync(string actionName, Func<Task> action)
     {
-        var (ok, profile, msg) = await _communitySync.FetchInaraCommanderProfileAsync();
-        if (TxtInaraReadStatus is not null)
-            TxtInaraReadStatus.Text = ok && profile is not null
-                ? $"{profile.CommanderName} · {profile.SquadronName} ({profile.PreferredAllegiance})"
-                : msg;
-        TxtStatusBarLeft.Text = msg;
+        AppDiagnosticsLogger.RecordBreadcrumb("UI", actionName);
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Error("UI", $"Unhandled error in {actionName}.", ex);
+            if (TxtStatusBarLeft is not null)
+                TxtStatusBarLeft.Text = $"⚠ {actionName}: {ex.Message}";
+        }
     }
 
-    private async void BtnFetchInaraCgs_Click(object sender, RoutedEventArgs e)
-    {
-        var (_, _, msg) = await _communitySync.FetchInaraCommunityGoalsAsync();
-        if (TxtInaraReadStatus is not null)
-            TxtInaraReadStatus.Text = msg;
-        TxtStatusBarLeft.Text = msg;
-    }
+    private async void BtnFetchInaraProfile_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Inara Profile", async () =>
+        {
+            var (ok, profile, msg) = await _communitySync.FetchInaraCommanderProfileAsync();
+            if (TxtInaraReadStatus is not null)
+                TxtInaraReadStatus.Text = ok && profile is not null
+                    ? $"{profile.CommanderName} · {profile.SquadronName} ({profile.PreferredAllegiance})"
+                    : msg;
+            TxtStatusBarLeft.Text = msg;
+        });
+
+    private async void BtnFetchInaraCgs_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Inara CGs", async () =>
+        {
+            var (_, _, msg) = await _communitySync.FetchInaraCommunityGoalsAsync();
+            if (TxtInaraReadStatus is not null)
+                TxtInaraReadStatus.Text = msg;
+            TxtStatusBarLeft.Text = msg;
+        });
 
     private void BtnOpenInaraCommanderProfile_Click(object sender, RoutedEventArgs e)
     {
@@ -565,21 +585,23 @@ public partial class MainWindow
             _ = _eliteBgsWatchlist.RefreshAsync();
     }
 
-    private async void BtnSaveEliteBgs_Click(object sender, RoutedEventArgs e)
-    {
-        _configService.Current.EliteBgsWatchedFactions = (TxtEliteBgsFactions.Text ?? "").Trim();
-        _configService.Save();
-        var (_, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
-        RefreshV3IntegrationsStatus();
-        TxtStatusBarLeft.Text = msg;
-    }
+    private async void BtnSaveEliteBgs_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("EliteBGS Save", async () =>
+        {
+            _configService.Current.EliteBgsWatchedFactions = (TxtEliteBgsFactions.Text ?? "").Trim();
+            _configService.Save();
+            var (_, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
+            RefreshV3IntegrationsStatus();
+            TxtStatusBarLeft.Text = msg;
+        });
 
-    private async void BtnRefreshEliteBgs_Click(object sender, RoutedEventArgs e)
-    {
-        var (_, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
-        RefreshV3IntegrationsStatus();
-        TxtStatusBarLeft.Text = msg;
-    }
+    private async void BtnRefreshEliteBgs_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("EliteBGS Refresh", async () =>
+        {
+            var (_, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
+            RefreshV3IntegrationsStatus();
+            TxtStatusBarLeft.Text = msg;
+        });
 
     private void UpdateEliteBgsWatchlistUi(IReadOnlyList<EliteBgsFactionWatchItem> items)
     {
@@ -599,22 +621,23 @@ public partial class MainWindow
         _configService.Save();
     }
 
-    private async void BtnSearchArdentMarket_Click(object sender, RoutedEventArgs e)
-    {
-        string commodity = (TxtArdentCommodity?.Text ?? "").Trim();
-        string mode = (CmbArdentMode?.SelectedItem as ComboBoxItem)?.Tag as string ?? "sell";
-        if (TxtArdentMarketStatus is not null)
-            TxtArdentMarketStatus.Text = "Ardent Insight...";
-
-        var (ok, offers, msg) = await _ardentMarket.SearchCommodityAsync(commodity, mode);
-        if (TxtArdentMarketStatus is not null)
-            TxtArdentMarketStatus.Text = msg;
-        if (GridArdentMarket is not null)
+    private async void BtnSearchArdentMarket_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Ardent Market", async () =>
         {
-            GridArdentMarket.ItemsSource = ok && offers.Count > 0 ? offers : null;
-            GridArdentMarket.Visibility = ok && offers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
+            string commodity = (TxtArdentCommodity?.Text ?? "").Trim();
+            string mode = (CmbArdentMode?.SelectedItem as ComboBoxItem)?.Tag as string ?? "sell";
+            if (TxtArdentMarketStatus is not null)
+                TxtArdentMarketStatus.Text = "Ardent Insight...";
+
+            var (ok, offers, msg) = await _ardentMarket.SearchCommodityAsync(commodity, mode);
+            if (TxtArdentMarketStatus is not null)
+                TxtArdentMarketStatus.Text = msg;
+            if (GridArdentMarket is not null)
+            {
+                GridArdentMarket.ItemsSource = ok && offers.Count > 0 ? offers : null;
+                GridArdentMarket.Visibility = ok && offers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+        });
 
     private void ChkEnableEdastroDssa_Click(object sender, RoutedEventArgs e)
     {
@@ -630,51 +653,54 @@ public partial class MainWindow
         _configService.Save();
     }
 
-    private async void BtnSearchSpanshBodies_Click(object sender, RoutedEventArgs e)
-    {
-        string query = (TxtSpanshBodyQuery?.Text ?? "").Trim();
-        var st = _fileWatcher.State;
-        if (TxtSpanshDeepSearchStatus is not null)
-            TxtSpanshDeepSearchStatus.Text = "Spansh Bodies...";
-        var (ok, results, msg) = await _spanshSystemDataService.SearchBodiesAsync(query, st.CurrentSystem, st.StarPos);
-        if (TxtSpanshDeepSearchStatus is not null)
-            TxtSpanshDeepSearchStatus.Text = msg;
-        if (GridSpanshBodiesSearch is not null)
+    private async void BtnSearchSpanshBodies_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Spansh Bodies", async () =>
         {
-            GridSpanshBodiesSearch.ItemsSource = ok && results.Count > 0 ? results : null;
-            GridSpanshBodiesSearch.Visibility = ok && results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
+            string query = (TxtSpanshBodyQuery?.Text ?? "").Trim();
+            var st = _fileWatcher.State;
+            if (TxtSpanshDeepSearchStatus is not null)
+                TxtSpanshDeepSearchStatus.Text = "Spansh Bodies...";
+            var (ok, results, msg) = await _spanshSystemDataService.SearchBodiesAsync(query, st.CurrentSystem, st.StarPos);
+            if (TxtSpanshDeepSearchStatus is not null)
+                TxtSpanshDeepSearchStatus.Text = msg;
+            if (GridSpanshBodiesSearch is not null)
+            {
+                GridSpanshBodiesSearch.ItemsSource = ok && results.Count > 0 ? results : null;
+                GridSpanshBodiesSearch.Visibility = ok && results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+        });
 
-    private async void BtnSearchSpanshCarriers_Click(object sender, RoutedEventArgs e)
-    {
-        string service = (CmbSpanshCarrierService?.SelectedItem as ComboBoxItem)?.Tag as string ?? "Vista Genomics";
-        var st = _fileWatcher.State;
-        if (TxtSpanshDeepSearchStatus is not null)
-            TxtSpanshDeepSearchStatus.Text = "Spansh Fleet Carriers...";
-        var (ok, results, msg) = await _spanshSystemDataService.SearchFleetCarriersAsync(service, st.CurrentSystem, st.StarPos);
-        if (TxtSpanshDeepSearchStatus is not null)
-            TxtSpanshDeepSearchStatus.Text = msg;
-        if (GridSpanshCarriersSearch is not null)
+    private async void BtnSearchSpanshCarriers_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Spansh Carriers", async () =>
         {
-            GridSpanshCarriersSearch.ItemsSource = ok && results.Count > 0 ? results : null;
-            GridSpanshCarriersSearch.Visibility = ok && results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
+            string service = (CmbSpanshCarrierService?.SelectedItem as ComboBoxItem)?.Tag as string ?? "Vista Genomics";
+            var st = _fileWatcher.State;
+            if (TxtSpanshDeepSearchStatus is not null)
+                TxtSpanshDeepSearchStatus.Text = "Spansh Fleet Carriers...";
+            var (ok, results, msg) = await _spanshSystemDataService.SearchFleetCarriersAsync(service, st.CurrentSystem, st.StarPos);
+            if (TxtSpanshDeepSearchStatus is not null)
+                TxtSpanshDeepSearchStatus.Text = msg;
+            if (GridSpanshCarriersSearch is not null)
+            {
+                GridSpanshCarriersSearch.ItemsSource = ok && results.Count > 0 ? results : null;
+                GridSpanshCarriersSearch.Visibility = ok && results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+        });
 
-    private async void BtnFetchNearestDssa_Click(object sender, RoutedEventArgs e)
-    {
-        if (TxtSpanshDeepSearchStatus is not null)
-            TxtSpanshDeepSearchStatus.Text = "EDAstro DSSA...";
-        var (ok, carriers, msg) = await _edastroCanonn.GetNearestDssaCarriersAsync();
-        if (TxtSpanshDeepSearchStatus is not null)
-            TxtSpanshDeepSearchStatus.Text = msg;
-        if (GridNearestDssa is not null)
+    private async void BtnFetchNearestDssa_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("EDAstro DSSA", async () =>
         {
-            GridNearestDssa.ItemsSource = ok && carriers.Count > 0 ? carriers : null;
-            GridNearestDssa.Visibility = ok && carriers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
+            if (TxtSpanshDeepSearchStatus is not null)
+                TxtSpanshDeepSearchStatus.Text = "EDAstro DSSA...";
+            var (ok, carriers, msg) = await _edastroCanonn.GetNearestDssaCarriersAsync();
+            if (TxtSpanshDeepSearchStatus is not null)
+                TxtSpanshDeepSearchStatus.Text = msg;
+            if (GridNearestDssa is not null)
+            {
+                GridNearestDssa.ItemsSource = ok && carriers.Count > 0 ? carriers : null;
+                GridNearestDssa.Visibility = ok && carriers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+        });
 
     private void ChkEnableDiscord_Click(object sender, RoutedEventArgs e)
     {
@@ -704,15 +730,16 @@ public partial class MainWindow
         TxtStatusBarLeft.Text = "Discord Webhook URL saved.";
     }
 
-    private async void BtnTestDiscordWebhook_Click(object sender, RoutedEventArgs e)
-    {
-        BtnSaveDiscordWebhook_Click(sender, e);
-        var (_, msg) = await _discord.SendWebhookAsync(
-            $"🛰 {HttpClientHeaderDefaults.ProductName} v{HttpClientHeaderDefaults.ProductVersion} Test",
-            $"Connected for **{_fileWatcher.State.CommanderName}** in `{_fileWatcher.State.CurrentSystem}`.");
-        RefreshV3IntegrationsStatus();
-        TxtStatusBarLeft.Text = msg;
-    }
+    private async void BtnTestDiscordWebhook_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Discord Webhook Test", async () =>
+        {
+            BtnSaveDiscordWebhook_Click(sender, e);
+            var (_, msg) = await _discord.SendWebhookAsync(
+                $"🛰 {HttpClientHeaderDefaults.ProductName} v{HttpClientHeaderDefaults.ProductVersion} Test",
+                $"Connected for **{_fileWatcher.State.CommanderName}** in `{_fileWatcher.State.CurrentSystem}`.");
+            RefreshV3IntegrationsStatus();
+            TxtStatusBarLeft.Text = msg;
+        });
 
     private void ApplyEdsmDiscoveryIntel(EdsmSystemDiscoveryIntel intel)
     {

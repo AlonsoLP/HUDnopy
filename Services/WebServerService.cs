@@ -111,6 +111,8 @@ public class WebServerService : IDisposable
     private byte[]? _lastBroadcastBytes;
     private int _broadcastRequested;
     private int _broadcastRunning;
+    private long _clientErrorWindowMinute;
+    private int _clientErrorWindowCount;
     private (IReadOnlyList<GameBinding>? Source, string Language, DeckBindingView[] Views) _cachedDeckBindings;
     private (SpanshSystemDataState? Source, string Language, SpanshSystemDisplay View) _cachedSpanshView;
     private (CarrierState? Source, string Language, CarrierDisplay View)? _cachedCarrierView;
@@ -304,7 +306,20 @@ public class WebServerService : IDisposable
                         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     return;
                 }
-                await next(context);
+                try
+                {
+                    await next(context);
+                }
+                catch (Exception ex) when (!context.RequestAborted.IsCancellationRequested)
+                {
+                    // Log only Method + Path (never QueryString, Body, or Cookies) to protect privacy
+                    AppDiagnosticsLogger.Error("WebServer.HTTP", $"Unhandled error on {context.Request.Method} {context.Request.Path}.", ex);
+                    if (!context.Response.HasStarted)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                        await WriteJsonAsync(context, new { ok = false, message = "Internal server error." });
+                    }
+                }
             });
 
             app.MapGet("/login", async context =>
@@ -802,6 +817,40 @@ public class WebServerService : IDisposable
                 await WriteJsonAsync(context, new { ok = true });
             });
 
+            app.MapPost("/api/client-error", async (HttpContext context) =>
+            {
+                long currentMinute = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60;
+                if (Interlocked.Exchange(ref _clientErrorWindowMinute, currentMinute) != currentMinute)
+                    Interlocked.Exchange(ref _clientErrorWindowCount, 0);
+
+                if (Interlocked.Increment(ref _clientErrorWindowCount) > 20)
+                {
+                    context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                    return;
+                }
+
+                using var doc = await TryReadJsonBodyAsync(context);
+                if (doc is null)
+                {
+                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    return;
+                }
+
+                string msg = (JsonElementExtensions.GetStr(doc.RootElement, "message") ?? "Unknown Web HUD error").Trim();
+                string source = (JsonElementExtensions.GetStr(doc.RootElement, "source") ?? "").Trim();
+                string stack = (JsonElementExtensions.GetStr(doc.RootElement, "stack") ?? "").Trim();
+                if (msg.Length > 300) msg = msg[..300];
+                if (source.Length > 160) source = source[..160];
+                if (stack.Length > 800) stack = stack[..800];
+
+                AppDiagnosticsLogger.Warn(
+                    "WebHUD",
+                    string.IsNullOrEmpty(stack)
+                        ? $"{msg} ({source})"
+                        : $"{msg} ({source})\n  {stack.Replace("\n", "\n  ")}");
+                await WriteJsonAsync(context, new { ok = true });
+            });
+
             app.Map("/ws", async context =>
             {
                 if (!context.WebSockets.IsWebSocketRequest)
@@ -877,6 +926,7 @@ public class WebServerService : IDisposable
             _cts = null;
             IsRunning = false;
             StatusMessage = $"Error en puerto {port}: {ex.Message}";
+            AppDiagnosticsLogger.Error("WebServer", $"Failed to start Kestrel on port {port}.", ex);
             ServerStatusChanged?.Invoke();
         }
     }
@@ -1283,9 +1333,13 @@ public class WebServerService : IDisposable
         try
         {
             _cts?.Cancel();
-            _app?.StopAsync().GetAwaiter().GetResult();
+            if (_app is not null)
+                Task.Run(() => _app.StopAsync()).Wait(TimeSpan.FromSeconds(2));
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("WebServer", $"Dispose stop warning: {ex.Message}");
+        }
     }
 
 }

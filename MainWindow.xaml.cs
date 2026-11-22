@@ -384,9 +384,9 @@ public partial class MainWindow : Window
             await _webServer.StopAsync();
             _webServer.Dispose();
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignorar errores al cerrar
+            AppDiagnosticsLogger.Warn("Shutdown", $"Error during application exit: {ex.Message}");
         }
         System.Windows.Application.Current.Shutdown();
     }
@@ -769,17 +769,18 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void ChkHideNavigationMenuText_Click(object sender, RoutedEventArgs e)
-    {
-        if (_suppressEvents)
-            return;
+    private async void ChkHideNavigationMenuText_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Nav Menu Text Toggle", async () =>
+        {
+            if (_suppressEvents)
+                return;
 
-        bool hideText = ChkHideNavigationMenuText.IsChecked == true;
-        _configService.Current.HideNavigationMenuText = hideText;
-        _configService.Save();
-        ApplyNavigationMenuTextVisibility(hideText);
-        await _webServer.BroadcastStateAsync();
-    }
+            bool hideText = ChkHideNavigationMenuText.IsChecked == true;
+            _configService.Current.HideNavigationMenuText = hideText;
+            _configService.Save();
+            ApplyNavigationMenuTextVisibility(hideText);
+            await _webServer.BroadcastStateAsync();
+        });
 
     private void SldDesktopFontScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
@@ -869,16 +870,17 @@ public partial class MainWindow : Window
         });
     }
 
-    private async void CmbNavigationMenuPosition_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppressEvents || CmbNavigationMenuPosition.SelectedValue is not string position)
-            return;
+    private async void CmbNavigationMenuPosition_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        await RunUiAsync("Nav Menu Position", async () =>
+        {
+            if (_suppressEvents || CmbNavigationMenuPosition.SelectedValue is not string position)
+                return;
 
-        ApplyNavigationMenuPosition(position);
-        _configService.Current.NavigationMenuPosition = position;
-        _configService.Save();
-        await _webServer.BroadcastStateAsync();
-    }
+            ApplyNavigationMenuPosition(position);
+            _configService.Current.NavigationMenuPosition = position;
+            _configService.Save();
+            await _webServer.BroadcastStateAsync();
+        });
 
 
     private void OnShipStateUpdated(ShipState state)

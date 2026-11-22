@@ -1010,6 +1010,8 @@
                      "scanUnhandled":  "🔍 Analyser les fichiers actuels",
                      "copyUnhandled":  "📋 Copier le JSON",
                      "openUnhandledFile":  "📂 Ouvrir le fichier",
+                     "openLogsFolder":  "📋 Ouvrir le dossier des journaux",
+                     "exportSupportBundle":  "📦 Exporter le ZIP de support",
                      "clearUnhandled":  "🗑 Effacer",
                      "unhandledStatus":  "{0} types d\u0027événements non traités ({1} messages reçus au total) · Affichage de {2}",
                      "unhandledEmpty":  "Aucun message non traité enregistré. Cliquez sur « Analyser les fichiers actuels » ou lancez le jeu.",

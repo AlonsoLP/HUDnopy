@@ -1,14 +1,14 @@
 # HUDnopy
 
 [![CI Build & Tests](https://github.com/AlonsoLP/HUDnopy/actions/workflows/ci.yml/badge.svg)](https://github.com/AlonsoLP/HUDnopy/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/Version-0.2.0-blue.svg)](#hudnopy)
+[![Version](https://img.shields.io/badge/Version-0.3.0-blue.svg)](#hudnopy)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0--windows-512BD4)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20WPF%20%2B%20Web%20HUD-0078D6)](#)
 [![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-orange.svg)](LICENSE)
 [![Languages](https://img.shields.io/badge/Languages-EN%20%7C%20ES%20%7C%20FR%20%7C%20DE%20%7C%20RU%20%7C%20PT-brightgreen)](#localization)
 
 > [!NOTE]
-> **HUDnopy `v0.2.0`** — Active open-source release with full 8-tab Desktop ↔ Web HUD parity, real-time streaming COVAS AI Copilot, persistent warm Piper Neural TTS, and 15 automated CI test suites. Feedback and bug reports are always welcome.
+> **HUDnopy `v0.3.0`** — Active open-source release with full 8-tab Desktop ↔ Web HUD parity, streaming COVAS AI Copilot with Cockpit Screen Vision, NAudio 3.3 WASAPI audio, 10 opt-in community integrations (cAPI, EDDN, EDSM, Inara, Spansh, EliteBGS, Ardent, EDAstro DSSA, Canonn, Discord), privacy-safe 1-click Support ZIP diagnostics, and **30 automated CI test suites**. Feedback and bug reports are always welcome.
 
 **HUDnopy** is an open-source desktop telemetry HUD, responsive Web MFD, Fleet Carrier manager, Spansh route/trade assistant, and voice-enabled AI Copilot (COVAS) for **Elite Dangerous**.
 
@@ -29,12 +29,13 @@ Built with **.NET 10 / WPF** and an embedded **Kestrel HTTPS + WebSocket** serve
 - **Combat, Mining, Missions & Spansh / GalNet**
   - Live target telemetry, combat session stats, massacre stack tracker, missions grouped by system with pending-cargo warnings, asteroid prospector, BGS/Powerplay, colonisation tracker, and historical Journal viewer.
   - Built-in **Spansh** plotters (Neutron, Road to Riches, Exomastery, Fleet Carrier, Trade, Pristine Mining Rings, Nearest Services, Colonisation Suppliers, and Li Yong-Rui Ship/Module search) plus multi-language **GalNet News**.
-- **COVAS AI Copilot (Streaming & ReAct) & Piper Neural TTS**
-  - Supports **Local LLMs (Ollama / LM Studio)**, **Google Gemini** (`gemini-flash-lite-latest` default), and **OpenAI / Groq / OpenRouter** with real-time **SSE sentence-by-sentence streaming**, configurable **Thinking Mode** (`no`/`auto`/`yes`), 2-step read-only `[[QUERY]]` analytics, instant **zero-LLM Voice Macros**, **6-language zero-token tactical announcements**, Global Push-to-Talk hotkey, Wake Word, Hands-Free VAD, persistent memory, and voice timers.
-  - Built-in **Piper Neural TTS** running as a **persistent warm daemon** (~100–150 ms per sentence, 11 voices across 6 languages) plus **Windows SAPI** fallback.
-- **Frontier cAPI, Community Sync & Secure Web HUD**
-  - Official **Frontier Companion API (cAPI)** via OAuth 2.0 + PKCE and **Windows DPAPI** encrypted tokens, plus independent opt-in sync for **EDDN** (14 schemas), **EDSM**, and **Inara**.
-  - Self-signed **HTTPS Web MFD** (7 tabs + **Split MFD** mode for wide tablets/monitors) with QR-code pairing, session codes, VPN binding, and auto-context `.binds` Control Deck.
+- **COVAS AI Copilot (Streaming, ReAct & Screen Vision) & NAudio 3.3 Audio**
+  - Supports **Local LLMs (Ollama / LM Studio)**, **Google Gemini** (`gemini-flash-lite-latest` default), and **OpenAI / Groq / OpenRouter** with real-time **SSE sentence-by-sentence streaming**, **Multimodal Cockpit Screen Vision**, configurable **Thinking Mode** (`no`/`auto`/`yes`), instant **zero-LLM cockpit telemetry queries**, 2-step read-only `[[QUERY]]` analytics, fuzzy **zero-LLM Voice Macros**, **6-language zero-token tactical announcements**, Global Push-to-Talk hotkey, Wake Word, adaptive noise-floor + ZCR Hands-Free VAD with barge-in, persistent memory, and voice timers.
+  - Built-in **Piper Neural TTS** running as a **persistent warm daemon** with parallel sentence pre-synthesis (~100–150 ms per sentence, 11 voices across 6 languages), powered by **NAudio 3.3** shared-mode `WasapiPlayer` (automatic device routing), `EffectChain` voice conditioning, and automatic microphone hot-swap reconnection.
+- **Frontier cAPI, 10 Opt-In Community Integrations, Secure Web HUD & Diagnostics**
+  - Official **Frontier Companion API (cAPI)** via OAuth 2.0 + PKCE and **Windows DPAPI** encrypted tokens, plus strictly opt-in integrations for **EDDN** (14 schemas + SHA-256 dedup), **EDSM**, **Inara**, **Spansh**, **EliteBGS v5**, **Ardent Insight**, **EDAstro DSSA**, **Canonn R&D**, and **Discord** (async Named Pipe Rich Presence + rich Webhook embeds).
+  - Self-signed **HTTPS Web MFD** (7 tabs + **Split MFD** mode, Brotli/GZip pre-compressed assets, per-socket parallel WebSocket broadcasts) with ISO-standard QR-code pairing, session codes, VPN binding, and auto-context `.binds` Control Deck.
+  - Built-in **Diagnostics & Support ZIP** (`Settings → Diagnostics → 📦 Export Support ZIP`): daily rolling logs, 40-entry breadcrumbs, Web HUD JS error capture, and automatic removal of all personal data (API keys, tokens, webhooks, commander names, notes, and Windows usernames).
 
 ---
 
@@ -64,14 +65,15 @@ dotnet run --project HUDnopy.Tests/HUDnopy.Tests.csproj -c Release
 
 ```text
 HUDnopy/
-├── HUDnopy.Tests/         # Zero-dependency automated regression test suite (15 suites, CI-integrated)
-├── Localization/          # Strongly-typed translation catalogs and parity validators
+├── HUDnopy.Tests/         # Zero-dependency automated regression test suite (30 suites, CI + JUnit XML)
+├── Localization/          # Strongly-typed FrozenDictionary translation catalogs and parity validators
 ├── Models/                # Domain models (ShipState, Exploration, Operations, ModuleDisplayCatalog, AppConfig)
 ├── Resources/Languages/   # 6-language JSON packs (en-GB default, es-ES, fr-FR, de-DE, ru-RU, pt-BR)
 ├── Services/
 │   ├── AiCopilot/         # Modular AiCopilotService partials (Prompt, Queries, Providers)
+│   ├── Integrations/      # Opt-in external integrations (Discord, EliteBGS, Ardent, EDAstro/Canonn)
 │   ├── Telemetry/         # EliteFileWatcherService partials (Core, Snapshots, Journal, Exploration)
-│   └── *.cs               # Alerts, Audio, Piper TTS, Bindings, Frontier cAPI, Community Sync, Spansh, Web Server
+│   └── *.cs               # Alerts, Audio (NAudio 3.3), Piper TTS, Diagnostics, cAPI, Community Sync, Spansh, Web Server
 ├── UI/
 │   ├── Controls/          # Reusable WPF controls and attached localization properties
 │   └── MainWindow.*.cs    # Modular partial classes for MainWindow by functional domain

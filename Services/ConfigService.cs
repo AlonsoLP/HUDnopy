@@ -60,9 +60,9 @@ public class ConfigService
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fall back to default configuration if reading fails
+            AppDiagnosticsLogger.Warn("ConfigService", $"Failed to load config.json; falling back to defaults: {ex.Message}");
         }
 
         Current = new AppConfig();
@@ -77,9 +77,9 @@ public class ConfigService
             ApplyThemeToApplication();
             ConfigChanged?.Invoke(Current);
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignorar errores de escritura menores
+            AppDiagnosticsLogger.Warn("ConfigService", $"Failed to save config.json: {ex.Message}");
         }
     }
 

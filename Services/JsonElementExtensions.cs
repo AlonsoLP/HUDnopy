@@ -15,6 +15,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace HUDnopy.Services;
 
@@ -89,21 +91,81 @@ internal static class HttpClientHeaderDefaults
     internal static Func<HttpMessageHandler>? TestHttpHandlerFactory { get; set; }
 
     /// <summary>
+    /// Optional time provider for <see cref="TransientHttpRetryHandler"/> backoff delays (defaults to <see cref="TimeProvider.System"/>).
+    /// </summary>
+    internal static TimeProvider RetryTimeProvider { get; set; } = TimeProvider.System;
+
+    /// <summary>
     /// Creates an <see cref="HttpClient"/> configured with the specified timeout, automatic GZip/Brotli decompression,
-    /// DNS-safe connection pooling, and the unified HUDnopy User-Agent.
+    /// DNS-safe connection pooling, transient idempotent GET/HEAD retries, and the unified HUDnopy User-Agent.
     /// </summary>
     public static HttpClient CreateHttpClient(TimeSpan timeout, HttpMessageHandler? handler = null)
     {
-        HttpMessageHandler effectiveHandler = handler
+        HttpMessageHandler innerHandler = handler
             ?? TestHttpHandlerFactory?.Invoke()
             ?? new SocketsHttpHandler
             {
                 AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Brotli,
                 PooledConnectionLifetime = TimeSpan.FromMinutes(5)
             };
-        var client = new HttpClient(effectiveHandler) { Timeout = timeout };
+        var retryHandler = new TransientHttpRetryHandler(innerHandler);
+        var client = new HttpClient(retryHandler) { Timeout = timeout };
         client.DefaultRequestHeaders.UserAgent.Add(UserAgent);
         return client;
+    }
+
+    /// <summary>
+    /// Zero-dependency HTTP retry handler for idempotent GET/HEAD requests on transient network or 5xx/408 gateway errors.
+    /// Never retries POST/PUT/DELETE requests so telemetry uploads (EDDN/Inara/Discord) cannot be duplicated.
+    /// </summary>
+    private sealed class TransientHttpRetryHandler(HttpMessageHandler innerHandler) : DelegatingHandler(innerHandler)
+    {
+        private const int MaxRetries = 2;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            bool isIdempotent = request.Method == HttpMethod.Get || request.Method == HttpMethod.Head;
+            if (!isIdempotent)
+                return await base.SendAsync(request, cancellationToken);
+
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    var response = await base.SendAsync(request, cancellationToken);
+                    if (attempt >= MaxRetries || !IsTransientStatus(response.StatusCode))
+                        return response;
+
+                    TimeSpan delay = ResolveDelay(response, attempt);
+                    response.Dispose();
+                    await Task.Delay(delay, RetryTimeProvider, cancellationToken);
+                }
+                catch (HttpRequestException) when (attempt < MaxRetries && !cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(ComputeBackoff(attempt), RetryTimeProvider, cancellationToken);
+                }
+            }
+        }
+
+        private static bool IsTransientStatus(HttpStatusCode code) => code is
+            HttpStatusCode.RequestTimeout or
+            HttpStatusCode.BadGateway or
+            HttpStatusCode.ServiceUnavailable or
+            HttpStatusCode.GatewayTimeout;
+
+        private static TimeSpan ResolveDelay(HttpResponseMessage response, int attempt)
+        {
+            if (response.Headers.RetryAfter?.Delta is TimeSpan delta && delta > TimeSpan.Zero && delta <= TimeSpan.FromSeconds(5))
+                return delta;
+            return ComputeBackoff(attempt);
+        }
+
+        private static TimeSpan ComputeBackoff(int attempt)
+        {
+            int baseMs = attempt == 0 ? 350 : 800;
+            int jitterMs = Random.Shared.Next(0, 120);
+            return TimeSpan.FromMilliseconds(baseMs + jitterMs);
+        }
     }
 
     /// <summary>

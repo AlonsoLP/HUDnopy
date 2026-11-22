@@ -1010,6 +1010,8 @@
                      "scanUnhandled":  "🔍 Aktuelle Dateien analysieren",
                      "copyUnhandled":  "📋 JSON kopieren",
                      "openUnhandledFile":  "📂 Datei öffnen",
+                     "openLogsFolder":  "📋 Log-Ordner öffnen",
+                     "exportSupportBundle":  "📦 Support-ZIP exportieren",
                      "clearUnhandled":  "🗑 Leeren",
                      "unhandledStatus":  "{0} unverarbeitete Ereignistypen ({1} Meldungen insgesamt) · Zeige {2}",
                      "unhandledEmpty":  "Keine unverarbeiteten Meldungen aufgezeichnet. Klicken Sie auf „Aktuelle Dateien analysieren“ oder starten Sie das Spiel.",

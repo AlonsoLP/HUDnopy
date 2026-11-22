@@ -17,9 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.2.0)'
+        description: 'Release tag (e.g. v0.3.0)'
         required: true
-        default: 'v0.2.0'
+        default: 'v0.3.0'
 
 permissions:
   contents: write
@@ -120,13 +120,11 @@ jobs:
           ## HUDnopy __TAG__
 
           __BANNER__### Highlights
-          - **8-Tab Desktop & Web HUD Parity:** Reorganized into 8 focused desktop tabs (7 in Web MFD, plus Split MFD mode) with live Elite Server Status, Galaxy BGS Tick, Landing Pad bay locator & TTS guidance, contextual Mini-HUD, and 1-click EDSY / Coriolis ship loadout export.
-          - **COVAS AI Copilot (Streaming, ReAct & Voice Macros):** Real-time SSE sentence-by-sentence streaming + persistent warm Piper Neural TTS daemon, configurable Thinking Mode (`no`/`auto`/`yes`), 2-step read-only `[[QUERY]]` analytics, instant zero-LLM Voice Macros, zero-token tactical announcements in all 6 languages, global Push-to-Talk hotkey, Wake Word, persistent memory, and voice timers.
-          - **Exploration, Exobiology & Surface Compass:** Live spherical surface compass tape with 1-click Last Exo Sample targeting, FSS/DSS body table with Universal Cartographics & Odyssey exobiology predictions, and historical Journal expedition analytics with Markdown export.
-          - **Engineering Wishlist, Cargo & Shipyard:** Curated ship & Odyssey engineering wishlist with live missing-material tracking, instant docked cargo sell-value & colonisation cross-reference, automatic EDSM Shipyard fallback, and official multilingual module names across all 6 languages.
-          - **Fleet Carrier, Spansh & GalNet:** Live carrier jump countdown with TTS warnings and financial runway, mass-aware tritium calculator, Spansh route/trade/mining/services/colonisation tools, and multi-language GalNet reader.
-          - **Frontier cAPI & Community Sync:** Official Frontier Companion API (OAuth 2.0 + PKCE + DPAPI encrypted tokens) plus opt-in EDDN, EDSM, and Inara sync.
-          - **6 Languages (English Default):** English (`en-GB`, default), Spanish (`es-ES`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`).
+          - **Expanded External Integrations (Strict Opt-In):** Added **Discord** (contextual Rich Presence via async Named Pipe IPC + Webhook embeds for ELW, 3/3 Exobiology, Carrier jumps with `<t:UNIX:R>` countdowns, BGS conflicts, ship builds, and cockpit screenshots), **EliteBGS v5** faction watchlist, **Ardent Insight** live commodity markets, **EDAstro DSSA** nearest carrier finder, **Canonn R&D** scientific telemetry, **Frontier cAPI** Fleet Carrier services/bartender/journal summary, **EDSM** live discovery/traffic/PvP intel, **Inara** profile card, and SHA-256 deduplicated **EDDN** uploads.
+          - **COVAS AI Copilot Upgrades:** Added **Multimodal Cockpit Screen Vision** (Desktop & Web HUD), instant **zero-LLM cockpit telemetry queries**, Levenshtein fuzzy voice macros, adaptive noise-floor + ZCR VAD with sustained-voice barge-in, 18 s hands-free follow-up window, 60 s query caching, new `[[QUERY]]`/`[[ACTION]]` tags (including Discord sharing), and parallel Piper Neural TTS sentence pre-synthesis.
+          - **Modern .NET 10 / C# 14 & NAudio 3.3 Audio Engine:** Upgraded to **NAudio 3.3.0** with shared-mode `WasapiPlayer` (automatic Windows default-device routing + `IAudioClient3` low latency), `EffectChain` (`GateEffect` + `CompressorEffect`) voice conditioning, and automatic microphone hot-swap reconnection. Pre-compressed Brotli/GZip Web HUD assets, per-socket parallel WebSocket broadcasts, parallel historical Journal analytics with SIMD `SearchValues`, `PeriodicTimer`, `FrozenDictionary`/`FrozenSet`, and source-generated `AppConfig` JSON.
+          - **Diagnostics, Privacy-Safe Support ZIP & 30 Automated Test Suites:** Added daily rolling diagnostic logs (`%LocalAppData%\HUDnopy\logs\`), 40-entry in-memory breadcrumbs, Web HUD JS error reporting, global Kestrel HTTP 500 logging, and 1-click **📦 Export Support ZIP** with strict allowlist sanitization (API keys, tokens, webhooks, commander names, notes, memories, and Windows usernames are automatically removed). Verified by **30 automated regression, contract, fuzzing, property-based, concurrency, and security test suites**.
+          - **6 Languages (English Default):** English (`en-GB`, default), Spanish (`es-ES`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`) with 100% key and placeholder parity.
 
           ### Downloads
           - **Windows Installer (`HUDnopy-__TAG__-Setup.exe`):** Per-user installer (no admin prompt required) with Start Menu and optional Desktop shortcuts.

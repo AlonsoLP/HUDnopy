@@ -14,7 +14,7 @@ cd HUDnopy
 dotnet run --project HUDnopy.csproj
 ```
 
-To build and run the automated regression test suite (15 suites):
+To build and run the automated regression test suite (30 suites):
 
 ```powershell
 dotnet build HUDnopy.csproj -c Release
@@ -30,6 +30,7 @@ dotnet run --project HUDnopy.Tests/HUDnopy.Tests.csproj -c Release
 | `frontier_capi.dat` | `%LocalAppData%\HUDnopy\` | DPAPI-encrypted Frontier cAPI OAuth tokens. |
 | `Piper\` | `%LocalAppData%\HUDnopy\Piper\` | Portable Piper neural TTS engine and downloaded ONNX voice models. |
 | `Spansh\` | `%LocalAppData%\HUDnopy\Spansh\` | Local disk cache for Spansh system intelligence lookups. |
+| `logs\` | `%LocalAppData%\HUDnopy\logs\` | Daily rolling diagnostic logs (7-day retention, 5 MB cap, secrets and Windows username paths automatically removed). |
 
 ## Game Paths & Profiles
 
@@ -54,3 +55,11 @@ Open **Settings → Appearance & Window**:
 
 - **Settings → Alerts:** Configure low/critical fuel percentages, critical hull threshold, mission expiry warning/critical hours, and the per-channel alert matrix. HUDnopy automatically suppresses false fuel/shield alerts while Elite Dangerous is on the main menu or loading screen (`Flags == 0 && Flags2 == 0`).
 - **Settings → Voice & Audio:** Configure **Piper Neural TTS** or **Windows SAPI**, speech queue mode (`tactical`, `immediate`, `sequential`), unified speech rate (`-5` to `+5`), master volume, and custom sound folders (`WAV`, `MP3`, `AIFF`, `M4A`/`AAC`/`WMA`/`FLAC`). Unlinking a folder preserves your files on disk and marks missing assignments cleanly.
+
+## Diagnostics, Crash Logs & Reporting Bugs
+
+HUDnopy includes a built-in, privacy-safe diagnostic system under **Settings → Diagnostics**:
+
+- **📋 Open logs folder:** Opens `%LocalAppData%\HUDnopy\logs\` containing daily rolling logs (`hudnopy-YYYY-MM-DD.log`, 7-day retention, 5 MB cap) with desktop crashes, Web Server HTTP 500 errors, and Web HUD JavaScript errors.
+- **📦 Export Support ZIP:** Generates a `HUDnopy-Support-YYYYMMDD-HHmmss.zip` archive containing `environment.txt`, `config.sanitized.json` (strict technical allowlist), recent in-memory breadcrumbs, and the last 3 days of logs.
+- **Automatic Privacy Protection:** Personal information — including API keys, OAuth tokens, Discord webhook URLs, passwords, commander names, AI memory, personal system notes, surface bookmarks, watched factions, local LAN IPs, and your Windows user folder path — is **automatically removed** before any log or Support ZIP is created.

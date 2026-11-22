@@ -36,8 +36,9 @@ internal static class AudioPlaybackHelper
                 .WithMmcssThreadPriority("Audio")
                 .Build();
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("Audio", $"WasapiPlayer init failed (HResult=0x{ex.HResult:X8}: {ex.Message}); falling back to WaveOut.");
             return new WaveOut
             {
                 BufferMilliseconds = Math.Max(20, latencyMs / 2),
@@ -74,8 +75,9 @@ internal static class AudioPlaybackHelper
 
             return output.Length > 0 ? output.ToArray() : rawPcm16;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("Audio", $"EffectChain voice conditioning failed; using raw PCM ({ex.Message}).");
             return rawPcm16;
         }
     }

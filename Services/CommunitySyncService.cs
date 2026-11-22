@@ -258,6 +258,7 @@ public sealed class CommunitySyncService : IDisposable
         catch (Exception ex)
         {
             LastEddnStatus = $"Error: {ex.Message}";
+            AppDiagnosticsLogger.Warn("EDDN", $"Upload failed for '{gameEvent.EventType}': {ex.Message}");
             UpdateStatus($"EDDN: {ex.Message}", increment: false);
         }
     }
@@ -313,6 +314,7 @@ public sealed class CommunitySyncService : IDisposable
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("EDDN", $"Snapshot upload failed for '{snapshotName}': {ex.Message}");
             UpdateStatus($"EDDN ({snapshotName}): {ex.Message}", increment: false);
         }
     }
