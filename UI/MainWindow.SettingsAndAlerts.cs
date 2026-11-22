@@ -985,7 +985,7 @@ public partial class MainWindow
             {
                 using var ms = new MemoryStream(wav);
                 using var reader = new NAudio.Wave.WaveFileReader(ms);
-                using var output = new NAudio.Wave.WaveOutEvent { DesiredLatency = 80, NumberOfBuffers = 2 };
+                using var output = AudioPlaybackHelper.CreateOutputPlayer(latencyMs: 80);
                 using var done = new System.Threading.ManualResetEventSlim(false);
                 output.PlaybackStopped += (_, _) => done.Set();
                 output.Init(reader);

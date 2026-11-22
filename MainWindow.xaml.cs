@@ -63,11 +63,13 @@ public partial class MainWindow : Window
     private List<SpanshRouteWaypoint> _spanshRouteWaypoints = new();
     private string _lastSpanshRouteAutoCopied = "";
     private bool _viewingHistoricalJournal;
-    private NAudio.Wave.WaveInEvent? _aiVoiceRecorder;
+    private NAudio.Wave.WaveIn? _aiVoiceRecorder;
     private MemoryStream? _aiVoiceStream;
     private NAudio.Wave.WaveFileWriter? _aiVoiceWriter;
     private bool _isRecordingAiVoice;
-    private NAudio.Wave.WaveInEvent? _aiVadRecorder;
+    private NAudio.Wave.WaveIn? _aiVadRecorder;
+    private NAudio.CoreAudioApi.MMDeviceEnumerator? _audioDeviceEnumerator;
+    private NAudio.CoreAudioApi.MMDeviceNotificationClient? _audioDeviceNotifications;
     private bool _aiHandsFreeActive;
     private volatile bool _aiHandsFreeProcessing;
     private readonly Lock _vadLock = new();

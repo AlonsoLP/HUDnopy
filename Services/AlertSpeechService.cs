@@ -481,11 +481,7 @@ public sealed class AlertSpeechService
 
             audioStream.Position = 0;
             using var reader = new WaveFileReader(audioStream);
-            using var output = new WaveOutEvent
-            {
-                DesiredLatency = 80,
-                NumberOfBuffers = 2
-            };
+            using var output = AudioPlaybackHelper.CreateOutputPlayer(latencyMs: 80);
 
             var tcs = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
             output.PlaybackStopped += (_, e) => tcs.TrySetResult(e.Exception);

@@ -4,14 +4,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    labels:
-      - "dependencies"
-      - "ci"
 
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "weekly"
-    labels:
-      - "dependencies"
-      - "dotnet"
+    ignore:
+      # Keep System.Speech on .NET 10 LTS (10.x) until HUDnopy targets .NET 11+
+      - dependency-name: "System.Speech"
+        update-types: ["version-update:semver-major"]

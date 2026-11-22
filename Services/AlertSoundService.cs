@@ -145,7 +145,7 @@ public sealed class AlertSoundService
         {
             Stream? stream = null;
             WaveStream? reader = null;
-            WaveOutEvent? output = null;
+            IWavePlayer? output = null;
             int disposed = 0;
             string profileName = selectedProfile ?? "Auto";
 
@@ -177,11 +177,7 @@ public sealed class AlertSoundService
                     stream = CreateWaveStream(profile, 1);
                     reader = new WaveFileReader(stream);
                 }
-                output = new WaveOutEvent
-                {
-                    DesiredLatency = 80,
-                    NumberOfBuffers = 2
-                };
+                output = AudioPlaybackHelper.CreateOutputPlayer(latencyMs: 80);
                 output.PlaybackStopped += (_, eventArgs) =>
                 {
                     if (eventArgs.Exception is not null)

@@ -29,7 +29,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Resolve version metadata
         id: meta
@@ -48,7 +48,7 @@ jobs:
           Write-Host "Building HUDnopy tag=$tag version=$version prerelease=$isPrerelease"
 
       - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -140,12 +140,13 @@ jobs:
           $notes | Out-File -FilePath "release-notes.md" -Encoding utf8
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: HUDnopy ${{ steps.meta.outputs.tag }}
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           body_path: release-notes.md
+          fail_on_unmatched_files: true
           files: |
             dist/HUDnopy-${{ steps.meta.outputs.tag }}-Setup.exe
             dist/HUDnopy-${{ steps.meta.outputs.tag }}-win-x64-portable.zip

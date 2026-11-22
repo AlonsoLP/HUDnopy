@@ -461,7 +461,7 @@ public partial class MainWindow
                 _aiVoiceStream = new MemoryStream();
                 var format = new NAudio.Wave.WaveFormat(16000, 16, 1);
                 _aiVoiceWriter = new NAudio.Wave.WaveFileWriter(new NonClosingStream(_aiVoiceStream), format);
-                _aiVoiceRecorder = new NAudio.Wave.WaveInEvent { WaveFormat = format, BufferMilliseconds = 80 };
+                _aiVoiceRecorder = new NAudio.Wave.WaveIn { WaveFormat = format, BufferMilliseconds = 80 };
                 _aiVoiceRecorder.DataAvailable += (_, args) =>
                 {
                     try { _aiVoiceWriter?.Write(args.Buffer, 0, args.BytesRecorded); } catch { }
@@ -550,10 +550,8 @@ public partial class MainWindow
         var ops = OperationsTranslations.ForLanguage(_uiLanguage);
         try
         {
-            var format = new NAudio.Wave.WaveFormat(16000, 16, 1);
-            _aiVadRecorder = new NAudio.Wave.WaveInEvent { WaveFormat = format, BufferMilliseconds = 100 };
-            _aiVadRecorder.DataAvailable += OnVadAudioDataAvailable;
-            _aiVadRecorder.StartRecording();
+            StartVadRecorderInstance();
+            SubscribeAudioDeviceNotifications();
             _aiHandsFreeActive = true;
             BtnAiHandsFree.Content = ops["aiHandsFreeListening"];
             BtnAiHandsFree.SetResourceReference(BackgroundProperty, "HudAccentBrush");
@@ -567,9 +565,80 @@ public partial class MainWindow
         }
     }
 
+    private void StartVadRecorderInstance()
+    {
+        try
+        {
+            if (_aiVadRecorder is not null)
+            {
+                _aiVadRecorder.DataAvailable -= OnVadAudioDataAvailable;
+                _aiVadRecorder.StopRecording();
+                _aiVadRecorder.Dispose();
+            }
+        }
+        catch { }
+        _aiVadRecorder = null;
+
+        var format = new NAudio.Wave.WaveFormat(16000, 16, 1);
+        _aiVadRecorder = new NAudio.Wave.WaveIn { WaveFormat = format, BufferMilliseconds = 100 };
+        _aiVadRecorder.DataAvailable += OnVadAudioDataAvailable;
+        _aiVadRecorder.StartRecording();
+    }
+
+    private void SubscribeAudioDeviceNotifications()
+    {
+        UnsubscribeAudioDeviceNotifications();
+        try
+        {
+            _audioDeviceEnumerator = new NAudio.CoreAudioApi.MMDeviceEnumerator();
+            _audioDeviceNotifications = _audioDeviceEnumerator.CreateNotificationClient();
+            _audioDeviceNotifications.DefaultDeviceChanged += OnDefaultAudioDeviceChanged;
+        }
+        catch
+        {
+            // Optional hot-swap notification; ignore on restricted audio subsystems
+            UnsubscribeAudioDeviceNotifications();
+        }
+    }
+
+    private void UnsubscribeAudioDeviceNotifications()
+    {
+        if (_audioDeviceNotifications is not null)
+        {
+            _audioDeviceNotifications.DefaultDeviceChanged -= OnDefaultAudioDeviceChanged;
+            try { _audioDeviceNotifications.Dispose(); } catch { }
+            _audioDeviceNotifications = null;
+        }
+        try { _audioDeviceEnumerator?.Dispose(); } catch { }
+        _audioDeviceEnumerator = null;
+    }
+
+    private void OnDefaultAudioDeviceChanged(object? sender, NAudio.CoreAudioApi.DefaultDeviceChangedEventArgs e)
+    {
+        if (!_aiHandsFreeActive || e.Flow != NAudio.CoreAudioApi.DataFlow.Capture)
+            return;
+
+        // Rebind hands-free VAD capture automatically when the Windows default microphone changes
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!_aiHandsFreeActive)
+                return;
+            try
+            {
+                StartVadRecorderInstance();
+                TxtStatusBarLeft.Text = OperationsTranslations.ForLanguage(_uiLanguage)["aiHandsFreeStatusOn"];
+            }
+            catch
+            {
+                // Keep existing state if the new endpoint is still initializing
+            }
+        });
+    }
+
     private void StopAiHandsFree()
     {
         _aiHandsFreeActive = false;
+        UnsubscribeAudioDeviceNotifications();
         lock (_vadLock)
         {
             _vadPreBuffer.Clear();
@@ -801,10 +870,11 @@ public partial class MainWindow
 
     private static byte[] WrapPcm16AsWav(byte[] pcmData, int sampleRate, int channels)
     {
+        byte[] conditioned = AudioPlaybackHelper.ProcessVoicePcmForRecognition(pcmData, sampleRate, channels);
         using var ms = new MemoryStream();
         using (var writer = new NAudio.Wave.WaveFileWriter(new NonClosingStream(ms), new NAudio.Wave.WaveFormat(sampleRate, 16, channels)))
         {
-            writer.Write(pcmData, 0, pcmData.Length);
+            writer.Write(conditioned, 0, conditioned.Length);
         }
         return ms.ToArray();
     }
