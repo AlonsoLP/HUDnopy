@@ -154,8 +154,13 @@
                 </Grid.RowDefinitions>
                 <Border x:Name="SectionNavigationPanel" Grid.Row="0" Visibility="Collapsed"
                         Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}"
-                        BorderThickness="1" Padding="6" Margin="0,0,0,12">
-                    <local:SectionNavigationPanel x:Name="SectionNavigationItems" />
+                        BorderThickness="1" Padding="6,4" Margin="0,0,0,10">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock x:Name="TxtActiveSectionTitle" DockPanel.Dock="Right"
+                                   Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12"
+                                   VerticalAlignment="Center" Margin="12,0,6,0" />
+                        <WrapPanel x:Name="SectionNavigationItems" VerticalAlignment="Center" />
+                    </DockPanel>
                 </Border>
 
                 <ScrollViewer x:Name="ViewDashboard" Grid.Row="1" Visibility="Visible" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Hidden">
@@ -197,8 +202,8 @@
                         <Border x:Name="SessionStatsCard" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="14" Margin="0,0,0,14">
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,6">
+                                    <Button x:Name="BtnResetSessionStats" DockPanel.Dock="Right" Content="🔄" ToolTip="Reiniciar sesión" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="8,0,0,0" Click="BtnResetSessionStats_Click" />
                                     <TextBlock x:Name="LblSessionStatsTitle" Text="RESUMEN FINANCIERO Y ESTADÍSTICO DE LA SESIÓN" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-                                    <Button x:Name="BtnResetSessionStats" DockPanel.Dock="Right" Content="🔄 Reiniciar sesión" Style="{StaticResource HudButtonStyle}" Padding="8,3" Click="BtnResetSessionStats_Click" />
                                 </DockPanel>
                                 <TextBlock x:Name="TxtSessionStatsSummary" Text="Esperando actividad de la sesión actual..." Foreground="{StaticResource HudTextBrush}" TextWrapping="Wrap" />
                                 <DockPanel Margin="0,6,0,0">
@@ -276,7 +281,7 @@
                                 <Border Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16">
                                     <StackPanel>
                                         <TextBlock Text="DISTRIBUIDOR DE ENERGÍA (PULSAR PARA AJUSTAR)" local:UiText.Key="power" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,12" />
-                                        <WrapPanel>
+                                        <UniformGrid Columns="4">
                                             <Button Style="{StaticResource HudButtonStyle}" Margin="3" Click="BtnAction_Click" Tag="IncreaseSystemsPower">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Text="SIS" local:UiText.Key="pipSystems" Foreground="{StaticResource HudMutedBrush}" FontSize="11" HorizontalAlignment="Center" />
@@ -301,7 +306,7 @@
                                                     <TextBlock Text="⚖" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="20" FontWeight="Black" HorizontalAlignment="Center" Margin="0,4" />
                                                 </StackPanel>
                                             </Button>
-                                        </WrapPanel>
+                                        </UniformGrid>
                                     </StackPanel>
                                 </Border>
 
@@ -353,18 +358,28 @@
                                 <StackPanel>
                                     <TextBlock Text="Telemetría a pie" local:UiText.Key="onFootTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,10" />
                                     <TextBlock x:Name="TxtOnFootStatus" Text="Sin estado a pie" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
-                                    <WrapPanel>
-                                        <TextBlock Text="Oxígeno: " local:UiText.Key="oxygen" Foreground="{StaticResource HudMutedBrush}" />
-                                        <TextBlock x:Name="TxtOnFootOxygen" Text="---" Margin="0,0,18,4" />
-                                        <TextBlock Text="Salud: " local:UiText.Key="health" Foreground="{StaticResource HudMutedBrush}" />
-                                        <TextBlock x:Name="TxtOnFootHealth" Text="---" Margin="0,0,18,4" />
-                                        <TextBlock Text="Temperatura: " local:UiText.Key="temperature" Foreground="{StaticResource HudMutedBrush}" />
-                                        <TextBlock x:Name="TxtOnFootTemperature" Text="---" Margin="0,0,18,4" />
-                                        <TextBlock Text="Gravedad: " local:UiText.Key="gravity" Foreground="{StaticResource HudMutedBrush}" />
-                                        <TextBlock x:Name="TxtOnFootGravity" Text="---" Margin="0,0,18,4" />
-                                        <TextBlock Text="Arma seleccionada: " local:UiText.Key="weapon" Foreground="{StaticResource HudMutedBrush}" />
-                                        <TextBlock x:Name="TxtOnFootWeapon" Text="---" Margin="0,0,18,4" />
-                                    </WrapPanel>
+                                    <UniformGrid Columns="5" Tag="150" SizeChanged="ResponsiveGrid_SizeChanged" Margin="0,0,0,8">
+                                        <StackPanel Margin="0,0,12,8">
+                                            <TextBlock Text="Oxígeno: " local:UiText.Key="oxygen" Foreground="{StaticResource HudMutedBrush}" FontSize="10" />
+                                            <TextBlock x:Name="TxtOnFootOxygen" Text="---" FontWeight="Bold" FontSize="14" Margin="0,3,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,12,8">
+                                            <TextBlock Text="Salud: " local:UiText.Key="health" Foreground="{StaticResource HudMutedBrush}" FontSize="10" />
+                                            <TextBlock x:Name="TxtOnFootHealth" Text="---" FontWeight="Bold" FontSize="14" Margin="0,3,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,12,8">
+                                            <TextBlock Text="Temperatura: " local:UiText.Key="temperature" Foreground="{StaticResource HudMutedBrush}" FontSize="10" />
+                                            <TextBlock x:Name="TxtOnFootTemperature" Text="---" FontWeight="Bold" FontSize="14" Margin="0,3,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,12,8">
+                                            <TextBlock Text="Gravedad: " local:UiText.Key="gravity" Foreground="{StaticResource HudMutedBrush}" FontSize="10" />
+                                            <TextBlock x:Name="TxtOnFootGravity" Text="---" FontWeight="Bold" FontSize="14" Margin="0,3,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,12,8">
+                                            <TextBlock Text="Arma seleccionada: " local:UiText.Key="weapon" Foreground="{StaticResource HudMutedBrush}" FontSize="10" />
+                                            <TextBlock x:Name="TxtOnFootWeapon" Text="---" FontWeight="Bold" FontSize="14" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </UniformGrid>
                                     <TextBlock x:Name="TxtActiveSuit" Text="Traje: --- · Equipamiento: ---" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
                                 </StackPanel>
                             </Border>
@@ -403,8 +418,8 @@
                     <Border x:Name="OperationsCombatSection" Visibility="Collapsed" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16" Margin="0,14,0,0">
                         <StackPanel>
                             <DockPanel Margin="0,0,0,8">
+                                <Button x:Name="BtnResetCombatSession" DockPanel.Dock="Right" Content="🔄" local:UiText.TooltipKey="combatResetSession" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="8,0,0,0" Click="BtnResetCombatSession_Click" />
                                 <TextBlock Text="SESIÓN DE COMBATE, RECOMPENSAS Y MASACRES" local:UiText.Key="combatTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" />
-                                <Button x:Name="BtnResetCombatSession" DockPanel.Dock="Right" Content="🔄 Reiniciar sesión" local:UiText.Key="combatResetSession" Style="{StaticResource HudButtonStyle}" Padding="8,4" Click="BtnResetCombatSession_Click" />
                             </DockPanel>
                             <TextBlock x:Name="TxtCombatSessionStats" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8" />
                             <DataGrid x:Name="GridCombatFactions" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,0,0,14"
@@ -526,12 +541,12 @@
                             <Border x:Name="SystemNoteCard" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,12,0,0">
                                 <StackPanel>
                                     <DockPanel Margin="0,0,0,6">
-                                        <TextBlock Text="CUADERNO DE BITÁCORA (NOTA DEL SISTEMA ACTUAL)" local:UiText.Key="systemNoteTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" />
-                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                            <Button x:Name="BtnOpenInaraSystem" Content="🌐 Inara" Style="{StaticResource HudButtonStyle}" Padding="8,3" Margin="0,0,6,0" Click="BtnOpenInaraSystem_Click" />
-                                            <Button x:Name="BtnFetchEdsmIntel" Content="🛰 Tráfico EDSM" local:UiText.Key="edsmIntelBtn" Style="{StaticResource HudButtonStyle}" Padding="8,3" Margin="0,0,6,0" Click="BtnFetchEdsmIntel_Click" />
-                                            <Button x:Name="BtnSaveSystemNote" Content="💾 Guardar nota" local:UiText.Key="saveNote" Style="{StaticResource HudButtonStyle}" Padding="8,3" Click="BtnSaveSystemNote_Click" />
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                                            <Button x:Name="BtnOpenInaraSystem" Content="🌐" ToolTip="Inara" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,0" Click="BtnOpenInaraSystem_Click" />
+                                            <Button x:Name="BtnFetchEdsmIntel" Content="🛰" local:UiText.TooltipKey="edsmIntelBtn" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,0" Click="BtnFetchEdsmIntel_Click" />
+                                            <Button x:Name="BtnSaveSystemNote" Content="💾" local:UiText.TooltipKey="saveNote" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Click="BtnSaveSystemNote_Click" />
                                         </StackPanel>
+                                        <TextBlock Text="CUADERNO DE BITÁCORA (NOTA DEL SISTEMA ACTUAL)" local:UiText.Key="systemNoteTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" />
                                     </DockPanel>
                                     <TextBlock x:Name="TxtEdsmDiscoveryBadge" Foreground="{DynamicResource HudOkBrush}" FontSize="11.5" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,4" Visibility="Collapsed" />
                                     <TextBlock x:Name="TxtEdsmSystemIntel" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="11.5" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,6" Visibility="Collapsed" />
@@ -564,8 +579,8 @@
                             <Border x:Name="EliteBgsWatchlistCard" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,12,0,0">
                                 <StackPanel>
                                     <DockPanel Margin="0,0,0,6">
+                                        <Button x:Name="BtnRefreshEliteBgs" DockPanel.Dock="Right" Content="🔄" ToolTip="Actualizar BGS" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="8,0,0,0" Click="BtnRefreshEliteBgs_Click" />
                                         <TextBlock Text="SEGUIMIENTO DE FACCIONES (ELITEBGS)" local:UiText.Key="eliteBgsWatchlistTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-                                        <Button x:Name="BtnRefreshEliteBgs" DockPanel.Dock="Right" Content="🔄 Actualizar BGS" Style="{StaticResource HudButtonStyle}" Padding="8,3" Click="BtnRefreshEliteBgs_Click" />
                                     </DockPanel>
                                     <TextBlock x:Name="TxtEliteBgsWatchlistStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
                                     <DataGrid x:Name="GridEliteBgsWatchlist" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="240"
@@ -823,7 +838,7 @@
                                         <TextBlock Text="AL:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,4,6" />
                                         <TextBox x:Name="TxtSpanshRouteRange" Width="56" Text="50" Margin="0,0,8,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                         <Button x:Name="BtnPlotSpanshRoute" Content="🧭 Calcular ruta" local:UiText.Key="spanshPlotRoute" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnPlotSpanshRoute_Click" />
-                                        <Button x:Name="BtnImportSpanshCsv" Content="📂 Importar CSV" local:UiText.Key="spanshImportCsv" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,6" Click="BtnImportSpanshCsv_Click" />
+                                        <Button x:Name="BtnImportSpanshCsv" Content="📂" local:UiText.TooltipKey="spanshImportCsv" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,8,6" Click="BtnImportSpanshCsv_Click" />
                                         <CheckBox x:Name="ChkSpanshAutoCopy" Content="Auto-copiar siguiente salto" local:UiText.Key="spanshAutoCopy" IsChecked="True" Foreground="{StaticResource HudTextBrush}" VerticalAlignment="Center" Margin="0,0,0,6" />
                                     </WrapPanel>
                                     <TextBlock x:Name="TxtSpanshRouteStatus" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,6" />
@@ -961,8 +976,8 @@
                                         <TextBox x:Name="TxtTargetLat" Width="90" Margin="0,0,12,6" Padding="6,4" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" TextChanged="SurfaceTarget_TextChanged" />
                                         <TextBlock Text="LON:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
                                         <TextBox x:Name="TxtTargetLon" Width="90" Margin="0,0,12,6" Padding="6,4" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" TextChanged="SurfaceTarget_TextChanged" />
+                                        <Button x:Name="BtnTargetLastExoSample" Content="🎯" local:UiText.TooltipKey="targetLastExo" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,0,6" Click="BtnTargetLastExoSample_Click" />
                                     </WrapPanel>
-                                    <Button x:Name="BtnTargetLastExoSample" Content="🎯 Última muestra Exo" local:UiText.Key="targetLastExo" Style="{StaticResource HudButtonStyle}" HorizontalAlignment="Left" Padding="8,4" Margin="0,0,0,6" Click="BtnTargetLastExoSample_Click" />
                                     <TextBlock x:Name="TxtSurfaceCompassTape" Foreground="{DynamicResource HudAccentBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="12" Margin="0,0,0,4" Visibility="Collapsed" />
                                     <TextBlock x:Name="TxtSurfaceGuidance" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" TextWrapping="Wrap" />
                                 </StackPanel>
@@ -971,9 +986,9 @@
                             <TextBlock Text="MARCADORES DE SUPERFICIE" local:UiText.Key="surfaceBookmarksTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
                             <WrapPanel Margin="0,0,0,8">
                                 <TextBox x:Name="TxtBookmarkLabel" Width="210" Margin="0,0,8,6" Padding="6,4" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" />
-                                <Button x:Name="BtnSaveSurfaceBookmark" Content="📍 Guardar posición actual" local:UiText.Key="saveBookmark" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="8,4" Click="BtnSaveSurfaceBookmark_Click" />
-                                <Button x:Name="BtnNavigateBookmark" Content="🧭 Navegar" local:UiText.Key="navigateBookmark" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="8,4" Click="BtnNavigateBookmark_Click" />
-                                <Button x:Name="BtnDeleteSurfaceBookmark" Content="🗑 Eliminar" local:UiText.Key="deleteBookmark" Style="{StaticResource HudButtonStyle}" Margin="0,0,0,6" Padding="8,4" Click="BtnDeleteSurfaceBookmark_Click" />
+                                <Button x:Name="BtnSaveSurfaceBookmark" Content="📍" local:UiText.TooltipKey="saveBookmark" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" MinWidth="34" Padding="8,4" Click="BtnSaveSurfaceBookmark_Click" />
+                                <Button x:Name="BtnNavigateBookmark" Content="🧭" local:UiText.TooltipKey="navigateBookmark" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" MinWidth="34" Padding="8,4" Click="BtnNavigateBookmark_Click" />
+                                <Button x:Name="BtnDeleteSurfaceBookmark" Content="🗑" local:UiText.TooltipKey="deleteBookmark" Style="{StaticResource HudButtonStyle}" Margin="0,0,0,6" MinWidth="34" Padding="8,4" Click="BtnDeleteSurfaceBookmark_Click" />
                             </WrapPanel>
                             <DataGrid x:Name="GridSurfaceBookmarks" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,0,0,14"
                                       Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
@@ -1009,7 +1024,7 @@
                                     <TextBlock Text="BUSCADOR DE SERVICIOS CERCANOS (SPANSH)" local:UiText.Key="spanshServicesTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,6" />
                                     <WrapPanel Margin="0,0,0,8">
                                         <Button Content="🔄 Material Trader" Tag="material_trader" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnSearchSpanshService_Click" />
-                                        <Button Content="🔬 Tech Broker" Tag="tech_broker" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnSearchSpanshService_Click" />
+                                        <Button Content="🧬 Tech Broker" Tag="tech_broker" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnSearchSpanshService_Click" />
                                         <Button Content="⚖ Interstellar Factors" Tag="interstellar_factors" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnSearchSpanshService_Click" />
                                         <Button Content="⛽ Tritio" Tag="tritium" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,6" Click="BtnSearchSpanshService_Click" />
                                     </WrapPanel>
@@ -1232,8 +1247,8 @@
                                 <TextBox x:Name="TxtMiningTargets" Width="280" Margin="0,0,8,6" Padding="6,4" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" />
                                 <TextBlock Text="Mín. %:" local:UiText.Key="miningMinPctLabel" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
                                 <TextBox x:Name="TxtMiningMinPercent" Width="52" Margin="0,0,8,6" Padding="6,4" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" />
-                                <Button x:Name="BtnSaveMiningFilter" Content="Aplicar" local:UiText.Key="miningApplyFilter" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="8,4" Click="BtnSaveMiningFilter_Click" />
-                                <Button x:Name="BtnResetMiningSession" Content="🔄 Reiniciar sesión" local:UiText.Key="miningResetSession" Style="{StaticResource HudButtonStyle}" Margin="0,0,0,6" Padding="8,4" Click="BtnResetMiningSession_Click" />
+                                <Button x:Name="BtnSaveMiningFilter" Content="✔" local:UiText.TooltipKey="miningApplyFilter" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" MinWidth="34" Padding="8,4" Click="BtnSaveMiningFilter_Click" />
+                                <Button x:Name="BtnResetMiningSession" Content="🔄" local:UiText.TooltipKey="miningResetSession" Style="{StaticResource HudButtonStyle}" Margin="0,0,0,6" MinWidth="34" Padding="8,4" Click="BtnResetMiningSession_Click" />
                             </WrapPanel>
                             <TextBlock x:Name="TxtMiningSessionStats" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8" />
                             <DataGrid x:Name="GridMiningRefined" AutoGenerateColumns="False" IsReadOnly="True"
@@ -1259,7 +1274,7 @@
                                             <ComboBoxItem Content="Musgravite" />
                                             <ComboBoxItem Content="Low Temperature Diamonds" />
                                         </ComboBox>
-                                        <Button x:Name="BtnSearchMiningRings" Content="☄ Buscar anillos prístinos" local:UiText.Key="spanshMiningBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,6" Click="BtnSearchMiningRings_Click" />
+                                        <Button x:Name="BtnSearchMiningRings" Content="⛏ Buscar anillos prístinos" local:UiText.Key="spanshMiningBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,6" Click="BtnSearchMiningRings_Click" />
                                     </WrapPanel>
                                     <TextBlock x:Name="TxtSpanshMiningStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
                                     <DataGrid x:Name="GridSpanshMiningRings" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed"
@@ -1393,7 +1408,7 @@
                                         <ComboBoxItem Content="Sin clasificar" />
                                     </ComboBox>
                                     <TextBox x:Name="TxtWishlistTarget" Width="62" Text="50" Margin="0,0,6,6" Padding="6,4" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" CaretBrush="{DynamicResource HudAccentBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" ToolTip="Objetivo de seguimiento (Wishlist)" />
-                                    <Button x:Name="BtnToggleWishlist" Content="★ Seguir / Quitar" Style="{StaticResource HudButtonStyle}" Margin="0,0,0,6" Padding="8,4" Click="BtnToggleWishlist_Click" />
+                                    <Button x:Name="BtnToggleWishlist" Content="★" ToolTip="Seguir / Quitar" Style="{StaticResource HudButtonStyle}" MinWidth="34" Margin="0,0,0,6" Padding="8,4" Click="BtnToggleWishlist_Click" />
                                 </WrapPanel>
                                 <TextBlock x:Name="TxtMaterialFilterStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" Margin="0,0,0,4" />
                                 <TextBlock x:Name="TxtMaterialTraderSummary" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4" Visibility="Collapsed" />
@@ -1435,9 +1450,9 @@
                                     <TextBlock Text="LISTA DE LA COMPRA DE INGENIERÍA (WISHLIST)" local:UiText.Key="wishlistPlannerTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,8" />
                                     <WrapPanel Margin="0,0,0,8">
                                         <ComboBox x:Name="CmbEngineeringBlueprint" Width="320" Margin="0,0,8,4" SelectedValuePath="Id" DisplayMemberPath="DisplayName" />
-                                        <Button x:Name="BtnAddBlueprintToWishlist" Content="➕ Añadir plano" local:UiText.Key="wishlistAddBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,4" Click="BtnAddBlueprintToWishlist_Click" />
-                                        <Button x:Name="BtnClearWishlist" Content="🗑 Limpiar" local:UiText.Key="wishlistClearBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,4" Click="BtnClearWishlist_Click" />
-                                        <Button x:Name="BtnWishlistFindTrader" Content="🔍 Material Trader (Spansh)" local:UiText.Key="wishlistFindTraderBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,4" Click="BtnWishlistFindTrader_Click" />
+                                        <Button x:Name="BtnAddBlueprintToWishlist" Content="➕" local:UiText.TooltipKey="wishlistAddBtn" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,4" Click="BtnAddBlueprintToWishlist_Click" />
+                                        <Button x:Name="BtnClearWishlist" Content="🗑" local:UiText.TooltipKey="wishlistClearBtn" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,4" Click="BtnClearWishlist_Click" />
+                                        <Button x:Name="BtnWishlistFindTrader" Content="🔍" local:UiText.TooltipKey="wishlistFindTraderBtn" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,0,4" Click="BtnWishlistFindTrader_Click" />
                                     </WrapPanel>
                                     <TextBlock x:Name="TxtEngineeringWishlistSummary" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
                                     <DataGrid x:Name="GridEngineeringWishlist" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="220"
@@ -1538,8 +1553,8 @@
                             <Border DockPanel.Dock="Bottom" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,12,0,0">
                                 <StackPanel>
                                     <DockPanel Margin="0,0,0,6">
+                                        <Button x:Name="BtnPlotSpanshTrade" DockPanel.Dock="Right" Content="💰 Buscar ruta comercial" local:UiText.Key="spanshTradeBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="8,0,0,0" Click="BtnPlotSpanshTrade_Click" />
                                         <TextBlock Text="PLANIFICADOR DE RUTAS COMERCIALES (SPANSH)" local:UiText.Key="spanshTradeTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-                                        <Button x:Name="BtnPlotSpanshTrade" DockPanel.Dock="Right" Content="💰 Buscar ruta comercial" local:UiText.Key="spanshTradeBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Click="BtnPlotSpanshTrade_Click" />
                                     </DockPanel>
                                     <TextBlock x:Name="TxtSpanshTradeStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
                                     <DataGrid x:Name="GridSpanshTrade" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed"
@@ -1742,11 +1757,11 @@
                                     <ComboBox x:Name="CmbJournalHistoryFiles" Width="300" Margin="0,0,8,6" SelectedValuePath="Key" SelectionChanged="CmbJournalHistoryFiles_SelectionChanged">
                                         <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
                                     </ComboBox>
-                                    <Button x:Name="BtnRefreshJournalHistory" Content="🔄" Style="{StaticResource HudButtonStyle}" MinWidth="38" Padding="6,4" Margin="0,0,8,6" Click="BtnRefreshJournalHistory_Click" />
-                                    <Button x:Name="BtnExportJournalCsv" Content="📤 Exportar CSV" local:UiText.Key="exportCsv" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,6" Click="BtnExportJournalCsv_Click" />
-                                    <Button x:Name="BtnExportJournalJson" Content="📤 Exportar JSON" local:UiText.Key="exportJson" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,6" Click="BtnExportJournalJson_Click" />
-                                    <Button x:Name="BtnAnalyzeExpeditionHistory" Content="📊 Estadísticas históricas" local:UiText.Key="expeditionAnalyzeBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,6" Click="BtnAnalyzeExpeditionHistory_Click" />
-                                    <Button x:Name="BtnExportExpeditionMarkdown" Content="📝 Informe MD" local:UiText.Key="expeditionExportMdBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,6" IsEnabled="False" Click="BtnExportExpeditionMarkdown_Click" />
+                                    <Button x:Name="BtnRefreshJournalHistory" Content="🔄" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnRefreshJournalHistory_Click" />
+                                    <Button x:Name="BtnExportJournalCsv" Content="📄" local:UiText.TooltipKey="exportCsv" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnExportJournalCsv_Click" />
+                                    <Button x:Name="BtnExportJournalJson" Content="{}{}" local:UiText.TooltipKey="exportJson" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnExportJournalJson_Click" />
+                                    <Button x:Name="BtnAnalyzeExpeditionHistory" Content="📊" local:UiText.TooltipKey="expeditionAnalyzeBtn" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnAnalyzeExpeditionHistory_Click" />
+                                    <Button x:Name="BtnExportExpeditionMarkdown" Content="📝" local:UiText.TooltipKey="expeditionExportMdBtn" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,0,6" IsEnabled="False" Click="BtnExportExpeditionMarkdown_Click" />
                                 </WrapPanel>
                                 <TextBlock x:Name="TxtExpeditionSummary" Visibility="Collapsed" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,6,0,0" />
                             </StackPanel>
@@ -1809,12 +1824,14 @@
                     </Border>
                     <Border x:Name="ActivityGalnetSection" Visibility="Collapsed" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16">
                         <StackPanel>
-                            <TextBlock Text="NOTICIAS GALÁCTICAS (GALNET NEWS)" local:UiText.Key="galnetTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,8" />
-                            <WrapPanel Margin="0,0,0,8">
-                                <Button x:Name="BtnRefreshGalnet" Content="🔄 Actualizar GalNet" local:UiText.Key="galnetRefresh" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,6" Click="BtnRefreshGalnet_Click" />
-                                <Button x:Name="BtnSpeakGalnet" Content="🔊 Leer en voz alta" local:UiText.Key="galnetSpeak" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,6" Click="BtnSpeakGalnet_Click" />
-                                <Button x:Name="BtnStopGalnetSpeech" Content="⏹ Detener voz" local:UiText.Key="galnetStop" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,6" Click="BtnStopGalnetSpeech_Click" />
-                            </WrapPanel>
+                            <DockPanel Margin="0,0,0,8">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                                    <Button x:Name="BtnRefreshGalnet" Content="🔄" local:UiText.TooltipKey="galnetRefresh" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,0" Click="BtnRefreshGalnet_Click" />
+                                    <Button x:Name="BtnSpeakGalnet" Content="🔊" local:UiText.TooltipKey="galnetSpeak" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,0" Click="BtnSpeakGalnet_Click" />
+                                    <Button x:Name="BtnStopGalnetSpeech" Content="⏹" local:UiText.TooltipKey="galnetStop" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Click="BtnStopGalnetSpeech_Click" />
+                                </StackPanel>
+                                <TextBlock Text="NOTICIAS GALÁCTICAS (GALNET NEWS)" local:UiText.Key="galnetTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" />
+                            </DockPanel>
                             <TextBlock x:Name="TxtGalnetStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
                             <DataGrid x:Name="GridGalnetArticles" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,0,0,12"
                                       Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
@@ -1837,13 +1854,13 @@
                                 <TextBlock x:Name="TxtAiProviderBadge" DockPanel.Dock="Right" Text="OFF" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="11.5" VerticalAlignment="Center" />
                             </DockPanel>
                             <WrapPanel Margin="0,0,0,8">
-                                <Button x:Name="BtnAiQuickStatus" Content="🔍 Situación táctica" local:UiText.Key="aiQuickStatus" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnAiQuickStatus_Click" />
-                                <Button x:Name="BtnAiPreFlightCheck" Content="✈ Chequeo pre-vuelo" local:UiText.Key="aiPreFlightBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnAiPreFlightCheck_Click" />
-                                <Button x:Name="BtnAiSummarizeGalnet" Content="✨ Resumir GalNet" local:UiText.Key="aiSummarizeGalnet" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnAiSummarizeGalnet_Click" />
-                                <Button x:Name="BtnAiSummarizeSession" Content="📖 Diario de sesión" local:UiText.Key="aiSummarizeSession" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnAiSummarizeSession_Click" />
-                                <Button x:Name="BtnAiClearChat" Content="🧹 Limpiar" local:UiText.Key="aiClearChat" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnAiClearChat_Click" />
-                                <Button x:Name="BtnExportAiChat" Content="📝 Exportar chat" local:UiText.Key="aiExportChatBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,6" Click="BtnExportAiChat_Click" />
-                                <Button x:Name="BtnAiStopVoice" Content="⏹ Detener voz" local:UiText.Key="galnetStop" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,6" Click="BtnStopGalnetSpeech_Click" />
+                                <Button x:Name="BtnAiQuickStatus" Content="📊" local:UiText.TooltipKey="aiQuickStatus" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnAiQuickStatus_Click" />
+                                <Button x:Name="BtnAiPreFlightCheck" Content="✈" local:UiText.TooltipKey="aiPreFlightBtn" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnAiPreFlightCheck_Click" />
+                                <Button x:Name="BtnAiSummarizeGalnet" Content="📰" local:UiText.TooltipKey="aiSummarizeGalnet" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnAiSummarizeGalnet_Click" />
+                                <Button x:Name="BtnAiSummarizeSession" Content="📖" local:UiText.TooltipKey="aiSummarizeSession" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnAiSummarizeSession_Click" />
+                                <Button x:Name="BtnAiClearChat" Content="🧹" local:UiText.TooltipKey="aiClearChat" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnAiClearChat_Click" />
+                                <Button x:Name="BtnExportAiChat" Content="📝" local:UiText.TooltipKey="aiExportChatBtn" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,6" Click="BtnExportAiChat_Click" />
+                                <Button x:Name="BtnAiStopVoice" Content="⏹" local:UiText.TooltipKey="galnetStop" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,0,6" Click="BtnStopGalnetSpeech_Click" />
                             </WrapPanel>
                             <TextBox x:Name="TxtAiChatHistory" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="220" MaxHeight="440"
                                      VerticalScrollBarVisibility="Auto" Background="#080A0E" Foreground="{StaticResource HudTextBrush}"
@@ -1859,14 +1876,14 @@
                                 <TextBox x:Name="TxtAiPrompt" Grid.Column="0" Background="#080A0E" Foreground="{StaticResource HudTextBrush}"
                                          CaretBrush="{DynamicResource HudAccentBrush}" BorderBrush="{DynamicResource HudBorderBrush}"
                                          Padding="10,7" VerticalContentAlignment="Center" KeyDown="TxtAiPrompt_KeyDown" />
-                                <Button x:Name="BtnAiVision" Grid.Column="1" Content="👁" local:UiText.Key="aiVisionBtn"
-                                        Style="{StaticResource HudButtonStyle}" Padding="10,7" Margin="8,0,0,0" Click="BtnAiVision_Click" />
-                                <Button x:Name="BtnAiHandsFree" Grid.Column="2" Content="🎙 Manos libres" local:UiText.Key="aiHandsFreeBtn"
-                                        Style="{StaticResource HudButtonStyle}" Padding="10,7" Margin="6,0,0,0" Click="BtnAiHandsFree_Click" />
-                                <Button x:Name="BtnAiVoiceInput" Grid.Column="3" Content="🎤 Hablar" local:UiText.Key="aiVoiceBtn"
-                                        Style="{StaticResource HudButtonStyle}" Padding="10,7" Margin="6,0,0,0" Click="BtnAiVoiceInput_Click" />
-                                <Button x:Name="BtnSendAiPrompt" Grid.Column="4" Content="➤ Enviar" local:UiText.Key="aiSend"
-                                        Style="{StaticResource HudButtonStyle}" Padding="14,7" Margin="6,0,0,0" Click="BtnSendAiPrompt_Click" />
+                                <Button x:Name="BtnAiVision" Grid.Column="1" Content="👁" local:UiText.TooltipKey="aiVisionBtn"
+                                        Style="{StaticResource HudButtonStyle}" MinWidth="36" Padding="10,7" Margin="8,0,0,0" Click="BtnAiVision_Click" />
+                                <Button x:Name="BtnAiHandsFree" Grid.Column="2" Content="🎙" local:UiText.TooltipKey="aiHandsFreeBtn"
+                                        Style="{StaticResource HudButtonStyle}" MinWidth="36" Padding="10,7" Margin="6,0,0,0" Click="BtnAiHandsFree_Click" />
+                                <Button x:Name="BtnAiVoiceInput" Grid.Column="3" Content="🎤" local:UiText.TooltipKey="aiVoiceBtn"
+                                        Style="{StaticResource HudButtonStyle}" MinWidth="36" Padding="10,7" Margin="6,0,0,0" Click="BtnAiVoiceInput_Click" />
+                                <Button x:Name="BtnSendAiPrompt" Grid.Column="4" Content="➤" local:UiText.TooltipKey="aiSend"
+                                        Style="{StaticResource HudButtonStyle}" MinWidth="36" Padding="10,7" Margin="6,0,0,0" Click="BtnSendAiPrompt_Click" />
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -2512,9 +2529,9 @@
                                 <TextBlock Text="Vincula carpetas para seleccionar sonidos propios." local:UiText.Key="soundDirsHelp" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,5" />
                                 <ListBox x:Name="LstSoundDirectories" MinHeight="42" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VirtualizingPanel.IsVirtualizing="False" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled" />
                                 <WrapPanel Margin="0,5,0,4">
-                                    <Button Content="Vincular carpeta" local:UiText.Key="soundDirAdd" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,4" Click="BtnAddSoundDirectory_Click" />
-                                    <Button Content="Desvincular carpeta" local:UiText.Key="soundDirRemove" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,4" Click="BtnRemoveSoundDirectory_Click" />
-                                    <Button Content="Actualizar sonidos" local:UiText.Key="soundDirRefresh" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,4" Click="BtnRefreshSoundDirectories_Click" />
+                                    <Button Content="➕" local:UiText.TooltipKey="soundDirAdd" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,4" Click="BtnAddSoundDirectory_Click" />
+                                    <Button Content="➖" local:UiText.TooltipKey="soundDirRemove" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,4" Click="BtnRemoveSoundDirectory_Click" />
+                                    <Button Content="🔄" local:UiText.TooltipKey="soundDirRefresh" Style="{StaticResource HudButtonStyle}" MinWidth="34" Padding="8,4" Margin="0,0,6,4" Click="BtnRefreshSoundDirectories_Click" />
                                 </WrapPanel>
                                 <TextBlock x:Name="TxtSoundDirectoryStatus" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,6" />
                                 <TextBlock Text="VOLUMEN MAESTRO DE SONIDOS" local:UiText.Key="volumeTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="10" Margin="0,2,0,5" />
@@ -2586,12 +2603,12 @@
                                 <CheckBox x:Name="ChkGroupUnhandledEvents" Content="Agrupar por tipo de evento (mostrar contador y último JSON)" local:UiText.Key="groupUnhandled" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,10" Click="ChkGroupUnhandledEvents_Click" />
                                 <WrapPanel Margin="0,2,0,4">
                                     <TextBox x:Name="TxtUnhandledSearch" Width="220" Margin="0,0,8,6" Padding="6,5" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" CaretBrush="{DynamicResource HudAccentBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" local:UiText.TooltipKey="unhandledSearch" TextChanged="TxtUnhandledSearch_TextChanged" />
-                                    <Button x:Name="BtnScanUnhandledFiles" Content="🔍 Analizar ficheros actuales" local:UiText.Key="scanUnhandled" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnScanUnhandledFiles_Click" />
-                                    <Button x:Name="BtnCopyUnhandledJson" Content="📋 Copiar JSON" local:UiText.Key="copyUnhandled" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnCopyUnhandledJson_Click" />
-                                    <Button x:Name="BtnOpenUnhandledFile" Content="📂 Abrir fichero" local:UiText.Key="openUnhandledFile" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnOpenUnhandledFile_Click" />
-                                    <Button x:Name="BtnOpenLogsFolder" Content="📋 Abrir carpeta de logs" local:UiText.Key="openLogsFolder" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnOpenLogsFolder_Click" />
-                                    <Button x:Name="BtnExportSupportBundle" Content="📦 Exportar ZIP de soporte" local:UiText.Key="exportSupportBundle" Style="{StaticResource HudButtonStyle}" Margin="0,0,6,6" Padding="10,5" Click="BtnExportSupportBundle_Click" />
-                                    <Button x:Name="BtnClearUnhandledEvents" Content="🗑 Limpiar" local:UiText.Key="clearUnhandled" Style="{StaticResource HudButtonStyle}" Margin="0,0,0,6" Padding="10,5" Click="BtnClearUnhandledEvents_Click" />
+                                    <Button x:Name="BtnScanUnhandledFiles" Content="🔍" local:UiText.TooltipKey="scanUnhandled" Style="{StaticResource HudButtonStyle}" MinWidth="34" Margin="0,0,6,6" Padding="8,5" Click="BtnScanUnhandledFiles_Click" />
+                                    <Button x:Name="BtnCopyUnhandledJson" Content="📋" local:UiText.TooltipKey="copyUnhandled" Style="{StaticResource HudButtonStyle}" MinWidth="34" Margin="0,0,6,6" Padding="8,5" Click="BtnCopyUnhandledJson_Click" />
+                                    <Button x:Name="BtnOpenUnhandledFile" Content="📂" local:UiText.TooltipKey="openUnhandledFile" Style="{StaticResource HudButtonStyle}" MinWidth="34" Margin="0,0,6,6" Padding="8,5" Click="BtnOpenUnhandledFile_Click" />
+                                    <Button x:Name="BtnOpenLogsFolder" Content="🗂" local:UiText.TooltipKey="openLogsFolder" Style="{StaticResource HudButtonStyle}" MinWidth="34" Margin="0,0,6,6" Padding="8,5" Click="BtnOpenLogsFolder_Click" />
+                                    <Button x:Name="BtnExportSupportBundle" Content="📦" local:UiText.TooltipKey="exportSupportBundle" Style="{StaticResource HudButtonStyle}" MinWidth="34" Margin="0,0,6,6" Padding="8,5" Click="BtnExportSupportBundle_Click" />
+                                    <Button x:Name="BtnClearUnhandledEvents" Content="🗑" local:UiText.TooltipKey="clearUnhandled" Style="{StaticResource HudButtonStyle}" MinWidth="34" Margin="0,0,0,6" Padding="8,5" Click="BtnClearUnhandledEvents_Click" />
                                 </WrapPanel>
                                 <TextBlock x:Name="TxtUnhandledStatus" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,2,0,8" />
                                 <DataGrid x:Name="GridUnhandledEvents" AutoGenerateColumns="False" IsReadOnly="True"

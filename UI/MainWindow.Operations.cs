@@ -853,6 +853,47 @@ public partial class MainWindow
             System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
+    private static readonly Dictionary<string, string> SectionIcons = new(StringComparer.Ordinal)
+    {
+        ["summary"] = "📊",
+        ["alerts-activity"] = "🔔",
+        ["status-resources"] = "🚀",
+        ["ship-systems"] = "⚡",
+        ["ship-modules"] = "🔧",
+        ["on-foot"] = "🧑‍🚀",
+        ["combat"] = "⚔️",
+        ["current-system"] = "🌌",
+        ["route"] = "🧭",
+        ["exploration"] = "🔭",
+        ["surface-nav"] = "🪐",
+        ["carrier"] = "🛸",
+        ["spansh-services"] = "🛰️",
+        ["missions"] = "📜",
+        ["passengers"] = "👥",
+        ["mining"] = "⛏️",
+        ["colonisation"] = "🏗️",
+        ["cargo"] = "📦",
+        ["materials"] = "💎",
+        ["engineers"] = "⚙️",
+        ["backpack"] = "🎒",
+        ["market"] = "🏪",
+        ["outfitting"] = "🔩",
+        ["shipyard"] = "🚢",
+        ["ai-copilot"] = "🤖",
+        ["galnet"] = "📰",
+        ["exploration-milestones"] = "🏆",
+        ["journal"] = "📖",
+        ["commander-profile"] = "🪪",
+        ["interface"] = "🎨",
+        ["paths"] = "📂",
+        ["web-server"] = "🌐",
+        ["integrations"] = "🔌",
+        ["ai-settings"] = "🤖",
+        ["voice-audio"] = "🔊",
+        ["alerts"] = "🚨",
+        ["diagnostics"] = "🩺"
+    };
+
     private void BuildSectionNavigation(int viewIndex, bool preserveSelection = false)
     {
         var previousSection = preserveSelection
@@ -868,94 +909,101 @@ public partial class MainWindow
         }
 
         var text = SectionTranslations.ForLanguage(_uiLanguage);
-        (string Title, FrameworkElement Element)[] sections = viewIndex switch
+        (string Key, FrameworkElement Element)[] sections = viewIndex switch
         {
             0 => new[]
             {
-                (text["summary"], (FrameworkElement)DashboardSummarySection),
-                (text["alerts-activity"], (FrameworkElement)DashboardOverviewSection)
+                ("summary", (FrameworkElement)DashboardSummarySection),
+                ("alerts-activity", (FrameworkElement)DashboardOverviewSection)
             },
             1 => new[]
             {
-                (text["status-resources"], (FrameworkElement)CockpitResourcesSection),
-                (text["ship-systems"], CockpitSystemsSection),
-                (text["ship-modules"], CockpitModulesSection),
-                (text["on-foot"], CockpitOnFootSection),
-                (text["combat"], OperationsCombatSection)
+                ("status-resources", (FrameworkElement)CockpitResourcesSection),
+                ("ship-systems", CockpitSystemsSection),
+                ("ship-modules", CockpitModulesSection),
+                ("on-foot", CockpitOnFootSection),
+                ("combat", OperationsCombatSection)
             },
             2 => new[]
             {
-                (text["current-system"], (FrameworkElement)NavigationSystemSection),
-                (text["route"], NavigationRouteSection),
-                (text["exploration"], NavigationBodiesSection),
-                (text["surface-nav"], NavigationSurfaceSection),
-                (text["carrier"], NavigationCarrierSection),
-                (text["spansh-services"], NavigationSpanshServicesSection)
+                ("current-system", (FrameworkElement)NavigationSystemSection),
+                ("route", NavigationRouteSection),
+                ("exploration", NavigationBodiesSection),
+                ("surface-nav", NavigationSurfaceSection),
+                ("carrier", NavigationCarrierSection),
+                ("spansh-services", NavigationSpanshServicesSection)
             },
             3 => new[]
             {
-                (text["missions"], (FrameworkElement)OperationsMissionsSection),
-                (text["passengers"], OperationsPassengersSection),
-                (text["mining"], OperationsMiningSection),
-                (text["colonisation"], ActivityColonisationSection)
+                ("missions", (FrameworkElement)OperationsMissionsSection),
+                ("passengers", OperationsPassengersSection),
+                ("mining", OperationsMiningSection),
+                ("colonisation", ActivityColonisationSection)
             },
             4 => new[]
             {
-                (text["cargo"], (FrameworkElement)OperationsCargoSection),
-                (text["materials"], OperationsMaterialsSection),
-                (text["engineers"], OperationsEngineersSection),
-                (text["backpack"], OperationsBackpackSection),
-                (text["market"], OperationsMarketSection),
-                (text["outfitting"], OperationsOutfittingSection),
-                (text["shipyard"], OperationsShipyardSection)
+                ("cargo", (FrameworkElement)OperationsCargoSection),
+                ("materials", OperationsMaterialsSection),
+                ("engineers", OperationsEngineersSection),
+                ("backpack", OperationsBackpackSection),
+                ("market", OperationsMarketSection),
+                ("outfitting", OperationsOutfittingSection),
+                ("shipyard", OperationsShipyardSection)
             },
             5 => new[]
             {
-                (text["ai-copilot"], (FrameworkElement)ActivityAiSection),
-                (text["galnet"], ActivityGalnetSection),
-                (text["exploration-milestones"], ActivityMilestonesSection),
-                (text["journal"], ActivityJournalSection),
-                (text["commander-profile"], ActivityProfileSection)
+                ("ai-copilot", (FrameworkElement)ActivityAiSection),
+                ("galnet", ActivityGalnetSection),
+                ("exploration-milestones", ActivityMilestonesSection),
+                ("journal", ActivityJournalSection),
+                ("commander-profile", ActivityProfileSection)
             },
             7 => new[]
             {
-                (text["interface"], (FrameworkElement)ConfigInterfaceSection),
-                (text["paths"], ConfigPathsSection),
-                (text["web-server"], ConfigWebSection),
-                (text["integrations"], ConfigIntegrationsSection),
-                (text["ai-settings"], ConfigAiSection),
-                (text["voice-audio"], ConfigVoiceSection),
-                (text["alerts"], ConfigAlertsSection),
-                (text["diagnostics"], ConfigDiagnosticsSection),
+                ("interface", (FrameworkElement)ConfigInterfaceSection),
+                ("paths", ConfigPathsSection),
+                ("web-server", ConfigWebSection),
+                ("integrations", ConfigIntegrationsSection),
+                ("ai-settings", ConfigAiSection),
+                ("voice-audio", ConfigVoiceSection),
+                ("alerts", ConfigAlertsSection),
+                ("diagnostics", ConfigDiagnosticsSection),
             },
             _ => Array.Empty<(string, FrameworkElement)>()
         };
 
         SectionNavigationPanel.Visibility = sections.Length > 1 ? Visibility.Visible : Visibility.Collapsed;
+        TxtActiveSectionTitle.Visibility = sections.Length > 1 ? Visibility.Visible : Visibility.Collapsed;
         if (sections.Length <= 1)
             return;
 
         bool hasPreviousSection = sections.Any(section => ReferenceEquals(section.Element, previousSection));
         for (int i = 0; i < sections.Length; i++)
         {
-            var (title, element) = sections[i];
+            var (key, element) = sections[i];
+            string title = text[key];
+            string icon = SectionIcons.TryGetValue(key, out string? mapped) ? mapped : "•";
             bool selected = hasPreviousSection ? ReferenceEquals(element, previousSection) : i == 0;
             element.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            if (selected)
+                TxtActiveSectionTitle.Text = title.ToUpper(UiCulture);
+
             var button = new System.Windows.Controls.Button
             {
-                Content = title,
+                Content = icon,
+                ToolTip = title,
                 Language = System.Windows.Markup.XmlLanguage.GetLanguage(_uiLanguage),
+                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),
                 Tag = element,
                 Style = (Style)FindResource("HudButtonStyle"),
-                Margin = new Thickness(3),
-                Padding = new Thickness(12, 7, 12, 7),
-                BorderBrush = selected
-                    ? (System.Windows.Media.Brush)FindResource("HudAccentBrush")
-                    : (System.Windows.Media.Brush)FindResource("HudBorderBrush"),
-                Foreground = selected
-                    ? (System.Windows.Media.Brush)FindResource("HudAccentBrush")
-                    : (System.Windows.Media.Brush)FindResource("HudMutedBrush")
+                MinWidth = 36,
+                Margin = new Thickness(2),
+                Padding = new Thickness(10, 5, 10, 5)
             };
+            System.Windows.Automation.AutomationProperties.SetName(button, title);
+            button.SetResourceReference(BorderBrushProperty, selected ? "HudAccentBrush" : "HudBorderBrush");
+            button.SetResourceReference(ForegroundProperty, selected ? "HudAccentBrush" : "HudMutedBrush");
+            button.SetResourceReference(BackgroundProperty, selected ? "HudAccentDimBrush" : "HudPanelAltBrush");
             button.Click += SectionNavigationButton_Click;
             SectionNavigationItems.Children.Add(button);
         }
@@ -964,6 +1012,7 @@ public partial class MainWindow
     private void BuildBindingCategoryNavigation()
     {
         SectionNavigationItems.Children.Clear();
+        TxtActiveSectionTitle.Visibility = Visibility.Collapsed;
 
         var categories = _bindingsService.Bindings
             .Where(binding => ChkHideUnassignedBindings.IsChecked != true ||
@@ -974,6 +1023,9 @@ public partial class MainWindow
             .ToList();
 
         SectionNavigationPanel.Visibility = categories.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        TxtActiveSectionTitle.Visibility = categories.Count > 0
             ? Visibility.Visible
             : Visibility.Collapsed;
         if (categories.Count == 0)
@@ -987,23 +1039,29 @@ public partial class MainWindow
             !categories.Contains(_selectedBindingCategory, StringComparer.OrdinalIgnoreCase))
             _selectedBindingCategory = categories[0];
 
-        foreach (string category in categories)
+        for (int i = 0; i < categories.Count; i++)
         {
+            string category = categories[i];
+            string categoryLabel = DeckTranslations.Category(category, _uiLanguage);
             bool isSelected = string.Equals(
                 category, _selectedBindingCategory, StringComparison.OrdinalIgnoreCase);
+            if (isSelected)
+                TxtActiveSectionTitle.Text = categoryLabel.ToUpper(UiCulture);
+
             var button = new System.Windows.Controls.Button
             {
-                Content = DeckTranslations.Category(category, _uiLanguage),
+                Content = (i + 1).ToString(),
+                ToolTip = categoryLabel,
                 Language = System.Windows.Markup.XmlLanguage.GetLanguage(_uiLanguage),
                 Tag = category,
                 Style = (Style)FindResource("HudButtonStyle"),
-                Margin = new Thickness(3),
-                Padding = new Thickness(12, 7, 12, 7),
-                BorderBrush = (System.Windows.Media.Brush)FindResource(
-                    isSelected ? "HudAccentBrush" : "HudBorderBrush"),
-                Foreground = (System.Windows.Media.Brush)FindResource(
-                    isSelected ? "HudAccentBrush" : "HudMutedBrush")
+                MinWidth = 36,
+                Margin = new Thickness(2),
+                Padding = new Thickness(10, 5, 10, 5)
             };
+            System.Windows.Automation.AutomationProperties.SetName(button, categoryLabel);
+            button.SetResourceReference(BorderBrushProperty, isSelected ? "HudAccentBrush" : "HudBorderBrush");
+            button.SetResourceReference(ForegroundProperty, isSelected ? "HudAccentBrush" : "HudMutedBrush");
             button.Click += BindingCategoryButton_Click;
             SectionNavigationItems.Children.Add(button);
         }
@@ -1029,10 +1087,11 @@ public partial class MainWindow
         {
             bool isSelected = ReferenceEquals(button, sender);
             ((FrameworkElement)button.Tag).Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
-            button.BorderBrush = (System.Windows.Media.Brush)FindResource(
-                isSelected ? "HudAccentBrush" : "HudBorderBrush");
-            button.Foreground = (System.Windows.Media.Brush)FindResource(
-                isSelected ? "HudAccentBrush" : "HudMutedBrush");
+            button.SetResourceReference(BorderBrushProperty, isSelected ? "HudAccentBrush" : "HudBorderBrush");
+            button.SetResourceReference(ForegroundProperty, isSelected ? "HudAccentBrush" : "HudMutedBrush");
+            button.SetResourceReference(BackgroundProperty, isSelected ? "HudAccentDimBrush" : "HudPanelAltBrush");
+            if (isSelected && button.ToolTip is string title)
+                TxtActiveSectionTitle.Text = title.ToUpper(UiCulture);
         }
     }
 

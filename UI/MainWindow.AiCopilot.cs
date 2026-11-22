@@ -469,7 +469,9 @@ public partial class MainWindow
                 _alertSpeechService.StopSpeaking();
                 _aiVoiceRecorder.StartRecording();
                 _isRecordingAiVoice = true;
-                BtnAiVoiceInput.Content = ops["aiVoiceStopBtn"];
+                BtnAiVoiceInput.Content = "⏹";
+                BtnAiVoiceInput.ToolTip = ops["aiVoiceStopBtn"];
+                System.Windows.Automation.AutomationProperties.SetName(BtnAiVoiceInput, ops["aiVoiceStopBtn"]);
                 BtnAiVoiceInput.SetResourceReference(BackgroundProperty, "HudDangerBrush");
                 BtnAiVoiceInput.SetResourceReference(ForegroundProperty, "HudBgBrush");
                 TxtStatusBarLeft.Text = ops["aiVoiceListening"];
@@ -496,7 +498,9 @@ public partial class MainWindow
         finally
         {
             CleanupAiVoiceRecorder();
-            BtnAiVoiceInput.Content = ops["aiVoiceBtn"];
+            BtnAiVoiceInput.Content = "🎤";
+            BtnAiVoiceInput.ToolTip = ops["aiVoiceBtn"];
+            System.Windows.Automation.AutomationProperties.SetName(BtnAiVoiceInput, ops["aiVoiceBtn"]);
             BtnAiVoiceInput.SetResourceReference(BackgroundProperty, "HudPanelAltBrush");
             BtnAiVoiceInput.SetResourceReference(ForegroundProperty, "HudTextBrush");
         }
@@ -553,7 +557,9 @@ public partial class MainWindow
             StartVadRecorderInstance();
             SubscribeAudioDeviceNotifications();
             _aiHandsFreeActive = true;
-            BtnAiHandsFree.Content = ops["aiHandsFreeListening"];
+            BtnAiHandsFree.Content = "🟢";
+            BtnAiHandsFree.ToolTip = ops["aiHandsFreeListening"];
+            System.Windows.Automation.AutomationProperties.SetName(BtnAiHandsFree, ops["aiHandsFreeListening"]);
             BtnAiHandsFree.SetResourceReference(BackgroundProperty, "HudAccentBrush");
             BtnAiHandsFree.SetResourceReference(ForegroundProperty, "HudBgBrush");
             TxtStatusBarLeft.Text = ops["aiHandsFreeStatusOn"];
@@ -664,7 +670,10 @@ public partial class MainWindow
 
         if (BtnAiHandsFree is not null)
         {
-            BtnAiHandsFree.Content = OperationsTranslations.ForLanguage(_uiLanguage)["aiHandsFreeBtn"];
+            string tip = OperationsTranslations.ForLanguage(_uiLanguage)["aiHandsFreeBtn"];
+            BtnAiHandsFree.Content = "🎙";
+            BtnAiHandsFree.ToolTip = tip;
+            System.Windows.Automation.AutomationProperties.SetName(BtnAiHandsFree, tip);
             BtnAiHandsFree.SetResourceReference(BackgroundProperty, "HudPanelAltBrush");
             BtnAiHandsFree.SetResourceReference(ForegroundProperty, "HudTextBrush");
         }
@@ -793,7 +802,12 @@ public partial class MainWindow
             Dispatcher.BeginInvoke(() =>
             {
                 if (_aiHandsFreeActive)
-                    BtnAiHandsFree.Content = OperationsTranslations.ForLanguage(_uiLanguage)["aiHandsFreeSpeaking"];
+                {
+                    string tip = OperationsTranslations.ForLanguage(_uiLanguage)["aiHandsFreeSpeaking"];
+                    BtnAiHandsFree.Content = "🗣";
+                    BtnAiHandsFree.ToolTip = tip;
+                    System.Windows.Automation.AutomationProperties.SetName(BtnAiHandsFree, tip);
+                }
             });
         }
 
@@ -832,7 +846,11 @@ public partial class MainWindow
             SetAiBusy(false);
             _aiHandsFreeProcessing = false;
             if (_aiHandsFreeActive)
-                BtnAiHandsFree.Content = ops["aiHandsFreeListening"];
+            {
+                BtnAiHandsFree.Content = "🟢";
+                BtnAiHandsFree.ToolTip = ops["aiHandsFreeListening"];
+                System.Windows.Automation.AutomationProperties.SetName(BtnAiHandsFree, ops["aiHandsFreeListening"]);
+            }
         }
     }
 

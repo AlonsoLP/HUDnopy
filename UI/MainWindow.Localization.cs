@@ -59,7 +59,8 @@ public partial class MainWindow
             (LblDashboardRoute, "nextRoute"), (LblDashboardActivity, "recentActivity"),
             (LblSessionStatsTitle, "sessionStatsTitle")
         };
-        BtnResetSessionStats.Content = text["sessionReset"];
+        BtnResetSessionStats.ToolTip = text["sessionReset"];
+        System.Windows.Automation.AutomationProperties.SetName(BtnResetSessionStats, text["sessionReset"]);
         foreach (var (label, key) in labels)
         {
             label.Text = text[key].ToUpper(culture);
@@ -121,7 +122,8 @@ public partial class MainWindow
         LblMaterials.Text = text["title"].ToUpper(UiCulture);
         TxtMaterialSearch.ToolTip = text["search"];
         TxtWishlistTarget.ToolTip = text["wishlistTargetTip"];
-        BtnToggleWishlist.Content = text["wishlistToggle"];
+        BtnToggleWishlist.ToolTip = text["wishlistToggle"];
+        System.Windows.Automation.AutomationProperties.SetName(BtnToggleWishlist, text["wishlistToggle"]);
         TxtShipLockerSearch.ToolTip = text["search"];
         CmbMaterialCategory.ToolTip = text["categoryFilter"];
         CmbMaterialRarity.ToolTip = text["rarityFilter"];
@@ -191,7 +193,12 @@ public partial class MainWindow
             }
             string? tooltipKey = UiText.GetTooltipKey(node);
             if (tooltipKey is not null && node is FrameworkElement tooltipElement)
-                tooltipElement.ToolTip = text[tooltipKey];
+            {
+                string tipValue = text[tooltipKey];
+                tooltipElement.ToolTip = tipValue;
+                if (key is null)
+                    System.Windows.Automation.AutomationProperties.SetName(tooltipElement, tipValue);
+            }
             foreach (object child in LogicalTreeHelper.GetChildren(node))
                 if (child is DependencyObject dependency)
                     Apply(dependency);

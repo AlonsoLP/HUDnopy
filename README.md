@@ -34,7 +34,7 @@ Built with **.NET 10 / WPF** and an embedded **Kestrel HTTPS + WebSocket** serve
   - Built-in **Piper Neural TTS** running as a **persistent warm daemon** with parallel sentence pre-synthesis (~100–150 ms per sentence, 11 voices across 6 languages), powered by **NAudio 3.3** shared-mode `WasapiPlayer` (automatic device routing), `EffectChain` voice conditioning, and automatic microphone hot-swap reconnection.
 - **Frontier cAPI, 10 Opt-In Community Integrations, Secure Web HUD & Diagnostics**
   - Official **Frontier Companion API (cAPI)** via OAuth 2.0 + PKCE and **Windows DPAPI** encrypted tokens, plus strictly opt-in integrations for **EDDN** (14 schemas + SHA-256 dedup), **EDSM**, **Inara**, **Spansh**, **EliteBGS v5**, **Ardent Insight**, **EDAstro DSSA**, **Canonn R&D**, and **Discord** (async Named Pipe Rich Presence + rich Webhook embeds).
-  - Self-signed **HTTPS Web MFD** (7 tabs + **Split MFD** mode, Brotli/GZip pre-compressed assets, per-socket parallel WebSocket broadcasts) with ISO-standard QR-code pairing, session codes, VPN binding, and auto-context `.binds` Control Deck.
+  - Self-signed **HTTPS Web MFD** (7 synchronized tabs, Brotli/GZip pre-compressed assets, per-socket parallel WebSocket broadcasts) with ISO-standard QR-code pairing, session codes, VPN binding, and auto-context `.binds` Control Deck.
   - Built-in **Diagnostics & Support ZIP** (`Settings → Diagnostics → 📦 Export Support ZIP`): daily rolling logs, 40-entry breadcrumbs, Web HUD JS error capture, and automatic removal of all personal data (API keys, tokens, webhooks, commander names, notes, and Windows usernames).
 
 ---

@@ -676,6 +676,70 @@ public class WebServerService : IDisposable
                 }, camelCase: true);
             });
 
+            app.MapPost("/api/session/reset", async (HttpContext context) =>
+            {
+                _fileWatcher.ResetSessionStats();
+                await WriteJsonAsync(context, new { success = true });
+            });
+
+            app.MapGet("/api/journal/files", async (HttpContext context) =>
+            {
+                string folder = _configService.Current.JournalFolderPath;
+                var files = new List<object>();
+                if (Directory.Exists(folder))
+                {
+                    try
+                    {
+                        foreach (var file in new DirectoryInfo(folder).EnumerateFiles("Journal.*.log")
+                            .OrderByDescending(static f => f.LastWriteTimeUtc)
+                            .Take(30))
+                        {
+                            files.Add(new { name = file.Name, label = $"{file.Name} ({file.LastWriteTime:dd/MM HH:mm})" });
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+                await WriteJsonAsync(context, new { success = true, files });
+            });
+
+            app.MapGet("/api/journal/events", async (HttpContext context) =>
+            {
+                string fileName = context.Request.Query["file"].ToString().Trim();
+                string language = _configService.Current.InterfaceLanguage;
+                if (string.IsNullOrWhiteSpace(fileName))
+                {
+                    var liveEvents = _fileWatcher.State.RecentEvents
+                        .Select(entry => JournalTranslations.Present(entry, language))
+                        .ToList();
+                    await WriteJsonAsync(context, new { success = true, events = liveEvents });
+                    return;
+                }
+
+                if (!string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal)
+                    || !fileName.StartsWith("Journal.", StringComparison.OrdinalIgnoreCase)
+                    || !fileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Response.StatusCode = 400;
+                    await WriteJsonAsync(context, new { success = false, message = "Invalid journal filename." });
+                    return;
+                }
+
+                string fullPath = Path.Combine(_configService.Current.JournalFolderPath, fileName);
+                if (!File.Exists(fullPath))
+                {
+                    context.Response.StatusCode = 404;
+                    await WriteJsonAsync(context, new { success = false, message = "Journal file not found." });
+                    return;
+                }
+
+                var entries = EliteFileWatcherService.LoadHistoricalJournal(fullPath)
+                    .Select(entry => JournalTranslations.Present(entry, language))
+                    .ToList();
+                await WriteJsonAsync(context, new { success = true, events = entries });
+            });
+
             app.MapPost("/api/combat/reset", async (HttpContext context) =>
             {
                 _fileWatcher.ResetCombatSession();
@@ -709,6 +773,59 @@ public class WebServerService : IDisposable
                     targets = _configService.Current.MiningTargetMinerals,
                     minPercent = _configService.Current.MiningMinPercent
                 });
+            });
+
+            app.MapPost("/api/materials/wishlist/toggle", async (HttpContext context) =>
+            {
+                string materialId = "";
+                int target = 50;
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                    {
+                        materialId = (JsonElementExtensions.GetStr(doc.RootElement, "materialId") ?? "").Trim();
+                        if (doc.RootElement.TryGetProperty("target", out var tEl) && tEl.TryGetInt32(out int parsed) && parsed > 0)
+                            target = parsed;
+                    }
+                }
+                if (string.IsNullOrWhiteSpace(materialId))
+                {
+                    context.Response.StatusCode = 400;
+                    await WriteJsonAsync(context, new { success = false });
+                    return;
+                }
+
+                var wishlist = _configService.Current.MaterialWishlist ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var item = _fileWatcher.State.MaterialsInventory.FirstOrDefault(m =>
+                    string.Equals(m.Id, materialId, StringComparison.OrdinalIgnoreCase));
+                if (wishlist.ContainsKey(materialId))
+                {
+                    wishlist.Remove(materialId);
+                    if (item is not null) item.WishlistTarget = 0;
+                }
+                else
+                {
+                    int clamped = item is not null ? Math.Min(target, item.MaxCapacity) : target;
+                    wishlist[materialId] = clamped;
+                    if (item is not null) item.WishlistTarget = clamped;
+                }
+                _configService.Save();
+                await BroadcastStateAsync();
+                await WriteJsonAsync(context, new { success = true });
+            });
+
+            app.MapPost("/api/deck/auto-context", async (HttpContext context) =>
+            {
+                bool enabled = false;
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null && doc.RootElement.TryGetProperty("enabled", out var el) && el.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                        enabled = el.GetBoolean();
+                }
+                _configService.Current.AutoContextDeck = enabled;
+                _configService.Save();
+                await BroadcastStateAsync();
+                await WriteJsonAsync(context, new { success = true, enabled });
             });
 
             app.MapPost("/api/wishlist/update", async (HttpContext context) =>
@@ -1065,6 +1182,7 @@ public class WebServerService : IDisposable
             surfaceBookmarks = _configService.Current.SurfaceBookmarks ?? new List<SurfaceBookmarkItem>(),
             miningTargets = _configService.Current.MiningTargetMinerals ?? "",
             miningMinPercent = _configService.Current.MiningMinPercent,
+            autoContextDeck = _configService.Current.AutoContextDeck,
             engineeringCatalog = EngineeringWishlistService.Catalog.Select(static b => new { b.Id, b.DisplayName }).ToArray(),
             engineeringWishlistBlueprints = _configService.Current.EngineeringWishlistBlueprints ?? new List<string>(),
             carrierView = GetCarrierView(state.Carrier, language),

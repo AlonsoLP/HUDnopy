@@ -4,7 +4,7 @@
 // Author:      AlonsoLP
 // Copyright:   Copyright (c) 2026 AlonsoLP
 // License:     GPL-3.0-only (see LICENSE file in the repository root)
-// Description: Live WebSocket client, MFD rendering, Split MFD, and COVAS AI web UI.
+// Description: Live WebSocket client, MFD rendering, and COVAS AI web UI.
 // -----------------------------------------------------------------------------
 
   let lastPayload = null;
@@ -91,32 +91,80 @@
     updateSectionTabs();
   }
 
+  const SECTION_ICONS = {
+    'summary': '📊',
+    'alerts-activity': '🔔',
+    'status-resources': '🚀',
+    'ship-systems': '⚡',
+    'ship-modules': '🔧',
+    'on-foot': '🧑‍🚀',
+    'combat': '⚔️',
+    'current-system': '🌌',
+    'route': '🧭',
+    'exploration': '🔭',
+    'surface-nav': '🪐',
+    'carrier': '🛸',
+    'spansh-services': '🛰️',
+    'missions': '📜',
+    'passengers': '👥',
+    'mining': '⛏️',
+    'colonisation': '🏗️',
+    'cargo': '📦',
+    'materials': '💎',
+    'engineers': '⚙️',
+    'backpack': '🎒',
+    'market': '🏪',
+    'outfitting': '🔩',
+    'shipyard': '🚢',
+    'ai-copilot': '🤖',
+    'galnet': '📰',
+    'exploration-milestones': '🏆',
+    'journal': '📖',
+    'commander-profile': '🪪'
+  };
+
   function updateSectionTabs() {
     const activeTab = document.querySelector('.tab-view.active');
     const sectionTabs = document.getElementById('sectionTabs');
     sectionTabs.replaceChildren();
     const sections = activeTab ? [...activeTab.querySelectorAll('.module-section')] : [];
+    sectionTabs.classList.toggle('section-tabs-empty', sections.length <= 1);
+    if (sections.length <= 1) return;
+
     const rememberedSection = activeSectionByTab.get(activeTab?.id);
     const selectedSection = sections.find(section => section.dataset.sectionTitle === rememberedSection)
       || sections.find(section => section.classList.contains('active'))
       || sections[0];
+
+    const activeLabel = document.createElement('span');
+    activeLabel.className = 'section-active-label';
+
     sections.forEach((section, index) => {
-      section.classList.toggle('active', section === selectedSection);
-      const button = document.createElement('button');
-      button.type = 'button';
+      const isSelected = section === selectedSection;
+      section.classList.toggle('active', isSelected);
       const key = section.dataset.sectionKey;
       if (key && sectionLanguage && !Object.prototype.hasOwnProperty.call(sectionTranslations, key))
         console.error(`Falta la traducción de la sección: ${key}`);
-      button.textContent = sectionTranslations[key] || section.dataset.sectionLabel || section.dataset.sectionTitle || `Sección ${index + 1}`;
+      const label = sectionTranslations[key] || section.dataset.sectionLabel || section.dataset.sectionTitle || `Sección ${index + 1}`;
+      if (isSelected) activeLabel.textContent = label;
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'section-icon-btn';
+      button.textContent = (key && SECTION_ICONS[key]) ? SECTION_ICONS[key] : String(index + 1);
+      button.title = label;
+      button.setAttribute('aria-label', label);
       if ((key && sectionTranslations[key]) || section.dataset.sectionLabel) button.lang = sectionLanguage;
-      button.classList.toggle('active', section.classList.contains('active'));
+      button.classList.toggle('active', isSelected);
       button.addEventListener('click', () => {
         activeSectionByTab.set(activeTab.id, section.dataset.sectionTitle);
         sections.forEach(item => item.classList.toggle('active', item === section));
         sectionTabs.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+        activeLabel.textContent = label;
       });
       sectionTabs.append(button);
     });
+    sectionTabs.append(activeLabel);
   }
 
   function showToast(msg) {
@@ -343,12 +391,6 @@
     }
   }
 
-  function toggleSplitMfd() {
-    document.body.classList.toggle('split-mfd');
-    const btn = document.getElementById('btnSplitMfd');
-    if (btn) btn.classList.toggle('active', document.body.classList.contains('split-mfd'));
-  }
-
   async function refreshWebGalnet() {
     try { await fetch('/api/galnet/refresh', { method: 'POST' }); } catch {}
   }
@@ -401,6 +443,12 @@
           element.textContent = value;
           element.lang = sectionLanguage;
         });
+        document.querySelectorAll('[data-operations-tooltip-key]').forEach(element => {
+          const value = operationsTranslations[element.dataset.operationsTooltipKey];
+          if (typeof value !== 'string' || !value) return;
+          element.title = value;
+          element.setAttribute('aria-label', value);
+        });
         document.querySelectorAll('[data-flight-key]').forEach(element => {
           const value = flightTranslations[element.dataset.flightKey];
           if (typeof value !== 'string' || !value) {
@@ -409,6 +457,12 @@
           }
           element.textContent = value;
           element.lang = sectionLanguage;
+        });
+        document.querySelectorAll('[data-flight-tooltip-key]').forEach(element => {
+          const value = flightTranslations[element.dataset.flightTooltipKey];
+          if (typeof value !== 'string' || !value) return;
+          element.title = value;
+          element.setAttribute('aria-label', value);
         });
         document.querySelectorAll('[data-flight-placeholder]').forEach(element => {
           const value = flightTranslations[element.dataset.flightPlaceholder];
@@ -454,6 +508,20 @@
           header.textContent = value;
           header.lang = sectionLanguage;
         });
+        document.querySelectorAll('[data-deck-key]').forEach(element => {
+          const value = deckTranslations?.[element.dataset.deckKey];
+          if (typeof value !== 'string' || !value) return;
+          element.textContent = value;
+          element.lang = sectionLanguage;
+        });
+        const wishlistTargetEl = document.getElementById('webWishlistTarget');
+        if (wishlistTargetEl && materialTranslations?.wishlistTargetTip)
+          wishlistTargetEl.title = materialTranslations.wishlistTargetTip;
+        const wishlistBtnEl = document.getElementById('btnWebToggleWishlist');
+        if (wishlistBtnEl && materialTranslations?.wishlistToggle) {
+          wishlistBtnEl.title = materialTranslations.wishlistToggle;
+          wishlistBtnEl.setAttribute('aria-label', materialTranslations.wishlistToggle);
+        }
         document.querySelectorAll('[data-dashboard-key]').forEach(element => {
           const value = dashboardTranslations[element.dataset.dashboardKey];
           if (typeof value !== 'string' || !value) {
@@ -462,6 +530,12 @@
           }
           element.textContent = value;
           element.lang = sectionLanguage;
+        });
+        document.querySelectorAll('[data-dashboard-tooltip-key]').forEach(element => {
+          const value = dashboardTranslations[element.dataset.dashboardTooltipKey];
+          if (typeof value !== 'string' || !value) return;
+          element.title = value;
+          element.setAttribute('aria-label', value);
         });
         const warning = document.getElementById('languageWarning');
         warning.lang = sectionLanguage;
@@ -1589,7 +1663,14 @@
     const milestones = events.filter(ev => explorationEvents.has(ev.EventType));
     const eventColumns = [ev => ev.Timestamp, ev => ev.EventType, ev => ev.Summary];
     renderTableRows('explorationTableBody', milestones, eventColumns, exploration.milestonesEmpty);
-    renderTableRows('journalTableBody', events, eventColumns, exploration.journalEmpty);
+    if (!webViewingHistoricalJournal) {
+      webCurrentJournalEvents = events;
+      renderTableRows('journalTableBody', events, eventColumns, exploration.journalEmpty);
+    }
+    if (!webJournalFilesLoaded) {
+      webJournalFilesLoaded = true;
+      refreshWebJournalFiles();
+    }
     for (const id of ['explorationTableBody', 'journalTableBody']) {
       for (const row of document.getElementById(id).rows) {
         if (row.cells.length !== 3) continue;
@@ -1599,6 +1680,10 @@
         row.cells[1].style.fontWeight = '700';
       }
     }
+
+    const autoCtxEl = document.getElementById('webAutoContextDeck');
+    if (autoCtxEl && typeof payload.autoContextDeck === 'boolean')
+      autoCtxEl.checked = payload.autoContextDeck;
 
     // Deck de controles
     if (payload.deckBindings) {
@@ -1738,8 +1823,17 @@
     const categoryNames = new Map([
       ['En bruto', text.raw], ['Manufacturados', text.manufactured], ['Datos codificados', text.encoded]
     ]);
+    let webSelectedMaterialId = window._webSelectedMaterialId || null;
     filtered.forEach(material => {
       const row = document.createElement('tr');
+      row.style.cursor = 'pointer';
+      if (webSelectedMaterialId && material.Id === webSelectedMaterialId)
+        row.classList.add('current-system');
+      row.addEventListener('click', () => {
+        window._webSelectedMaterialId = material.Id;
+        body.querySelectorAll('tr').forEach(r => r.classList.remove('current-system'));
+        row.classList.add('current-system');
+      });
       const values = [
         material.DisplayName,
         categoryNames.get(material.Category) ?? material.Category,
@@ -1934,6 +2028,61 @@
   }
 
   let webAiRecognition = null;
+  let webAiHandsFreeActive = false;
+
+  function openWebInaraCurrentSystem() {
+    const sys = lastPayload?.state?.CurrentSystem;
+    if (!sys) return;
+    window.open(`https://inara.cz/elite/starsystem/?search=${encodeURIComponent(sys)}`, '_blank', 'noopener');
+  }
+
+  function toggleWebAiHandsFree() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showToast(inputTranslations?.webSpeechUnsupported || 'Web Speech API is not supported in this browser'); return; }
+    const btn = document.getElementById('btnWebAiHandsFree');
+    if (webAiHandsFreeActive) {
+      webAiHandsFreeActive = false;
+      if (webAiRecognition) { try { webAiRecognition.stop(); } catch { } }
+      if (btn) {
+        btn.textContent = '🎙';
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.title = operationsTranslations?.aiHandsFreeBtn || 'Hands-free';
+      }
+      return;
+    }
+    webAiHandsFreeActive = true;
+    if (btn) {
+      btn.textContent = '🟢';
+      btn.style.background = 'var(--hud-accent)';
+      btn.style.color = '#080A0E';
+      btn.title = operationsTranslations?.aiHandsFreeListening || 'Listening...';
+    }
+    startWebAiHandsFreeLoop();
+  }
+
+  function startWebAiHandsFreeLoop() {
+    if (!webAiHandsFreeActive) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    webAiRecognition = new SR();
+    webAiRecognition.lang = sectionLanguage || 'en-GB';
+    webAiRecognition.interimResults = false;
+    webAiRecognition.onresult = e => {
+      const transcript = e.results?.[0]?.[0]?.transcript || '';
+      if (transcript) sendWebAiPrompt(transcript);
+    };
+    webAiRecognition.onend = () => {
+      webAiRecognition = null;
+      if (webAiHandsFreeActive) setTimeout(startWebAiHandsFreeLoop, 400);
+    };
+    webAiRecognition.onerror = () => {
+      webAiRecognition = null;
+      if (webAiHandsFreeActive) setTimeout(startWebAiHandsFreeLoop, 1000);
+    };
+    try { webAiRecognition.start(); } catch { }
+  }
+
   function toggleWebAiVoice() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { showToast(inputTranslations?.webSpeechUnsupported || 'Web Speech API is not supported in this browser'); return; }
@@ -1973,6 +2122,8 @@
       const items = data[itemsKey];
       if (tbody && Array.isArray(items)) {
         tbody.innerHTML = items.map(rowHtmlFn).join('');
+        const wrap = tbody.closest('.table-scroll');
+        if (wrap) wrap.hidden = items.length === 0;
       }
     } catch (err) {
       if (status) status.textContent = String(err);
@@ -2229,8 +2380,146 @@
     } catch { }
   }
 
+  let webViewingHistoricalJournal = false;
+  let webJournalFilesLoaded = false;
+  let webCurrentJournalEvents = [];
+  let webLastExpeditionMarkdown = '';
+
+  async function toggleSelectedWebMaterialWishlist() {
+    const materialId = window._webSelectedMaterialId;
+    if (!materialId) {
+      showToast(materialTranslations?.wishlistToggle || 'Select a material row first');
+      return;
+    }
+    const target = Number(document.getElementById('webWishlistTarget')?.value || 50) || 50;
+    await fetch('/api/materials/wishlist/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ materialId, target })
+    });
+  }
+
+  async function toggleWebAutoContextDeck(enabled) {
+    await fetch('/api/deck/auto-context', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: Boolean(enabled) })
+    });
+  }
+
+  function importWebSpanshCsv(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const lines = String(reader.result || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const tbody = document.getElementById('webSpanshRouteTableBody');
+      const status = document.getElementById('webSpanshRouteStatus');
+      if (!tbody || lines.length < 2) return;
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+        if (!cols[0]) continue;
+        rows.push({ index: i, systemName: cols[0], distanceDisplay: cols[1] ? `${cols[1]} LY` : '—', details: cols.slice(2).filter(Boolean).join(' · ') });
+      }
+      tbody.innerHTML = rows.map(w => `<tr><td>${escapeHtml(String(w.index))}</td><td>${escapeHtml(w.systemName)}</td><td>${escapeHtml(w.distanceDisplay)}</td><td>${escapeHtml(w.details)}</td></tr>`).join('');
+      const wrap = tbody.closest('.table-scroll');
+      if (wrap) wrap.hidden = rows.length === 0;
+      if (status) status.textContent = `${file.name} (${rows.length})`;
+      if (rows.length > 0 && document.getElementById('webSpanshAutoCopy')?.checked && navigator.clipboard) {
+        navigator.clipboard.writeText(rows[0].systemName).catch(() => {});
+      }
+    };
+    reader.readAsText(file);
+    input.value = '';
+  }
+
+  async function resetWebSessionStats() {
+    await fetch('/api/session/reset', { method: 'POST' });
+    showToast(dashboardTranslations?.sessionReset || 'Session reset');
+  }
+
+  async function refreshWebJournalFiles() {
+    const sel = document.getElementById('webJournalHistorySelect');
+    if (!sel) return;
+    const prev = sel.value || '';
+    try {
+      const resp = await fetch('/api/journal/files');
+      const data = await resp.json();
+      sel.replaceChildren();
+      const liveOpt = document.createElement('option');
+      liveOpt.value = '';
+      liveOpt.textContent = operationsTranslations?.journalLiveSession || 'Live session';
+      sel.append(liveOpt);
+      for (const f of (data.files || [])) {
+        const opt = document.createElement('option');
+        opt.value = f.name;
+        opt.textContent = f.label;
+        sel.append(opt);
+      }
+      if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+    } catch { }
+  }
+
+  async function onWebJournalHistoryChange() {
+    const sel = document.getElementById('webJournalHistorySelect');
+    if (!sel) return;
+    const file = sel.value || '';
+    webViewingHistoricalJournal = Boolean(file);
+    try {
+      const url = file ? `/api/journal/events?file=${encodeURIComponent(file)}` : '/api/journal/events';
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.success && Array.isArray(data.events)) {
+        webCurrentJournalEvents = data.events;
+        const eventColumns = [ev => ev.Timestamp, ev => ev.EventType, ev => ev.Summary];
+        renderTableRows('journalTableBody', data.events, eventColumns, explorationTranslations?.journalEmpty || '');
+        for (const row of document.getElementById('journalTableBody').rows) {
+          if (row.cells.length !== 3) continue;
+          row.cells[0].style.fontFamily = 'Consolas,monospace';
+          row.cells[0].style.color = 'var(--hud-muted)';
+          row.cells[1].style.color = 'var(--hud-accent)';
+          row.cells[1].style.fontWeight = '700';
+        }
+      }
+    } catch { }
+  }
+
+  function exportWebJournal(format) {
+    const rows = webCurrentJournalEvents || [];
+    if (!rows.length) return;
+    let content = '';
+    let mime = 'text/plain;charset=utf-8';
+    let ext = format === 'json' ? 'json' : 'csv';
+    if (format === 'json') {
+      content = JSON.stringify(rows, null, 2);
+      mime = 'application/json;charset=utf-8';
+    } else {
+      const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      content = 'Timestamp,EventType,Summary\n' + rows.map(r => [esc(r.Timestamp), esc(r.EventType), esc(r.Summary)].join(',')).join('\n');
+      mime = 'text/csv;charset=utf-8';
+    }
+    const blob = new Blob([content], { type: mime });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `hudnopy-journal.${ext}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function exportWebExpeditionMarkdown() {
+    if (!webLastExpeditionMarkdown) return;
+    const blob = new Blob([webLastExpeditionMarkdown], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hudnopy-expedition-report.md';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   async function analyzeWebExpedition() {
     const el = document.getElementById('webExpeditionSummary');
+    const mdBtn = document.getElementById('btnWebExportExpeditionMd');
     if (!el) return;
     el.hidden = false;
     el.textContent = inputTranslations?.webAnalyzingJournals || 'Analyzing journals...';
@@ -2240,6 +2529,8 @@
       if (data.success && data.stats) {
         const st = data.stats;
         el.textContent = `Journals: ${st.journalsScanned} · Jumps: ${st.totalJumps} (${Number(st.totalDistanceLy || 0).toFixed(1)} LY) · Systems: ${st.uniqueSystems} · ELW/WW/AW: ${st.earthLikeWorlds}/${st.waterWorlds}/${st.ammoniaWorlds} · Exo: ${st.organicsAnalysed} · Missions: ${st.missionsCompleted}`;
+        webLastExpeditionMarkdown = data.markdown || '';
+        if (mdBtn) mdBtn.disabled = !webLastExpeditionMarkdown;
       }
     } catch (err) {
       el.textContent = String(err);
