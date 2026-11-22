@@ -26,7 +26,7 @@ public sealed class AlertSpeechService
     private readonly AlertService _alertService;
     private readonly ConfigService _configService;
     private readonly PiperTtsService _piperTts;
-    private readonly object _queueLock = new();
+    private readonly Lock _queueLock = new();
     private readonly List<SpeechRequest> _pendingRequests = new();
     private SpeechRequest? _currentRequest;
     private bool _workerRunning;
@@ -50,6 +50,7 @@ public sealed class AlertSpeechService
         public DateTimeOffset EnqueuedAtUtc { get; } = EnqueuedAtUtc;
         public bool IsManualPreview { get; } = IsManualPreview;
         public bool AppendSequential { get; } = AppendSequential;
+        public Task<byte[]?>? PreSynthesizedWavTask { get; set; }
         public CancellationToken CancellationToken => _cts.Token;
         public bool IsCancellationRequested => _cts.IsCancellationRequested;
 
@@ -351,6 +352,21 @@ public sealed class AlertSpeechService
                         _workerRunning = false;
                         return;
                     }
+
+                    // Pre-synthesize the next queued sentence in parallel while the current sentence plays (Piper TTS)
+                    if (_pendingRequests.Count > 0 &&
+                        string.Equals(_configService.Current.SpeechEngine, "piper", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var upcoming = _pendingRequests[0];
+                        if (upcoming.PreSynthesizedWavTask is null && !upcoming.IsCancellationRequested)
+                        {
+                            string voiceId = _configService.Current.PiperVoiceId;
+                            string lang = _configService.Current.InterfaceLanguage;
+                            int rate = Math.Clamp(_configService.Current.SpeechRate, -5, 5);
+                            upcoming.PreSynthesizedWavTask = _piperTts.TrySynthesizeWavAsync(
+                                upcoming.Text, voiceId, lang, rate, upcoming.CancellationToken);
+                        }
+                    }
                 }
 
                 try
@@ -408,12 +424,14 @@ public sealed class AlertSpeechService
 
             if (string.Equals(_configService.Current.SpeechEngine, "piper", StringComparison.OrdinalIgnoreCase))
             {
-                byte[]? piperWav = await _piperTts.TrySynthesizeWavAsync(
-                    request.Text,
-                    _configService.Current.PiperVoiceId,
-                    _configService.Current.InterfaceLanguage,
-                    speechRate,
-                    request.CancellationToken).ConfigureAwait(false);
+                byte[]? piperWav = request.PreSynthesizedWavTask is not null
+                    ? await request.PreSynthesizedWavTask.ConfigureAwait(false)
+                    : await _piperTts.TrySynthesizeWavAsync(
+                        request.Text,
+                        _configService.Current.PiperVoiceId,
+                        _configService.Current.InterfaceLanguage,
+                        speechRate,
+                        request.CancellationToken).ConfigureAwait(false);
                 if (piperWav is { Length: > 44 })
                 {
                     await audioStream.WriteAsync(piperWav, request.CancellationToken).ConfigureAwait(false);

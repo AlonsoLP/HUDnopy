@@ -120,7 +120,7 @@ public partial class MainWindow
     private void UpdateDashboardUi(ShipState s)
     {
         var text = DashboardTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         bool hasSessionData = s.CommanderName != "CMDR DESCONOCIDO";
         string shipName = !hasSessionData && s.ShipName == "SIN SEÑAL" ? text["noSignal"] : s.ShipName;
         TxtModeBadge.Text = s.IsGameDetected ? text["online"] : text["inactive"];
@@ -167,7 +167,7 @@ public partial class MainWindow
     private void UpdateFlightUi(ShipState s)
     {
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         // Barras de estado
         double hull = Math.Clamp(s.HullHealth, 0, 100);
         TxtHullPercent.Text = s.HasHullTelemetry ? $"{hull.ToString("0.0", culture)}%" : "---";
@@ -359,7 +359,7 @@ public partial class MainWindow
             return;
 
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         if (s.CarrierMaterials.Count == 0)
         {
             TxtCarrierMaterialsStatus.Text = flight["fcMaterialsWaiting"];
@@ -399,7 +399,7 @@ public partial class MainWindow
         _lastTritiumCalcKey = key;
 
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         if (!double.TryParse(
                 routeText.Replace(',', '.'),
                 System.Globalization.NumberStyles.Float,
@@ -473,6 +473,14 @@ public partial class MainWindow
             _lastEdsmIntelSystem = s.CurrentSystem;
             _ = _communitySync.FetchEdsmSystemIntelAsync(s.CurrentSystem);
         }
+
+        if (!string.IsNullOrWhiteSpace(s.CurrentSystem) &&
+            !string.Equals(_lastEdsmDiscoverySystem, s.CurrentSystem, StringComparison.OrdinalIgnoreCase) &&
+            _configService.Current.EnableEdsmSync)
+        {
+            _lastEdsmDiscoverySystem = s.CurrentSystem;
+            _ = _communitySync.FetchEdsmDiscoveryAndFactionsAsync(s.CurrentSystem);
+        }
     }
 
     private void BtnSaveSystemNote_Click(object sender, RoutedEventArgs e)
@@ -512,7 +520,7 @@ public partial class MainWindow
             return;
 
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         TxtEdsmSystemIntel.Text = string.Format(
             culture,
             flight["edsmIntelSummary"],
@@ -543,7 +551,7 @@ public partial class MainWindow
             return;
 
         var dash = DashboardTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         var st = s.SessionStats;
         string sign = st.NetCredits >= 0 ? "+" : "";
         TxtSessionStatsSummary.Text = string.Format(
@@ -643,7 +651,7 @@ public partial class MainWindow
             if (asJson)
             {
                 var payload = rows.Select(static r => new { r.Timestamp, r.EventType, r.Summary }).ToList();
-                string json = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                string json = System.Text.Json.JsonSerializer.Serialize(payload, HttpClientHeaderDefaults.IndentedJsonOptions);
                 File.WriteAllText(dialog.FileName, json, System.Text.Encoding.UTF8);
             }
             else
@@ -769,7 +777,7 @@ public partial class MainWindow
     private void UpdateCarrierCountdownAndRunway(ShipState s)
     {
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
 
         if (TxtCarrierUpkeepRunway is not null)
         {
@@ -893,7 +901,7 @@ public partial class MainWindow
             _lastExpeditionStats = stats;
 
             var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-            var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+            var culture = UiCulture;
             TxtExpeditionSummary.Text = string.Format(
                 culture,
                 ops["expeditionSummary"],

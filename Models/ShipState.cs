@@ -317,8 +317,16 @@ public class ShipState
     public SessionStatsState SessionStats { get; set; } = new();
     public string CurrentSystemNote { get; set; } = "";
     public List<StoredShipItem> StoredShips { get; set; } = new();
+    public List<StoredModuleItem> StoredModules { get; set; } = new();
     public List<CommunityGoalItem> CommunityGoals { get; set; } = new();
     public List<CarrierCargoItem> CarrierCargo { get; set; } = new();
+    public List<CarrierMarketOrderItem> CarrierMarketOrders { get; set; } = new();
+    public List<string> CarrierServices { get; set; } = new();
+    public EdsmSystemDiscoveryIntel? EdsmDiscoveryIntel { get; set; }
+    public InaraCommanderProfile? InaraProfile { get; set; }
+    public List<EliteBgsFactionWatchItem> WatchedBgsFactions { get; set; } = new();
+    public List<DssaCarrierItem> NearestDssaCarriers { get; set; } = new();
+    public List<ArdentMarketOfferItem> ArdentMarketOffers { get; set; } = new();
 
     // Session metadata and game version (for EDDN / EDSM / Inara)
     public string GameVersion { get; set; } = "";

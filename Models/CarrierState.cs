@@ -41,6 +41,7 @@ public sealed class CarrierState
     public long? Available { get; set; }
     public double? ReservePercent { get; set; }
     public double? TaxRate { get; set; }
+    public long? WeeklyUpkeep { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 
     internal CarrierState Snapshot() => (CarrierState)MemberwiseClone();

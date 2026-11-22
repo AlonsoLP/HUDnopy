@@ -18,7 +18,7 @@ namespace HUDnopy.Services;
 /// </summary>
 internal sealed class WebAccessControl
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<string, DateTimeOffset> _sessions = new(StringComparer.Ordinal);
     private int _failures;
     private DateTimeOffset _blockedUntil;

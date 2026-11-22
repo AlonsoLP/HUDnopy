@@ -705,7 +705,7 @@ public partial class MainWindow
             string label = module.Label;
             if (module.Id == "shield" && label.Length > 0)
             {
-                var casing = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage).TextInfo;
+                var casing = UiCulture.TextInfo;
                 label = casing.ToUpper(label[..1]) + casing.ToLower(label[1..]);
             }
             var check = new System.Windows.Controls.CheckBox

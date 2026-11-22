@@ -7,6 +7,8 @@
 // Description: Dependency composition root wiring all HUDnopy background services.
 // -----------------------------------------------------------------------------
 
+using HUDnopy.Services.Integrations;
+
 namespace HUDnopy.Services;
 
 /// <summary>
@@ -28,6 +30,10 @@ public sealed class ApplicationServices
     public FrontierCapiService FrontierCapi { get; }
     public GalaxyStatusService GalaxyStatus { get; }
     public GalnetService Galnet { get; }
+    public EliteBgsWatchlistService EliteBgsWatchlist { get; }
+    public ArdentMarketService ArdentMarket { get; }
+    public EdastroCanonnService EdastroCanonn { get; }
+    public DiscordIntegrationService Discord { get; }
     public AiCopilotService AiCopilot { get; }
     public WebServerService WebServer { get; }
 
@@ -48,7 +54,14 @@ public sealed class ApplicationServices
         FrontierCapi = new FrontierCapiService(Configuration, ShipState, GameEvents);
         GalaxyStatus = new GalaxyStatusService();
         Galnet = new GalnetService();
-        AiCopilot = new AiCopilotService(Configuration, ShipState, Bindings, InputSimulator, SpanshSystemData, CommunitySync, Galnet, GalaxyStatus, AlertSpeech, GameEvents);
-        WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot, GalaxyStatus, Galnet);
+        EliteBgsWatchlist = new EliteBgsWatchlistService(Configuration, ShipState);
+        ArdentMarket = new ArdentMarketService(Configuration, ShipState);
+        EdastroCanonn = new EdastroCanonnService(Configuration, ShipState, GameEvents);
+        Discord = new DiscordIntegrationService(Configuration, ShipState, GameEvents, EliteBgsWatchlist);
+        AiCopilot = new AiCopilotService(Configuration, ShipState, Bindings, InputSimulator, SpanshSystemData, CommunitySync, Galnet, GalaxyStatus, AlertSpeech, GameEvents, EliteBgsWatchlist, ArdentMarket, EdastroCanonn, Discord, FrontierCapi, Alerts);
+        WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot, GalaxyStatus, Galnet, EliteBgsWatchlist, ArdentMarket, EdastroCanonn, CommunitySync, AlertSpeech);
+        AiCopilot.WebHudStatusProvider = () => WebServer.IsRunning
+            ? $"Web HUD active on port {WebServer.CurrentPort}. URLs: {string.Join(", ", WebServer.GetAccessUrls())}{(string.IsNullOrWhiteSpace(WebServer.SessionCode) ? "" : $". Session code: {WebServer.SessionCode}")}."
+            : $"Web HUD is stopped ({WebServer.StatusMessage}).";
     }
 }

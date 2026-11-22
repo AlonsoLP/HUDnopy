@@ -18,7 +18,7 @@ namespace HUDnopy.Models;
 /// </summary>
 public class AppConfig
 {
-    public int WebServerPort { get; set; } = 5050;
+    public int WebServerPort { get => field; set => field = Math.Clamp(value, 1024, 65535); } = 5050;
     public bool AutoStartWebServer { get; set; } = true;
     public string WebAccessMode { get; set; } = "local";
     public string WebVpnInterfaceId { get; set; } = "";
@@ -33,17 +33,17 @@ public class AppConfig
     public bool HideNavigationMenuText { get; set; }
     public string InterfaceLanguage { get; set; } = "en-GB";
     public bool EnableSpanshSystemData { get; set; }
-    public int DesktopFontScalePercent { get; set; } = 100;
+    public int DesktopFontScalePercent { get => field; set => field = Math.Clamp(value, 70, 200); } = 100;
     public bool StartMinimizedToTray { get; set; }
     public string NavigationMenuPosition { get; set; } = "left";
     public List<string> HeaderModules { get; set; } = ["system", "credits"];
-    public int GameProcessExitGraceSeconds { get; set; } = 15;
+    public int GameProcessExitGraceSeconds { get => field; set => field = Math.Clamp(value, 1, 300); } = 15;
     public int FuelLowThresholdPercent { get; set; } = 20;
     public int FuelCriticalThresholdPercent { get; set; } = 10;
     public int HullCriticalThresholdPercent { get; set; } = 50;
     public int MissionExpiryWarningHours { get; set; } = 24;
     public int MissionExpiryCriticalHours { get; set; } = 1;
-    public int AlertSoundVolumePercent { get; set; } = 100;
+    public int AlertSoundVolumePercent { get => field; set => field = Math.Clamp(value, 0, 100); } = 100;
     public List<string> AlertSoundDirectories { get; set; } = [];
     public string SpeechVoiceName { get; set; } = "";
     public string SpeechEngine { get; set; } = "sapi"; // "sapi" | "piper"
@@ -56,13 +56,14 @@ public class AppConfig
     public bool GroupUnhandledEvents { get; set; } = true;
     public Dictionary<string, int> MaterialWishlist { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string MiningTargetMinerals { get; set; } = "Platinum, Osmium, Painite, LowTemperatureDiamond, Opal, Monazite, Musgravite, Alexandrite, Benitoite, Grandidierite, Rhodplumsite, Serendibite";
-    public int MiningMinPercent { get; set; } = 25;
+    public int MiningMinPercent { get => field; set => field = Math.Clamp(value, 1, 100); } = 25;
     public List<SurfaceBookmarkItem> SurfaceBookmarks { get; set; } = new();
     public bool AutoContextDeck { get; set; }
     public List<DeckMacroDefinition> CustomMacros { get; set; } = new();
     public Dictionary<string, string> SystemNotes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public bool EnableEddnUpload { get; set; }
     public bool EnableEdsmSync { get; set; }
+    public bool EdsmAnnounceFirstDiscovery { get; set; } = true;
     public string EdsmCommanderName { get; set; } = "";
     public string EdsmApiKey { get; set; } = "";
     public bool EnableInaraSync { get; set; }
@@ -70,7 +71,17 @@ public class AppConfig
     public string InaraApiKey { get; set; } = "";
     public bool EnableFrontierCapi { get; set; }
     public string FrontierCapiClientId { get; set; } = "";
-    public int FrontierCapiCallbackPort { get; set; } = 5055;
+    public int FrontierCapiCallbackPort { get => field; set => field = Math.Clamp(value, 1024, 65535); } = 5055;
+    public bool EnableEliteBgsWatchlist { get; set; }
+    public string EliteBgsWatchedFactions { get; set; } = "";
+    public bool EnableArdentMarketApi { get; set; }
+    public bool EnableEdastroDssa { get; set; }
+    public bool EnableCanonnUpload { get; set; }
+    public bool EnableDiscord { get; set; }
+    public string DiscordWebhookUrl { get; set; } = "";
+    public bool DiscordWebhookOnElw { get; set; } = true;
+    public bool DiscordWebhookOnCarrierJump { get; set; } = true;
+    public bool DiscordWebhookOnBgsAlert { get; set; } = true;
     public List<string> EngineeringWishlistBlueprints { get; set; } = new();
     public bool EnableAiCopilot { get; set; }
     public string AiActiveProvider { get; set; } = "ollama"; // "ollama" | "gemini" | "openai"
@@ -173,3 +184,10 @@ public class VoiceMacroDefinition
         }
     ];
 }
+
+/// <summary>
+/// Compile-time System.Text.Json source generation context for reflection-free <see cref="AppConfig"/> persistence.
+/// </summary>
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(AppConfig))]
+internal partial class AppConfigJsonContext : JsonSerializerContext;

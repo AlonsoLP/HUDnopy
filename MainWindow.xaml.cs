@@ -25,6 +25,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using HUDnopy.Models;
 using HUDnopy.Services;
+using HUDnopy.Services.Integrations;
 using Forms = System.Windows.Forms;
 using WpfBinding = System.Windows.Data.Binding;
 using WpfControl = System.Windows.Controls.Control;
@@ -50,10 +51,15 @@ public partial class MainWindow : Window
     private readonly FrontierCapiService _frontierCapi;
     private readonly GalaxyStatusService _galaxyStatus;
     private readonly GalnetService _galnetService;
+    private readonly EliteBgsWatchlistService _eliteBgsWatchlist;
+    private readonly ArdentMarketService _ardentMarket;
+    private readonly EdastroCanonnService _edastroCanonn;
+    private readonly DiscordIntegrationService _discord;
     private readonly AiCopilotService _aiCopilot;
     private readonly WebServerService _webServer;
     private string _lastSystemNoteLoaded = "";
     private string _lastEdsmIntelSystem = "";
+    private string _lastEdsmDiscoverySystem = "";
     private List<SpanshRouteWaypoint> _spanshRouteWaypoints = new();
     private string _lastSpanshRouteAutoCopied = "";
     private bool _viewingHistoricalJournal;
@@ -64,13 +70,15 @@ public partial class MainWindow : Window
     private NAudio.Wave.WaveInEvent? _aiVadRecorder;
     private bool _aiHandsFreeActive;
     private volatile bool _aiHandsFreeProcessing;
-    private readonly object _vadLock = new();
+    private readonly Lock _vadLock = new();
     private readonly Queue<byte[]> _vadPreBuffer = new();
     private MemoryStream? _vadUtterancePcm;
     private bool _vadInSpeech;
     private int _vadSpeechFrames;
     private int _vadSilenceFrames;
-    private readonly object _shipUiUpdateLock = new();
+    private double _vadNoiseFloor = 0.008;
+    private int _vadBargeInFrames;
+    private readonly Lock _shipUiUpdateLock = new();
     private ShipState? _pendingShipUiState;
     private bool _shipUiUpdateQueued;
     private int _fontZoomWheelDelta;
@@ -100,6 +108,7 @@ public partial class MainWindow : Window
     private readonly ConditionalWeakTable<FrameworkElement, FontSizeBaseline> _desktopFontBaseSizes = new();
     private double _desktopFontScale = 1;
     private string _uiLanguage = "en-GB";
+    private System.Globalization.CultureInfo UiCulture => System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
     private string _readyStatusText = "";
     private string? _displayedBindsFile;
     private IReadOnlyList<string>? _installedVoiceNames;
@@ -117,6 +126,7 @@ public partial class MainWindow : Window
     public MainWindow(ApplicationServices services)
     {
         InitializeComponent();
+        Title = $"{HttpClientHeaderDefaults.ProductName} v{HttpClientHeaderDefaults.ProductVersion} // SHIP CONTROL SYSTEM";
         _readyStatusText = TxtStatusBarLeft.Text;
         _materialFilterControlsReady = true;
 
@@ -135,6 +145,10 @@ public partial class MainWindow : Window
         _frontierCapi = services.FrontierCapi;
         _galaxyStatus = services.GalaxyStatus;
         _galnetService = services.Galnet;
+        _eliteBgsWatchlist = services.EliteBgsWatchlist;
+        _ardentMarket = services.ArdentMarket;
+        _edastroCanonn = services.EdastroCanonn;
+        _discord = services.Discord;
         _aiCopilot = services.AiCopilot;
         _webServer = services.WebServer;
         InitializeTableHeaderKeys();
@@ -152,9 +166,12 @@ public partial class MainWindow : Window
         });
         _communitySync.SyncStatusChanged += () => Dispatcher.BeginInvoke(RefreshCommunitySyncStatus);
         _communitySync.EdsmSystemIntelUpdated += intel => Dispatcher.BeginInvoke(() => ApplyEdsmSystemIntel(intel));
+        _communitySync.EdsmDiscoveryUpdated += intel => Dispatcher.BeginInvoke(() => ApplyEdsmDiscoveryIntel(intel));
         _frontierCapi.StatusChanged += () => Dispatcher.BeginInvoke(RefreshFrontierCapiUi);
         _galaxyStatus.StatusUpdated += snap => Dispatcher.BeginInvoke(() => UpdateGalaxyStatusUi(snap));
         _galnetService.ArticlesUpdated += () => Dispatcher.BeginInvoke(RefreshGalnetUi);
+        _eliteBgsWatchlist.WatchlistUpdated += items => Dispatcher.BeginInvoke(() => UpdateEliteBgsWatchlistUi(items));
+        _discord.StatusChanged += () => Dispatcher.BeginInvoke(RefreshV3IntegrationsStatus);
         _aiCopilot.CopilotMessageAdded += (speaker, msg) => Dispatcher.BeginInvoke(() => AppendAiChatLine(speaker, msg));
         _aiCopilot.CopilotStreamChunk += chunk => Dispatcher.BeginInvoke(() => AppendAiStreamChunk(chunk));
         _aiCopilot.SpanshRouteRequested += (mode, dest) => Dispatcher.BeginInvoke(() => ExecuteSpanshRouteFromAi(mode, dest));
@@ -198,6 +215,7 @@ public partial class MainWindow : Window
         {
             RefreshHeaderOptions();
             RefreshHeaderModules(_fileWatcher.State);
+            SyncIntegrationsUiFromConfig();
         });
 
         RefreshBindingsUi();
@@ -350,6 +368,10 @@ public partial class MainWindow : Window
             _frontierCapi.Dispose();
             _galaxyStatus.Dispose();
             _galnetService.Dispose();
+            _eliteBgsWatchlist.Dispose();
+            _ardentMarket.Dispose();
+            _edastroCanonn.Dispose();
+            _discord.Dispose();
             StopAiHandsFree();
             CleanupAiVoiceRecorder();
             UnregisterGlobalPttHotkey();
@@ -358,6 +380,7 @@ public partial class MainWindow : Window
             _piperTts.Dispose();
             _fileWatcher.Dispose();
             await _webServer.StopAsync();
+            _webServer.Dispose();
         }
         catch
         {
@@ -410,6 +433,7 @@ public partial class MainWindow : Window
         TxtFrontierClientId.Text = Guid.TryParse(cfg.FrontierCapiClientId?.Trim(), out _) ? cfg.FrontierCapiClientId.Trim() : "";
         TxtFrontierCallbackPort.Text = Math.Clamp(cfg.FrontierCapiCallbackPort, 1024, 65535).ToString();
         RefreshFrontierCapiUi();
+        LoadV3IntegrationsConfigToUi(cfg);
         if (CmbEngineeringBlueprint is not null)
         {
             CmbEngineeringBlueprint.ItemsSource = EngineeringWishlistService.Catalog;

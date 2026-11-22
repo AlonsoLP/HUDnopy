@@ -12,6 +12,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HUDnopy.Models;
@@ -37,9 +38,10 @@ public sealed class SpanshSystemDataService : IDisposable
 
     private readonly ConfigService _configService;
     private readonly EliteFileWatcherService _fileWatcher;
+    private readonly TimeProvider _timeProvider;
     private readonly HttpClient _httpClient;
     private readonly string _cachePath;
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private CancellationTokenSource? _activeRequest;
     private ulong? _activeId64;
     private DateTimeOffset _retryAfterUtc;
@@ -58,17 +60,13 @@ public sealed class SpanshSystemDataService : IDisposable
         }
     }
 
-    public SpanshSystemDataService(ConfigService configService, EliteFileWatcherService fileWatcher)
+    public SpanshSystemDataService(ConfigService configService, EliteFileWatcherService fileWatcher, TimeProvider? timeProvider = null)
     {
         _configService = configService;
         _fileWatcher = fileWatcher;
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("HUDnopy", "0.1"));
-        string cacheDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HUDnopy",
-            "Spansh");
-        _cachePath = Path.Combine(cacheDirectory, "current-system.json");
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _httpClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(20));
+        _cachePath = HttpClientHeaderDefaults.GetLocalDataPath("Spansh", "current-system.json");
 
         _configService.ConfigChanged += OnConfigChanged;
         _fileWatcher.StateUpdated += OnShipStateUpdated;
@@ -85,7 +83,7 @@ public sealed class SpanshSystemDataService : IDisposable
         CancellationTokenSource? requestToStart = null;
         SpanshSystemDataState? changedState = null;
         ulong id64 = 0;
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
 
         lock (_sync)
         {
@@ -403,6 +401,8 @@ public sealed class SpanshSystemDataService : IDisposable
         string referenceSystem,
         double[]? referenceCoords)
     {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return (false, new List<SpanshServiceStationItem>(), "Spansh está desactivado en Ajustes -> Integraciones.");
         var filters = new Dictionary<string, object>();
         switch (serviceKey)
         {
@@ -491,6 +491,8 @@ public sealed class SpanshSystemDataService : IDisposable
         string referenceSystem,
         double[]? referenceCoords)
     {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return (false, new List<SpanshServiceStationItem>(), "Spansh está desactivado en Ajustes -> Integraciones.");
         if (string.IsNullOrWhiteSpace(commodityName))
             return (false, new List<SpanshServiceStationItem>(), "Mercancía vacía");
 
@@ -514,6 +516,8 @@ public sealed class SpanshSystemDataService : IDisposable
         string referenceSystem,
         double[]? referenceCoords)
     {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return (false, new List<SpanshServiceStationItem>(), "Spansh está desactivado en Ajustes -> Integraciones.");
         if (string.IsNullOrWhiteSpace(query))
             return (false, new List<SpanshServiceStationItem>(), "Introduce un nombre de nave o módulo");
 
@@ -598,6 +602,8 @@ public sealed class SpanshSystemDataService : IDisposable
         string referenceSystem,
         double[]? referenceCoords)
     {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return (false, new List<SpanshMiningRingItem>(), "Spansh está desactivado en Ajustes -> Integraciones.");
         var filters = new Dictionary<string, object>
         {
             ["reserve_level"] = new { value = new[] { "Pristine" } },
@@ -688,6 +694,163 @@ public sealed class SpanshSystemDataService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Searches nearby landable planetary bodies containing a target raw material or matching a subtype via Spansh /api/bodies/search.
+    /// </summary>
+    public async Task<(bool Success, List<SpanshBodySearchItem> Results, string Message)> SearchBodiesAsync(
+        string query,
+        string referenceSystem,
+        double[]? starPos,
+        double maxDistanceLy = 100)
+    {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return (false, new List<SpanshBodySearchItem>(), "Spansh API is disabled.");
+
+        string cleanQuery = (query ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(cleanQuery))
+            return (false, new List<SpanshBodySearchItem>(), "Enter a material or body type.");
+
+        object refCoords = starPos is { Length: 3 }
+            ? new { x = starPos[0], y = starPos[1], z = starPos[2] }
+            : new { x = 0.0, y = 0.0, z = 0.0 };
+
+        var filters = new Dictionary<string, object>
+        {
+            ["is_landable"] = new { value = true },
+            ["distance"] = new { min = "0", max = Math.Clamp(maxDistanceLy, 10, 500).ToString("0", CultureInfo.InvariantCulture) },
+            ["materials"] = new[] { new { name = cleanQuery, value = new[] { 1.0, 100.0 } } }
+        };
+
+        var payload = new
+        {
+            filters,
+            sort = new[] { new Dictionary<string, object> { ["distance"] = new { direction = "asc" } } },
+            size = 20,
+            page = 0,
+            reference_system = string.IsNullOrWhiteSpace(referenceSystem) || referenceSystem == "---" ? "Sol" : referenceSystem,
+            reference_coords = refCoords
+        };
+
+        try
+        {
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var resp = await _httpClient.PostAsync("https://spansh.co.uk/api/bodies/search", content);
+            if (!resp.IsSuccessStatusCode)
+                return (false, new List<SpanshBodySearchItem>(), $"Spansh HTTP {(int)resp.StatusCode}");
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            var list = new List<SpanshBodySearchItem>();
+            if (doc.RootElement.TryGetProperty("results", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var b in arr.EnumerateArray())
+                {
+                    string sys = b.TryGetProperty("system_name", out var sp) ? (sp.GetString() ?? "") : "";
+                    string name = b.TryGetProperty("name", out var np) ? (np.GetString() ?? "") : "";
+                    string subType = b.TryGetProperty("subtype", out var stp) ? (stp.GetString() ?? "") : "";
+                    double dist = b.TryGetProperty("distance", out var dp) && dp.ValueKind == JsonValueKind.Number ? Math.Round(dp.GetDouble(), 1) : 0;
+                    double? grav = b.TryGetProperty("gravity", out var gp) && gp.ValueKind == JsonValueKind.Number ? Math.Round(gp.GetDouble(), 2) : null;
+                    bool landable = b.TryGetProperty("is_landable", out var lp) && lp.ValueKind == JsonValueKind.True;
+
+                    string mats = "";
+                    if (b.TryGetProperty("materials", out var mArr) && mArr.ValueKind == JsonValueKind.Array)
+                    {
+                        mats = string.Join(", ", mArr.EnumerateArray().Take(4).Select(m =>
+                        {
+                            string mn = m.TryGetProperty("name", out var mnp) ? (mnp.GetString() ?? "") : "";
+                            double pct = m.TryGetProperty("share", out var msp) && msp.ValueKind == JsonValueKind.Number ? msp.GetDouble() : 0;
+                            return !string.IsNullOrWhiteSpace(mn) ? $"{mn} {pct:0.0}%" : "";
+                        }).Where(static s => !string.IsNullOrWhiteSpace(s)));
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(name))
+                        list.Add(new SpanshBodySearchItem(sys, name, subType, dist, grav, landable, mats));
+                }
+            }
+
+            return (true, list, $"Spansh Bodies: {list.Count}");
+        }
+        catch (Exception ex)
+        {
+            return (false, new List<SpanshBodySearchItem>(), $"Spansh: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Searches nearby Fleet Carriers offering a specific service (e.g., Vista Genomics, Repair, Shipyard) via Spansh /api/stations/search.
+    /// </summary>
+    public async Task<(bool Success, List<SpanshCarrierSearchItem> Results, string Message)> SearchFleetCarriersAsync(
+        string requiredService,
+        string referenceSystem,
+        double[]? starPos,
+        double maxDistanceLy = 500)
+    {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return (false, new List<SpanshCarrierSearchItem>(), "Spansh API is disabled.");
+
+        object refCoords = starPos is { Length: 3 }
+            ? new { x = starPos[0], y = starPos[1], z = starPos[2] }
+            : new { x = 0.0, y = 0.0, z = 0.0 };
+
+        var filters = new Dictionary<string, object>
+        {
+            ["type"] = new { value = new[] { "Drake-Class Carrier" } },
+            ["distance"] = new { min = "0", max = Math.Clamp(maxDistanceLy, 25, 2500).ToString("0", CultureInfo.InvariantCulture) }
+        };
+        if (!string.IsNullOrWhiteSpace(requiredService))
+            filters["services"] = new { value = new[] { requiredService.Trim() } };
+
+        var payload = new
+        {
+            filters,
+            sort = new[] { new Dictionary<string, object> { ["distance"] = new { direction = "asc" } } },
+            size = 20,
+            page = 0,
+            reference_system = string.IsNullOrWhiteSpace(referenceSystem) || referenceSystem == "---" ? "Sol" : referenceSystem,
+            reference_coords = refCoords
+        };
+
+        try
+        {
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var resp = await _httpClient.PostAsync("https://spansh.co.uk/api/stations/search", content);
+            if (!resp.IsSuccessStatusCode)
+                return (false, new List<SpanshCarrierSearchItem>(), $"Spansh HTTP {(int)resp.StatusCode}");
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            var list = new List<SpanshCarrierSearchItem>();
+            if (doc.RootElement.TryGetProperty("results", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var st in arr.EnumerateArray())
+                {
+                    string callsign = st.TryGetProperty("name", out var np) ? (np.GetString() ?? "") : "";
+                    string sys = st.TryGetProperty("system_name", out var sp) ? (sp.GetString() ?? "") : "";
+                    double dist = st.TryGetProperty("distance", out var dp) && dp.ValueKind == JsonValueKind.Number ? Math.Round(dp.GetDouble(), 1) : 0;
+                    string updatedRaw = st.TryGetProperty("updated_at", out var up) ? (up.GetString() ?? "") : "";
+                    string updatedDisp = DateTimeOffset.TryParse(updatedRaw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dt)
+                        ? dt.ToLocalTime().ToString("dd/MM HH:mm", CultureInfo.CurrentCulture)
+                        : "—";
+
+                    string servicesSummary = "";
+                    if (st.TryGetProperty("services", out var svArr) && svArr.ValueKind == JsonValueKind.Array)
+                    {
+                        servicesSummary = string.Join(", ", svArr.EnumerateArray().Take(5)
+                            .Select(static s => s.ValueKind == JsonValueKind.Object && s.TryGetProperty("name", out var sn) ? sn.GetString() ?? "" : s.GetString() ?? "")
+                            .Where(static x => !string.IsNullOrWhiteSpace(x)));
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(callsign))
+                        list.Add(new SpanshCarrierSearchItem(callsign, sys, dist, servicesSummary, updatedDisp));
+                }
+            }
+
+            return (true, list, $"Spansh Carriers: {list.Count}");
+        }
+        catch (Exception ex)
+        {
+            return (false, new List<SpanshCarrierSearchItem>(), $"Spansh: {ex.Message}");
+        }
+    }
+
     public async Task<(bool Success, List<SpanshRouteWaypoint> Waypoints, string Message)> PlotSpanshRouteAsync(
         string mode,
         string fromSystem,
@@ -695,14 +858,15 @@ public sealed class SpanshSystemDataService : IDisposable
         double jumpRange,
         long carrierUsedMass = 0)
     {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return (false, new List<SpanshRouteWaypoint>(), "Spansh está desactivado en Ajustes -> Integraciones.");
         if (string.IsNullOrWhiteSpace(fromSystem))
             return (false, new List<SpanshRouteWaypoint>(), "Sistema de origen desconocido");
 
         string endpoint;
-        var form = new List<KeyValuePair<string, string>>
-        {
-            new("from", fromSystem.Trim())
-        };
+        var form = new List<KeyValuePair<string, string>>();
+        if (mode is not ("carrier" or "tourist" or "galaxy"))
+            form.Add(new("from", fromSystem.Trim()));
 
         switch (mode)
         {
@@ -748,6 +912,36 @@ public sealed class SpanshSystemDataService : IDisposable
                 form.Add(new("capacity_used", Math.Max(0, carrierUsedMass).ToString(CultureInfo.InvariantCulture)));
                 break;
 
+            case "ammonia":
+                endpoint = "https://spansh.co.uk/api/ammonia/route";
+                if (!string.IsNullOrWhiteSpace(toSystem))
+                    form.Add(new("to", toSystem.Trim()));
+                form.Add(new("range", Math.Clamp(jumpRange, 10, 120).ToString("0.0", CultureInfo.InvariantCulture)));
+                form.Add(new("radius", "40"));
+                form.Add(new("max_results", "20"));
+                form.Add(new("max_distance", "5000"));
+                form.Add(new("loop", string.IsNullOrWhiteSpace(toSystem) ? "1" : "0"));
+                break;
+
+            case "tourist":
+                endpoint = "https://spansh.co.uk/api/tourist/route";
+                if (!string.IsNullOrWhiteSpace(toSystem))
+                    form.Add(new("destination", toSystem.Trim()));
+                form.Add(new("source", fromSystem.Trim()));
+                form.Add(new("range", Math.Clamp(jumpRange, 10, 120).ToString("0.0", CultureInfo.InvariantCulture)));
+                form.Add(new("loop", string.IsNullOrWhiteSpace(toSystem) ? "1" : "0"));
+                break;
+
+            case "galaxy":
+                if (string.IsNullOrWhiteSpace(toSystem))
+                    return (false, new List<SpanshRouteWaypoint>(), "Introduce sistema de destino");
+                endpoint = "https://spansh.co.uk/api/generic/route";
+                form.Add(new("source", fromSystem.Trim()));
+                form.Add(new("destination", toSystem.Trim()));
+                form.Add(new("range", Math.Clamp(jumpRange, 10, 120).ToString("0.0", CultureInfo.InvariantCulture)));
+                form.Add(new("supercharge_multiplier", "4"));
+                break;
+
             default:
                 return (false, new List<SpanshRouteWaypoint>(), "Modo de ruta desconocido");
         }
@@ -788,6 +982,8 @@ public sealed class SpanshSystemDataService : IDisposable
         double jumpRange,
         bool requireLargePad)
     {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return (false, new List<SpanshTradeHopItem>(), "Spansh está desactivado en Ajustes -> Integraciones.");
         if (string.IsNullOrWhiteSpace(fromSystem))
             return (false, new List<SpanshTradeHopItem>(), "Sistema actual desconocido");
 
@@ -865,7 +1061,7 @@ public sealed class SpanshSystemDataService : IDisposable
         string url = $"https://spansh.co.uk/api/results/{Uri.EscapeDataString(jobId)}";
         for (int attempt = 0; attempt < 25; attempt++)
         {
-            await Task.Delay(1200);
+            await Task.Delay(TimeSpan.FromMilliseconds(1200), _timeProvider);
             using var resp = await _httpClient.GetAsync(url);
             if (!resp.IsSuccessStatusCode)
                 continue;
@@ -911,8 +1107,8 @@ public sealed class SpanshSystemDataService : IDisposable
 
             var detailParts = new List<string>();
             if (isNeutron) detailParts.Add("⚡ Neutrones");
-            if (item.TryGetProperty("fuel_used", out var fu) && fu.ValueKind == JsonValueKind.Number)
-                detailParts.Add($"Tritio: {fu.GetInt32()} t");
+            if (item.TryGetProperty("fuel_used", out var fu) && fu.ValueKind == JsonValueKind.Number && fu.TryGetDouble(out double fuelUsed))
+                detailParts.Add($"Fuel: {fuelUsed.ToString("0.#", CultureInfo.InvariantCulture)} t");
             if (item.TryGetProperty("bodies", out var bArr) && bArr.ValueKind == JsonValueKind.Array && bArr.GetArrayLength() > 0)
             {
                 var bodies = bArr.EnumerateArray()

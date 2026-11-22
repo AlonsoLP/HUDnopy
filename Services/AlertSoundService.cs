@@ -31,8 +31,8 @@ public sealed class AlertSoundService
     private const int MaximumNotesPerProfile = 32;
     private const int MaximumNoteDurationMilliseconds = 3000;
     public const string FileProfilePrefix = "file:";
-    private static readonly HashSet<string> SupportedExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".wav", ".mp3", ".aif", ".aiff", ".m4a", ".aac", ".wma", ".flac" };
+    private static readonly System.Collections.Frozen.FrozenSet<string> SupportedExtensions =
+        System.Collections.Frozen.FrozenSet.ToFrozenSet([".wav", ".mp3", ".aif", ".aiff", ".m4a", ".aac", ".wma", ".flac"], StringComparer.OrdinalIgnoreCase);
     private readonly string _baseDirectory = AppContext.BaseDirectory;
     private readonly ConfigService _configService;
     private readonly SoundLibrary _library;
@@ -58,10 +58,8 @@ public sealed class AlertSoundService
         try
         {
             using var stream = File.OpenRead(libraryPath);
-            _library = JsonSerializer.Deserialize<SoundLibrary>(stream, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            }) ?? throw new InvalidDataException(errors["libraryEmpty"]);
+            _library = JsonSerializer.Deserialize<SoundLibrary>(stream, HttpClientHeaderDefaults.CaseInsensitiveJsonOptions)
+                ?? throw new InvalidDataException(errors["libraryEmpty"]);
         }
         catch (JsonException ex)
         {

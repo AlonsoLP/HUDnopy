@@ -191,6 +191,8 @@ public partial class MainWindow
         _configService.Save();
         UpdateCommunitySyncVisibility();
         RefreshCommunitySyncStatus();
+        if (_configService.Current.EnableEdsmSync && !string.IsNullOrWhiteSpace(_fileWatcher.State.CurrentSystem))
+            _ = _communitySync.FetchEdsmDiscoveryAndFactionsAsync(_fileWatcher.State.CurrentSystem);
     }
 
     private void ChkEnableInaraSync_Click(object sender, RoutedEventArgs e)
@@ -351,6 +353,22 @@ public partial class MainWindow
                 GridCarrierCargo.ItemsSource = s.CarrierCargo;
         }
 
+        if (CarrierMarketOrdersCard is not null && GridCarrierMarketOrders is not null)
+        {
+            bool hasOrders = s.CarrierMarketOrders.Count > 0;
+            CarrierMarketOrdersCard.Visibility = hasOrders ? Visibility.Visible : Visibility.Collapsed;
+            if (hasOrders && !ReferenceEquals(GridCarrierMarketOrders.ItemsSource, s.CarrierMarketOrders))
+                GridCarrierMarketOrders.ItemsSource = s.CarrierMarketOrders;
+        }
+
+        if (CarrierServicesCard is not null && TxtCarrierServices is not null)
+        {
+            bool hasServices = s.CarrierServices.Count > 0;
+            CarrierServicesCard.Visibility = hasServices ? Visibility.Visible : Visibility.Collapsed;
+            if (hasServices)
+                TxtCarrierServices.Text = string.Join(" · ", s.CarrierServices);
+        }
+
         if (StoredShipsCard is not null && GridStoredShips is not null)
         {
             bool hasShips = s.StoredShips.Count > 0;
@@ -359,12 +377,368 @@ public partial class MainWindow
                 GridStoredShips.ItemsSource = s.StoredShips;
         }
 
+        if (StoredModulesCard is not null && GridStoredModules is not null)
+        {
+            bool hasModules = s.StoredModules.Count > 0;
+            StoredModulesCard.Visibility = hasModules ? Visibility.Visible : Visibility.Collapsed;
+            if (hasModules && !ReferenceEquals(GridStoredModules.ItemsSource, s.StoredModules))
+                GridStoredModules.ItemsSource = s.StoredModules;
+        }
+
         if (CommunityGoalsCard is not null && GridCommunityGoals is not null)
         {
             bool hasCgs = s.CommunityGoals.Count > 0;
             CommunityGoalsCard.Visibility = hasCgs ? Visibility.Visible : Visibility.Collapsed;
             if (hasCgs && !ReferenceEquals(GridCommunityGoals.ItemsSource, s.CommunityGoals))
                 GridCommunityGoals.ItemsSource = s.CommunityGoals;
+        }
+
+        if (BtnOpenInaraSystem is not null)
+            BtnOpenInaraSystem.Visibility = _configService.Current.EnableInaraSync ? Visibility.Visible : Visibility.Collapsed;
+        if (ArdentMarketCard is not null)
+            ArdentMarketCard.Visibility = _configService.Current.EnableArdentMarketApi ? Visibility.Visible : Visibility.Collapsed;
+        if (BtnFetchNearestDssa is not null)
+            BtnFetchNearestDssa.Visibility = _configService.Current.EnableEdastroDssa ? Visibility.Visible : Visibility.Collapsed;
+
+        if (InaraProfileCard is not null && TxtInaraProfileSummary is not null)
+        {
+            if (_configService.Current.EnableInaraSync && s.InaraProfile is { } ip && !string.IsNullOrWhiteSpace(ip.CommanderName))
+            {
+                var parts = new List<string> { $"INARA · {ip.CommanderName}" };
+                if (!string.IsNullOrWhiteSpace(ip.SquadronName))
+                    parts.Add(string.IsNullOrWhiteSpace(ip.SquadronRank) ? ip.SquadronName : $"{ip.SquadronName} ({ip.SquadronRank})");
+                if (!string.IsNullOrWhiteSpace(ip.PreferredAllegiance))
+                    parts.Add(ip.PreferredAllegiance);
+                TxtInaraProfileSummary.Text = string.Join("  ·  ", parts);
+                InaraProfileCard.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                InaraProfileCard.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        if (EliteBgsWatchlistCard is not null)
+        {
+            bool showBgs = _configService.Current.EnableEliteBgsWatchlist || s.WatchedBgsFactions.Count > 0;
+            EliteBgsWatchlistCard.Visibility = showBgs ? Visibility.Visible : Visibility.Collapsed;
+            if (GridEliteBgsWatchlist is not null && s.WatchedBgsFactions.Count > 0 &&
+                !ReferenceEquals(GridEliteBgsWatchlist.ItemsSource, s.WatchedBgsFactions))
+            {
+                GridEliteBgsWatchlist.ItemsSource = s.WatchedBgsFactions;
+            }
+        }
+    }
+
+    // =========================================================================
+    // External Integrations v0.3.0 (Per-API Opt-In Toggles & Handlers)
+    // =========================================================================
+
+    private void SyncIntegrationsUiFromConfig()
+    {
+        if (_suppressEvents)
+            return;
+        _suppressEvents = true;
+        try
+        {
+            var cfg = _configService.Current;
+            if (ChkEnableSpanshSystemData is not null) ChkEnableSpanshSystemData.IsChecked = cfg.EnableSpanshSystemData;
+            if (ChkEnableEddnUpload is not null) ChkEnableEddnUpload.IsChecked = cfg.EnableEddnUpload;
+            if (ChkEnableEdsmSync is not null) ChkEnableEdsmSync.IsChecked = cfg.EnableEdsmSync;
+            if (ChkEnableInaraSync is not null) ChkEnableInaraSync.IsChecked = cfg.EnableInaraSync;
+            if (ChkEnableFrontierCapi is not null) ChkEnableFrontierCapi.IsChecked = cfg.EnableFrontierCapi;
+            UpdateCommunitySyncVisibility();
+            RefreshFrontierCapiUi();
+            LoadV3IntegrationsConfigToUi(cfg);
+        }
+        finally
+        {
+            _suppressEvents = false;
+        }
+    }
+
+    private void LoadV3IntegrationsConfigToUi(AppConfig cfg)
+    {
+        if (ChkEdsmAnnounceFirstDiscovery is not null) ChkEdsmAnnounceFirstDiscovery.IsChecked = cfg.EdsmAnnounceFirstDiscovery;
+        if (ChkEnableEliteBgsWatchlist is not null) ChkEnableEliteBgsWatchlist.IsChecked = cfg.EnableEliteBgsWatchlist;
+        if (TxtEliteBgsFactions is not null) TxtEliteBgsFactions.Text = cfg.EliteBgsWatchedFactions ?? "";
+        if (ChkEnableArdentMarketApi is not null) ChkEnableArdentMarketApi.IsChecked = cfg.EnableArdentMarketApi;
+        if (ChkEnableEdastroDssa is not null) ChkEnableEdastroDssa.IsChecked = cfg.EnableEdastroDssa;
+        if (ChkEnableCanonnUpload is not null) ChkEnableCanonnUpload.IsChecked = cfg.EnableCanonnUpload;
+        if (ChkEnableDiscord is not null) ChkEnableDiscord.IsChecked = cfg.EnableDiscord;
+        if (TxtDiscordWebhookUrl is not null) TxtDiscordWebhookUrl.Text = cfg.DiscordWebhookUrl ?? "";
+        if (ChkDiscordWebhookElw is not null) ChkDiscordWebhookElw.IsChecked = cfg.DiscordWebhookOnElw;
+        if (ChkDiscordWebhookCarrier is not null) ChkDiscordWebhookCarrier.IsChecked = cfg.DiscordWebhookOnCarrierJump;
+        if (ChkDiscordWebhookBgs is not null) ChkDiscordWebhookBgs.IsChecked = cfg.DiscordWebhookOnBgsAlert;
+
+        UpdateV3IntegrationsVisibility();
+        RefreshV3IntegrationsStatus();
+    }
+
+    private void UpdateV3IntegrationsVisibility()
+    {
+        if (EliteBgsOptionsPanel is not null)
+            EliteBgsOptionsPanel.Visibility = ChkEnableEliteBgsWatchlist?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        if (DiscordOptionsPanel is not null)
+            DiscordOptionsPanel.Visibility = ChkEnableDiscord?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        if (EliteBgsWatchlistCard is not null)
+            EliteBgsWatchlistCard.Visibility = ChkEnableEliteBgsWatchlist?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RefreshV3IntegrationsStatus()
+    {
+        if (TxtDiscordStatus is not null)
+            TxtDiscordStatus.Text = _discord.LastStatus;
+        if (TxtEliteBgsSettingsStatus is not null)
+            TxtEliteBgsSettingsStatus.Text = _eliteBgsWatchlist.LastStatus;
+        if (TxtEliteBgsWatchlistStatus is not null)
+            TxtEliteBgsWatchlistStatus.Text = _eliteBgsWatchlist.LastStatus;
+    }
+
+    private void ChkEdsmAnnounceFirstDiscovery_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _configService.Current.EdsmAnnounceFirstDiscovery = ChkEdsmAnnounceFirstDiscovery.IsChecked == true;
+        _configService.Save();
+    }
+
+    private async void BtnFetchInaraProfile_Click(object sender, RoutedEventArgs e)
+    {
+        var (ok, profile, msg) = await _communitySync.FetchInaraCommanderProfileAsync();
+        if (TxtInaraReadStatus is not null)
+            TxtInaraReadStatus.Text = ok && profile is not null
+                ? $"{profile.CommanderName} · {profile.SquadronName} ({profile.PreferredAllegiance})"
+                : msg;
+        TxtStatusBarLeft.Text = msg;
+    }
+
+    private async void BtnFetchInaraCgs_Click(object sender, RoutedEventArgs e)
+    {
+        var (_, _, msg) = await _communitySync.FetchInaraCommunityGoalsAsync();
+        if (TxtInaraReadStatus is not null)
+            TxtInaraReadStatus.Text = msg;
+        TxtStatusBarLeft.Text = msg;
+    }
+
+    private void BtnOpenInaraCommanderProfile_Click(object sender, RoutedEventArgs e)
+    {
+        string url = _fileWatcher.State.InaraProfile?.InaraUrl ?? "";
+        if (string.IsNullOrWhiteSpace(url))
+            url = CommunitySyncService.BuildInaraDeepLink("commander", _fileWatcher.State.CommanderName);
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
+    private void BtnOpenInaraSystem_Click(object sender, RoutedEventArgs e)
+    {
+        string sys = _fileWatcher.State.CurrentSystem;
+        if (string.IsNullOrWhiteSpace(sys) || sys == "---")
+            return;
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = CommunitySyncService.BuildInaraDeepLink("system", sys),
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            TxtStatusBarLeft.Text = ex.Message;
+        }
+    }
+
+    private void ChkEnableEliteBgsWatchlist_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _configService.Current.EnableEliteBgsWatchlist = ChkEnableEliteBgsWatchlist.IsChecked == true;
+        _configService.Save();
+        UpdateV3IntegrationsVisibility();
+        if (_configService.Current.EnableEliteBgsWatchlist)
+            _ = _eliteBgsWatchlist.RefreshAsync();
+    }
+
+    private async void BtnSaveEliteBgs_Click(object sender, RoutedEventArgs e)
+    {
+        _configService.Current.EliteBgsWatchedFactions = (TxtEliteBgsFactions.Text ?? "").Trim();
+        _configService.Save();
+        var (_, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
+        RefreshV3IntegrationsStatus();
+        TxtStatusBarLeft.Text = msg;
+    }
+
+    private async void BtnRefreshEliteBgs_Click(object sender, RoutedEventArgs e)
+    {
+        var (_, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
+        RefreshV3IntegrationsStatus();
+        TxtStatusBarLeft.Text = msg;
+    }
+
+    private void UpdateEliteBgsWatchlistUi(IReadOnlyList<EliteBgsFactionWatchItem> items)
+    {
+        if (GridEliteBgsWatchlist is not null)
+            GridEliteBgsWatchlist.ItemsSource = items;
+        if (EliteBgsWatchlistCard is not null)
+            EliteBgsWatchlistCard.Visibility = (_configService.Current.EnableEliteBgsWatchlist || items.Count > 0)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        RefreshV3IntegrationsStatus();
+    }
+
+    private void ChkEnableArdentMarketApi_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _configService.Current.EnableArdentMarketApi = ChkEnableArdentMarketApi.IsChecked == true;
+        _configService.Save();
+    }
+
+    private async void BtnSearchArdentMarket_Click(object sender, RoutedEventArgs e)
+    {
+        string commodity = (TxtArdentCommodity?.Text ?? "").Trim();
+        string mode = (CmbArdentMode?.SelectedItem as ComboBoxItem)?.Tag as string ?? "sell";
+        if (TxtArdentMarketStatus is not null)
+            TxtArdentMarketStatus.Text = "Ardent Insight...";
+
+        var (ok, offers, msg) = await _ardentMarket.SearchCommodityAsync(commodity, mode);
+        if (TxtArdentMarketStatus is not null)
+            TxtArdentMarketStatus.Text = msg;
+        if (GridArdentMarket is not null)
+        {
+            GridArdentMarket.ItemsSource = ok && offers.Count > 0 ? offers : null;
+            GridArdentMarket.Visibility = ok && offers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void ChkEnableEdastroDssa_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _configService.Current.EnableEdastroDssa = ChkEnableEdastroDssa.IsChecked == true;
+        _configService.Save();
+    }
+
+    private void ChkEnableCanonnUpload_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _configService.Current.EnableCanonnUpload = ChkEnableCanonnUpload.IsChecked == true;
+        _configService.Save();
+    }
+
+    private async void BtnSearchSpanshBodies_Click(object sender, RoutedEventArgs e)
+    {
+        string query = (TxtSpanshBodyQuery?.Text ?? "").Trim();
+        var st = _fileWatcher.State;
+        if (TxtSpanshDeepSearchStatus is not null)
+            TxtSpanshDeepSearchStatus.Text = "Spansh Bodies...";
+        var (ok, results, msg) = await _spanshSystemDataService.SearchBodiesAsync(query, st.CurrentSystem, st.StarPos);
+        if (TxtSpanshDeepSearchStatus is not null)
+            TxtSpanshDeepSearchStatus.Text = msg;
+        if (GridSpanshBodiesSearch is not null)
+        {
+            GridSpanshBodiesSearch.ItemsSource = ok && results.Count > 0 ? results : null;
+            GridSpanshBodiesSearch.Visibility = ok && results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private async void BtnSearchSpanshCarriers_Click(object sender, RoutedEventArgs e)
+    {
+        string service = (CmbSpanshCarrierService?.SelectedItem as ComboBoxItem)?.Tag as string ?? "Vista Genomics";
+        var st = _fileWatcher.State;
+        if (TxtSpanshDeepSearchStatus is not null)
+            TxtSpanshDeepSearchStatus.Text = "Spansh Fleet Carriers...";
+        var (ok, results, msg) = await _spanshSystemDataService.SearchFleetCarriersAsync(service, st.CurrentSystem, st.StarPos);
+        if (TxtSpanshDeepSearchStatus is not null)
+            TxtSpanshDeepSearchStatus.Text = msg;
+        if (GridSpanshCarriersSearch is not null)
+        {
+            GridSpanshCarriersSearch.ItemsSource = ok && results.Count > 0 ? results : null;
+            GridSpanshCarriersSearch.Visibility = ok && results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private async void BtnFetchNearestDssa_Click(object sender, RoutedEventArgs e)
+    {
+        if (TxtSpanshDeepSearchStatus is not null)
+            TxtSpanshDeepSearchStatus.Text = "EDAstro DSSA...";
+        var (ok, carriers, msg) = await _edastroCanonn.GetNearestDssaCarriersAsync();
+        if (TxtSpanshDeepSearchStatus is not null)
+            TxtSpanshDeepSearchStatus.Text = msg;
+        if (GridNearestDssa is not null)
+        {
+            GridNearestDssa.ItemsSource = ok && carriers.Count > 0 ? carriers : null;
+            GridNearestDssa.Visibility = ok && carriers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void ChkEnableDiscord_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _configService.Current.EnableDiscord = ChkEnableDiscord.IsChecked == true;
+        _configService.Save();
+        UpdateV3IntegrationsVisibility();
+        if (_configService.Current.EnableDiscord)
+            _ = _discord.RefreshPresenceAsync();
+        else
+            _discord.DisconnectIpc();
+    }
+
+    private void ChkDiscordWebhookEvents_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _configService.Current.DiscordWebhookOnElw = ChkDiscordWebhookElw.IsChecked == true;
+        _configService.Current.DiscordWebhookOnCarrierJump = ChkDiscordWebhookCarrier.IsChecked == true;
+        _configService.Current.DiscordWebhookOnBgsAlert = ChkDiscordWebhookBgs.IsChecked == true;
+        _configService.Save();
+    }
+
+    private void BtnSaveDiscordWebhook_Click(object sender, RoutedEventArgs e)
+    {
+        _configService.Current.DiscordWebhookUrl = (TxtDiscordWebhookUrl.Text ?? "").Trim();
+        _configService.Save();
+        TxtStatusBarLeft.Text = "Discord Webhook URL saved.";
+    }
+
+    private async void BtnTestDiscordWebhook_Click(object sender, RoutedEventArgs e)
+    {
+        BtnSaveDiscordWebhook_Click(sender, e);
+        var (_, msg) = await _discord.SendWebhookAsync(
+            $"🛰 {HttpClientHeaderDefaults.ProductName} v{HttpClientHeaderDefaults.ProductVersion} Test",
+            $"Connected for **{_fileWatcher.State.CommanderName}** in `{_fileWatcher.State.CurrentSystem}`.");
+        RefreshV3IntegrationsStatus();
+        TxtStatusBarLeft.Text = msg;
+    }
+
+    private void ApplyEdsmDiscoveryIntel(EdsmSystemDiscoveryIntel intel)
+    {
+        if (TxtEdsmDiscoveryBadge is null)
+            return;
+        if (!string.Equals(intel.SystemName, _fileWatcher.State.CurrentSystem, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        TxtEdsmDiscoveryBadge.Text = intel.DiscoveryBadge;
+        TxtEdsmDiscoveryBadge.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            intel.IsKnownInEdsm ? "HudSecondaryBrush" : "HudOkBrush");
+        TxtEdsmDiscoveryBadge.Visibility = Visibility.Visible;
+
+        if (!intel.IsKnownInEdsm && _configService.Current.EdsmAnnounceFirstDiscovery)
+        {
+            string msg = _uiLanguage switch
+            {
+                "es-ES" => $"Sistema virgen no registrado en EDSM: {intel.SystemName}.",
+                "fr-FR" => $"Système inconnu dans EDSM : {intel.SystemName}.",
+                "de-DE" => $"Unentdecktes System in EDSM: {intel.SystemName}.",
+                "pt-BR" => $"Sistema desconhecido no EDSM: {intel.SystemName}.",
+                "ru-RU" => $"Неоткрытая система в EDSM: {intel.SystemName}.",
+                _ => $"Undiscovered system in EDSM: {intel.SystemName}."
+            };
+            _alertSpeechService.SpeakCustomText(msg);
         }
     }
 

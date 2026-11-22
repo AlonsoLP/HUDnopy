@@ -357,6 +357,16 @@ public partial class MainWindow
         }
     }
 
+    private void BtnAiVision_Click(object sender, RoutedEventArgs e)
+    {
+        string prompt = TxtAiPrompt.Text.Trim();
+        TxtAiPrompt.Text = "";
+        _ = RunAiQuickActionAsync(
+            string.IsNullOrWhiteSpace(prompt) ? "👁" : $"👁 {prompt}",
+            GetCovasSpeakerLabel(),
+            () => _aiCopilot.AskWithScreenVisionAsync(prompt));
+    }
+
     private void BtnSendAiPrompt_Click(object sender, RoutedEventArgs e)
     {
         _ = SendAiPromptAsync(TxtAiPrompt.Text);
@@ -416,11 +426,17 @@ public partial class MainWindow
         TxtAiPrompt.Clear();
         SetAiBusy(true);
         _aiStreamLineOpen = false;
-        AppendAiChatLine("CMDR", trimmed);
-        var (_, reply) = await _aiCopilot.AskAsync(trimmed);
-        FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
-        UpdateAiLatencyStatusBar();
-        SetAiBusy(false);
+        try
+        {
+            AppendAiChatLine("CMDR", trimmed);
+            var (_, reply) = await _aiCopilot.AskAsync(trimmed);
+            FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
+            UpdateAiLatencyStatusBar();
+        }
+        finally
+        {
+            SetAiBusy(false);
+        }
     }
 
     private void SetAiBusy(bool busy)
@@ -434,6 +450,9 @@ public partial class MainWindow
 
     private async void BtnAiVoiceInput_Click(object sender, RoutedEventArgs e)
     {
+        if (!_isRecordingAiVoice && (!BtnAiVoiceInput.IsEnabled || _aiHandsFreeActive))
+            return;
+
         var ops = OperationsTranslations.ForLanguage(_uiLanguage);
         if (!_isRecordingAiVoice)
         {
@@ -447,6 +466,7 @@ public partial class MainWindow
                 {
                     try { _aiVoiceWriter?.Write(args.Buffer, 0, args.BytesRecorded); } catch { }
                 };
+                _alertSpeechService.StopSpeaking();
                 _aiVoiceRecorder.StartRecording();
                 _isRecordingAiVoice = true;
                 BtnAiVoiceInput.Content = ops["aiVoiceStopBtn"];
@@ -486,17 +506,23 @@ public partial class MainWindow
 
         SetAiBusy(true);
         _aiStreamLineOpen = false;
-        DateTime sentAt = DateTime.Now;
-        bool isGeminiVoice = string.Equals(_configService.Current.AiActiveProvider, "gemini", StringComparison.OrdinalIgnoreCase);
-        if (isGeminiVoice)
-            AppendAiChatLine("CMDR", "🎤 [Comando de voz]", sentAt);
-        TxtStatusBarLeft.Text = ops["aiVoiceProcessing"];
-        var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes);
-        if (!isGeminiVoice && !string.IsNullOrWhiteSpace(transcript))
-            AppendAiChatLine("CMDR", transcript, sentAt);
-        FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
-        UpdateAiLatencyStatusBar();
-        SetAiBusy(false);
+        try
+        {
+            DateTime sentAt = DateTime.Now;
+            bool isGeminiVoice = string.Equals(_configService.Current.AiActiveProvider, "gemini", StringComparison.OrdinalIgnoreCase);
+            if (isGeminiVoice)
+                AppendAiChatLine("CMDR", "🎤 [Comando de voz]", sentAt);
+            TxtStatusBarLeft.Text = ops["aiVoiceProcessing"];
+            var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes);
+            if (!isGeminiVoice && !string.IsNullOrWhiteSpace(transcript))
+                AppendAiChatLine("CMDR", transcript, sentAt);
+            FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
+            UpdateAiLatencyStatusBar();
+        }
+        finally
+        {
+            SetAiBusy(false);
+        }
     }
 
     private void CleanupAiVoiceRecorder()
@@ -580,23 +606,49 @@ public partial class MainWindow
         if (!_aiHandsFreeActive || args.BytesRecorded <= 0)
             return;
 
-        // Ignorar audio mientras COVAS habla o procesa para evitar bucles de eco
-        if (_aiHandsFreeProcessing || _alertSpeechService.IsSpeaking)
+        var (rms, zcr) = ComputePcm16Features(args.Buffer, args.BytesRecorded);
+
+        // While processing an LLM request, ignore audio; while TTS is speaking, allow sustained loud barge-in
+        if (_aiHandsFreeProcessing)
         {
-            lock (_vadLock)
-            {
-                _vadPreBuffer.Clear();
-                _vadUtterancePcm?.Dispose();
-                _vadUtterancePcm = null;
-                _vadInSpeech = false;
-                _vadSpeechFrames = 0;
-                _vadSilenceFrames = 0;
-            }
+            ResetVadBufferState();
             return;
         }
 
-        double rms = ComputePcm16Rms(args.Buffer, args.BytesRecorded);
-        bool isVoiceFrame = rms >= 0.024;
+        if (_alertSpeechService.IsSpeaking)
+        {
+            double bargeThreshold = Math.Max(0.065, _vadNoiseFloor * 4.5);
+            if (rms >= bargeThreshold && zcr is >= 0.03 and <= 0.45)
+            {
+                _vadBargeInFrames++;
+                if (_vadBargeInFrames >= 3)
+                {
+                    _vadBargeInFrames = 0;
+                    _alertSpeechService.StopSpeaking();
+                }
+                else
+                {
+                    return;
+                }
+            }
+            else
+            {
+                _vadBargeInFrames = 0;
+                ResetVadBufferState();
+                return;
+            }
+        }
+        else
+        {
+            _vadBargeInFrames = 0;
+        }
+
+        // Adaptive noise floor (EMA updated during non-speech frames) + ZCR filter to reject engine rumble
+        double dynamicThreshold = Math.Clamp(_vadNoiseFloor * 2.5, 0.015, 0.055);
+        bool isVoiceFrame = rms >= dynamicThreshold && zcr is >= 0.02 and <= 0.50;
+        if (!isVoiceFrame && !_vadInSpeech)
+            _vadNoiseFloor = (_vadNoiseFloor * 0.94) + (Math.Min(rms, 0.04) * 0.06);
+
         byte[] chunk = new byte[args.BytesRecorded];
         Buffer.BlockCopy(args.Buffer, 0, chunk, 0, args.BytesRecorded);
 
@@ -638,12 +690,12 @@ public partial class MainWindow
                     _vadSilenceFrames++;
                 }
 
-                // Auto-send after 0.9 s of silence (9 x 100 ms chunks) or 15 s limit
-                bool endedBySilence = _vadSilenceFrames >= 9;
+                // Faster endpointing: auto-send after 0.6 s of silence (6 x 100 ms chunks) or 15 s limit
+                bool endedBySilence = _vadSilenceFrames >= 6;
                 bool maxDurationReached = (_vadUtterancePcm?.Length ?? 0) >= 16000 * 2 * 15;
                 if (endedBySilence || maxDurationReached)
                 {
-                    if (_vadSpeechFrames >= 4 && _vadUtterancePcm is not null)
+                    if (_vadSpeechFrames >= 3 && _vadUtterancePcm is not null)
                     {
                         byte[] rawPcm = _vadUtterancePcm.ToArray();
                         // Trim excess trailing silence (keep ~200 ms tail = 6,400 bytes at 16 kHz 16-bit mono) to shrink WAV upload
@@ -715,18 +767,36 @@ public partial class MainWindow
         }
     }
 
-    private static double ComputePcm16Rms(byte[] buffer, int bytesRecorded)
+    private void ResetVadBufferState()
+    {
+        lock (_vadLock)
+        {
+            _vadPreBuffer.Clear();
+            _vadUtterancePcm?.Dispose();
+            _vadUtterancePcm = null;
+            _vadInSpeech = false;
+            _vadSpeechFrames = 0;
+            _vadSilenceFrames = 0;
+        }
+    }
+
+    private static (double Rms, double Zcr) ComputePcm16Features(byte[] buffer, int bytesRecorded)
     {
         int samples = bytesRecorded / 2;
-        if (samples <= 0) return 0;
+        if (samples <= 0) return (0, 0);
         double sumSq = 0;
+        int zeroCrossings = 0;
+        short prev = 0;
         for (int i = 0; i < samples; i++)
         {
             short s = BitConverter.ToInt16(buffer, i * 2);
             double norm = s / 32768.0;
             sumSq += norm * norm;
+            if (i > 0 && ((s >= 0 && prev < 0) || (s < 0 && prev >= 0)))
+                zeroCrossings++;
+            prev = s;
         }
-        return Math.Sqrt(sumSq / samples);
+        return (Math.Sqrt(sumSq / samples), (double)zeroCrossings / samples);
     }
 
     private static byte[] WrapPcm16AsWav(byte[] pcmData, int sampleRate, int channels)
@@ -821,6 +891,8 @@ public partial class MainWindow
     {
         if (string.IsNullOrWhiteSpace(message))
             return;
+        if (_aiStreamLineOpen)
+            CloseAiStreamLine();
         DateTime ts = timestamp ?? DateTime.Now;
         string block = $"[{ts:HH:mm:ss}] {speaker}: {message}\n\n";
         TxtAiChatHistory.AppendText(block);
@@ -843,6 +915,18 @@ public partial class MainWindow
     /// </summary>
     private void HandleAiSurfaceNavigate(string target)
     {
+        if (target.StartsWith("COORDS:", StringComparison.OrdinalIgnoreCase))
+        {
+            string[] parts = target["COORDS:".Length..].Split('|', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length == 2 && TxtTargetLat is not null && TxtTargetLon is not null)
+            {
+                TxtTargetLat.Text = parts[0];
+                TxtTargetLon.Text = parts[1];
+                UpdateSurfaceGuidance(_fileWatcher.State);
+            }
+            return;
+        }
+
         if (target.Equals("exo", StringComparison.OrdinalIgnoreCase) ||
             target.Contains("exo", StringComparison.OrdinalIgnoreCase))
         {
@@ -894,6 +978,20 @@ public partial class MainWindow
             ToggleMiniHud();
             return;
         }
+        if (target is "fullscreen" or "pantalla completa")
+        {
+            if (!_isFullscreen)
+                ToggleFullscreen();
+            return;
+        }
+        if (target is "normal" or "windowed" or "ventana")
+        {
+            if (_isMiniHud)
+                ToggleMiniHud();
+            else if (_isFullscreen)
+                ToggleFullscreen();
+            return;
+        }
 
         int? tabIndex = target switch
         {
@@ -926,11 +1024,29 @@ public partial class MainWindow
 
     private void HandleAiWishlistAdd(string blueprintId)
     {
+        if (string.Equals(blueprintId, "__CLEAR__", StringComparison.OrdinalIgnoreCase))
+        {
+            _configService.Current.EngineeringWishlistBlueprints?.Clear();
+            _configService.Save();
+            _lastWishlistSignature = null;
+            UpdateEngineeringWishlistUi(_fileWatcher.State);
+            return;
+        }
+
+        var match = EngineeringWishlistService.Catalog.FirstOrDefault(b =>
+            string.Equals(b.Id, blueprintId, StringComparison.OrdinalIgnoreCase) ||
+            b.DisplayName.Contains(blueprintId, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+            return;
+
         _configService.Current.EngineeringWishlistBlueprints ??= new List<string>();
-        _configService.Current.EngineeringWishlistBlueprints.Add(blueprintId);
-        _configService.Save();
-        _lastWishlistSignature = null;
-        UpdateEngineeringWishlistUi(_fileWatcher.State);
+        if (!_configService.Current.EngineeringWishlistBlueprints.Contains(match.Id, StringComparer.OrdinalIgnoreCase))
+        {
+            _configService.Current.EngineeringWishlistBlueprints.Add(match.Id);
+            _configService.Save();
+            _lastWishlistSignature = null;
+            UpdateEngineeringWishlistUi(_fileWatcher.State);
+        }
     }
 
     private void HandleAiTritiumCalc(double lightYears)

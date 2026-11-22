@@ -22,10 +22,10 @@ namespace HUDnopy.Services;
 /// </summary>
 public sealed record GalnetArticle(string Id, string DateDisplay, string Title, string Body);
 
-public sealed class GalnetService : IDisposable
+public sealed partial class GalnetService : IDisposable
 {
     private readonly HttpClient _httpClient;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private List<GalnetArticle> _articles = new();
 
     public IReadOnlyList<GalnetArticle> Articles
@@ -41,8 +41,7 @@ public sealed class GalnetService : IDisposable
 
     public GalnetService()
     {
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("HUDnopy", "0.1"));
+        _httpClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(15));
     }
 
     public async Task<(bool Success, string Message)> RefreshAsync(string interfaceLanguage)
@@ -116,15 +115,27 @@ public sealed class GalnetService : IDisposable
         }
     }
 
+    [GeneratedRegex(@"<br\s*/?>", RegexOptions.IgnoreCase)]
+    private static partial Regex HtmlBrRegex();
+
+    [GeneratedRegex(@"</p>", RegexOptions.IgnoreCase)]
+    private static partial Regex HtmlParagraphEndRegex();
+
+    [GeneratedRegex(@"<[^>]+>")]
+    private static partial Regex HtmlTagRegex();
+
+    [GeneratedRegex(@"\n{3,}")]
+    private static partial Regex ExcessNewlinesRegex();
+
     private static string CleanHtml(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
             return "";
-        string text = Regex.Replace(raw, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, "</p>", "\n\n", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, "<[^>]+>", "");
+        string text = HtmlBrRegex().Replace(raw, "\n");
+        text = HtmlParagraphEndRegex().Replace(text, "\n\n");
+        text = HtmlTagRegex().Replace(text, "");
         text = System.Net.WebUtility.HtmlDecode(text);
-        return Regex.Replace(text, "\n{3,}", "\n\n").Trim();
+        return ExcessNewlinesRegex().Replace(text, "\n\n").Trim();
     }
 
     public void Dispose() => _httpClient.Dispose();

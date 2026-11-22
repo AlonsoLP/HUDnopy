@@ -117,7 +117,7 @@ public partial class MainWindow
         GridShipLocker.ItemsSource = items;
         TxtShipLockerStatus.Text = s.ShipLockerInventory.Count == 0
             ? text["shipLockerWaiting"]
-            : string.Format(System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage), text["shipLockerCount"], s.ShipLockerInventory.Count);
+            : string.Format(UiCulture, text["shipLockerCount"], s.ShipLockerInventory.Count);
     }
 
     private void TxtShipLockerSearch_TextChanged(object sender, TextChangedEventArgs e) =>
@@ -133,7 +133,7 @@ public partial class MainWindow
             GridEngineers.ItemsSource = s.Engineers;
         TxtEngineersStatus.Text = s.Engineers.Count == 0
             ? text["engineersWaiting"]
-            : string.Format(System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage), text["engineersCount"], s.Engineers.Count);
+            : string.Format(UiCulture, text["engineersCount"], s.Engineers.Count);
     }
 
     private void UpdateMiningUi(ShipState s)
@@ -142,7 +142,7 @@ public partial class MainWindow
             return;
 
         var text = OperationsTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         TxtProspectorSummary.Text = s.LastProspectedAsteroid is { } asteroid
             ? $"{asteroid.Timestamp} · {asteroid.SummaryDisplay} ({asteroid.Remaining.ToString("0.#", culture)}%)"
             : text["prospectorWaiting"];
@@ -183,7 +183,7 @@ public partial class MainWindow
     {
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
         var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
 
         if (TargetShipCard is not null && TxtTargetHeader is not null && TxtTargetStatus is not null && TxtTargetVitals is not null)
         {
@@ -308,7 +308,7 @@ public partial class MainWindow
             return;
 
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         TxtSurfaceLiveCoords.Text = s.HasLatLong
             ? $"{(string.IsNullOrWhiteSpace(s.BodyName) ? s.CurrentSystem : s.BodyName)} · LAT: {s.Latitude.ToString("0.0000", culture)}° · LON: {s.Longitude.ToString("0.0000", culture)}° · ALT: {s.Altitude.ToString("0.0", culture)} m · {flight["heading"]}: {s.Heading.ToString("0", culture)}°"
             : flight["noSurface"];
@@ -325,7 +325,7 @@ public partial class MainWindow
             return;
 
         var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         if (!double.TryParse(TxtTargetLat.Text.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double targetLat) ||
             !double.TryParse(TxtTargetLon.Text.Trim().Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double targetLon))
         {
@@ -383,7 +383,7 @@ public partial class MainWindow
         }
 
         var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
 
         var groups = s.ActiveMissions
             .Where(static m => !string.IsNullOrWhiteSpace(m.DestinationSystem))
@@ -453,7 +453,7 @@ public partial class MainWindow
         }
 
         var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         var notes = new List<string>();
 
         if (s.Market?.Items is { Count: > 0 })
@@ -1308,7 +1308,7 @@ public partial class MainWindow
             if (needed.Count > 0)
             {
                 var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-                var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+                var culture = UiCulture;
                 string itemsText = string.Join(" · ", needed.Select(i => $"{i.DisplayName}: {i.ColonisationNeeded.ToString("N0", culture)} t"));
                 TxtMarketColonisationSummary.Text = string.Format(culture, ops["marketColonisationMatch"], needed.Count, itemsText);
                 TxtMarketColonisationSummary.Visibility = Visibility.Visible;
@@ -1333,7 +1333,7 @@ public partial class MainWindow
         static bool Contains(string? value, string search) =>
             (value ?? "").IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0;
         string format = OperationsTranslations.ForLanguage(_uiLanguage)["filterCount"];
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         if (GridMarket.ItemsSource is IEnumerable<MarketCommodityItem> market)
         {
             string search = TxtMarketSearch.Text.Trim();
@@ -1393,7 +1393,7 @@ public partial class MainWindow
             return true;
         };
         view.Refresh();
-        TxtMaterialFilterStatus.Text = string.Format(System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage),
+        TxtMaterialFilterStatus.Text = string.Format(UiCulture,
             MaterialTranslations.ForLanguage(_uiLanguage)["filtered"], GridMaterials.Items.Count, _fileWatcher.State.MaterialsInventory.Count);
     }
 
@@ -1657,7 +1657,7 @@ public partial class MainWindow
 
         GridUnhandledEvents.ItemsSource = filtered;
         var text = SettingsTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         TxtUnhandledStatus.Text = distinctCount == 0
             ? text["unhandledEmpty"]
             : string.Format(culture, text["unhandledStatus"], distinctCount, totalCount, filtered.Count);
@@ -1707,7 +1707,7 @@ public partial class MainWindow
         int count = _fileWatcher.ScanCurrentFolderForUnhandledMessages();
         RefreshUnhandledMessagesUi();
         TxtStatusBarLeft.Text = string.Format(
-            System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage),
+            UiCulture,
             SettingsTranslations.ForLanguage(_uiLanguage)["unhandledScanned"],
             count);
     }

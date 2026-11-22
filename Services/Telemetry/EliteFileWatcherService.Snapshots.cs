@@ -471,6 +471,9 @@ public partial class EliteFileWatcherService
             return;
         }
 
+        if (!_configService.Current.EnableEdsmSync)
+            return;
+
         string key = $"{system}|{station}";
         if (string.Equals(_lastEdsmShipyardLookupKey, key, StringComparison.OrdinalIgnoreCase))
             return;

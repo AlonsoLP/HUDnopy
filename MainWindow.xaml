@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:HUDnopy"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         mc:Ignorable="d"
-        Title="HUDnopy v0.1 (Preview) // SHIP CONTROL SYSTEM"
+        Title="HUDnopy // SHIP CONTROL SYSTEM"
         Icon="pack://application:,,,/HUDnopy.ico"
         Height="820" Width="1340"
         MinHeight="600" MinWidth="900"
@@ -528,10 +528,12 @@
                                     <DockPanel Margin="0,0,0,6">
                                         <TextBlock Text="CUADERNO DE BITÁCORA (NOTA DEL SISTEMA ACTUAL)" local:UiText.Key="systemNoteTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" />
                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <Button x:Name="BtnOpenInaraSystem" Content="🌐 Inara" Style="{StaticResource HudButtonStyle}" Padding="8,3" Margin="0,0,6,0" Click="BtnOpenInaraSystem_Click" />
                                             <Button x:Name="BtnFetchEdsmIntel" Content="🛰 Tráfico EDSM" local:UiText.Key="edsmIntelBtn" Style="{StaticResource HudButtonStyle}" Padding="8,3" Margin="0,0,6,0" Click="BtnFetchEdsmIntel_Click" />
                                             <Button x:Name="BtnSaveSystemNote" Content="💾 Guardar nota" local:UiText.Key="saveNote" Style="{StaticResource HudButtonStyle}" Padding="8,3" Click="BtnSaveSystemNote_Click" />
                                         </StackPanel>
                                     </DockPanel>
+                                    <TextBlock x:Name="TxtEdsmDiscoveryBadge" Foreground="{DynamicResource HudOkBrush}" FontSize="11.5" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,4" Visibility="Collapsed" />
                                     <TextBlock x:Name="TxtEdsmSystemIntel" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="11.5" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,6" Visibility="Collapsed" />
                                     <TextBox x:Name="TxtSystemNote" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="8,6" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" />
                                 </StackPanel>
@@ -553,6 +555,30 @@
                                             <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding FactionState}" Width="125" MinWidth="105" />
                                             <DataGridTextColumn Header="Gobierno" local:TableHeader.Key="government" Binding="{Binding Government}" Width="125" MinWidth="105" />
                                             <DataGridTextColumn Header="Reputación" local:TableHeader.Key="reputation" Binding="{Binding ReputationDisplay}" Width="95" MinWidth="85" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- EliteBGS Watchlist (v0.3.0) -->
+                            <Border x:Name="EliteBgsWatchlistCard" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,12,0,0">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,6">
+                                        <TextBlock Text="SEGUIMIENTO DE FACCIONES (ELITEBGS)" local:UiText.Key="eliteBgsWatchlistTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                                        <Button x:Name="BtnRefreshEliteBgs" DockPanel.Dock="Right" Content="🔄 Actualizar BGS" Style="{StaticResource HudButtonStyle}" Padding="8,3" Click="BtnRefreshEliteBgs_Click" />
+                                    </DockPanel>
+                                    <TextBlock x:Name="TxtEliteBgsWatchlistStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
+                                    <DataGrid x:Name="GridEliteBgsWatchlist" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="240"
+                                              Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
+                                              AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
+                                              ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Facción" local:TableHeader.Key="faction" Binding="{Binding FactionName}" Width="2*" MinWidth="140" />
+                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
+                                            <DataGridTextColumn Header="Influencia" local:TableHeader.Key="influence" Binding="{Binding InfluenceDisplay}" Width="85" />
+                                            <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding State}" Width="110" />
+                                            <DataGridTextColumn Header="Activos" local:TableHeader.Key="activeStates" Binding="{Binding ActiveStates}" Width="*" MinWidth="110" />
+                                            <DataGridTextColumn Header="Pendientes" local:TableHeader.Key="pendingStates" Binding="{Binding PendingStates}" Width="*" MinWidth="110" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -673,6 +699,32 @@
                                     </DataGrid>
                                 </StackPanel>
                             </Border>
+
+                            <!-- Órdenes de mercado activas del Portanaves (Frontier cAPI /fleetcarrier) -->
+                            <Border x:Name="CarrierMarketOrdersCard" Style="{StaticResource CarrierCard}" Visibility="Collapsed" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="ÓRDENES DE MERCADO DEL PORTANAVES (Frontier cAPI)" local:UiText.Key="carrierMarketOrdersTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,6" />
+                                    <DataGrid x:Name="GridCarrierMarketOrders" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="240"
+                                              Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
+                                              AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
+                                              ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding OrderType}" Width="75" />
+                                            <DataGridTextColumn Header="Mercancía" local:TableHeader.Key="commodity" Binding="{Binding Commodity}" Width="*" MinWidth="150" />
+                                            <DataGridTextColumn Header="Cantidad" local:TableHeader.Key="quantity" Binding="{Binding Quantity}" Width="90" />
+                                            <DataGridTextColumn Header="Precio" local:TableHeader.Key="price" Binding="{Binding PriceDisplay}" Width="125" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Servicios activos del Portanaves (Frontier cAPI /fleetcarrier) -->
+                            <Border x:Name="CarrierServicesCard" Style="{StaticResource CarrierCard}" Visibility="Collapsed" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="SERVICIOS ACTIVOS DEL PORTANAVES (Frontier cAPI)" local:UiText.Key="carrierServicesTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,4" />
+                                    <TextBlock x:Name="TxtCarrierServices" Foreground="{StaticResource HudTextBrush}" FontSize="12" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
                     <Border x:Name="NavigationRouteSection" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16" Margin="0,14,0,0">
@@ -757,11 +809,14 @@
                                 <StackPanel>
                                     <TextBlock Text="ASISTENTE DE RUTAS SPANSH (NEUTRONES / RICHES / EXOMASTERY / PORTANAVES)" local:UiText.Key="spanshRouteTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,8" />
                                     <WrapPanel Margin="0,0,0,8">
-                                        <ComboBox x:Name="CmbSpanshRouteMode" Width="170" SelectedIndex="0" Margin="0,0,8,6">
+                                        <ComboBox x:Name="CmbSpanshRouteMode" Width="180" SelectedValuePath="Tag" SelectedIndex="0" Margin="0,0,8,6">
                                             <ComboBoxItem Content="⚡ Neutrones" Tag="neutron" />
                                             <ComboBoxItem Content="💎 Road to Riches" Tag="riches" />
                                             <ComboBoxItem Content="🌿 Exomastery" Tag="exomastery" />
                                             <ComboBoxItem Content="🚢 Portanaves" Tag="carrier" />
+                                            <ComboBoxItem Content="🧪 Ammonia Worlds" Tag="ammonia" />
+                                            <ComboBoxItem Content="📸 Tourist" Tag="tourist" />
+                                            <ComboBoxItem Content="🌌 Galaxy Plotter" Tag="galaxy" />
                                         </ComboBox>
                                         <TextBlock Text="Destino:" local:UiText.Key="spanshRouteDest" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
                                         <TextBox x:Name="TxtSpanshRouteDest" Width="180" Margin="0,0,8,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
@@ -983,6 +1038,64 @@
                                     </DataGrid>
                                 </StackPanel>
                             </Border>
+
+                            <!-- Buscador avanzado de Cuerpos, Fleet Carriers (Spansh) y DSSA (EDAstro) -->
+                            <Border x:Name="SpanshAdvancedSearchCard" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,12,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="EXPLORACIÓN PROFUNDA: CUERPOS, PORTANAVES (SPANSH) Y DSSA (EDASTRO)" local:UiText.Key="spanshDeepSearchTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,8" />
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <TextBox x:Name="TxtSpanshBodyQuery" Width="180" Margin="0,0,6,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" ToolTip="Ej: Selenium, Polonium, Antimony" />
+                                        <Button x:Name="BtnSearchSpanshBodies" Content="🪐 Buscar Cuerpos (Material)" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,10,6" Click="BtnSearchSpanshBodies_Click" />
+                                        <ComboBox x:Name="CmbSpanshCarrierService" Width="155" SelectedIndex="0" Margin="0,0,6,6">
+                                            <ComboBoxItem Content="Vista Genomics" Tag="Vista Genomics" />
+                                            <ComboBoxItem Content="Universal Cartographics" Tag="Universal Cartographics" />
+                                            <ComboBoxItem Content="Repair" Tag="Repair" />
+                                            <ComboBoxItem Content="Refuel" Tag="Refuel" />
+                                            <ComboBoxItem Content="Shipyard" Tag="Shipyard" />
+                                        </ComboBox>
+                                        <Button x:Name="BtnSearchSpanshCarriers" Content="🚢 Buscar Carriers" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,10,6" Click="BtnSearchSpanshCarriers_Click" />
+                                        <Button x:Name="BtnFetchNearestDssa" Content="🛰 DSSA Cercanos (EDAstro)" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,6" Click="BtnFetchNearestDssa_Click" />
+                                    </WrapPanel>
+                                    <TextBlock x:Name="TxtSpanshDeepSearchStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
+                                    <DataGrid x:Name="GridSpanshBodiesSearch" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed" MaxHeight="220" Margin="0,0,0,8"
+                                              Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
+                                              AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
+                                              ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
+                                            <DataGridTextColumn Header="Cuerpo" local:TableHeader.Key="body" Binding="{Binding BodyName}" Width="2*" MinWidth="130" />
+                                            <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding SubType}" Width="*" MinWidth="110" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="85" />
+                                            <DataGridTextColumn Header="G" local:TableHeader.Key="surfaceGravity" Binding="{Binding GravityDisplay}" Width="65" />
+                                            <DataGridTextColumn Header="Materiales" local:TableHeader.Key="materials" Binding="{Binding MaterialsSummary}" Width="2*" MinWidth="140" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <DataGrid x:Name="GridSpanshCarriersSearch" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed" MaxHeight="220" Margin="0,0,0,8"
+                                              Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
+                                              AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
+                                              ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Callsign" local:TableHeader.Key="callsign" Binding="{Binding Callsign}" Width="120" />
+                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="140" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="90" />
+                                            <DataGridTextColumn Header="Servicios" local:TableHeader.Key="services" Binding="{Binding ServicesSummary}" Width="2*" MinWidth="150" />
+                                            <DataGridTextColumn Header="Actualizado" local:TableHeader.Key="updated" Binding="{Binding UpdatedDisplay}" Width="110" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <DataGrid x:Name="GridNearestDssa" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed" MaxHeight="220"
+                                              Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
+                                              AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
+                                              ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Callsign" local:TableHeader.Key="callsign" Binding="{Binding Callsign}" Width="95" />
+                                            <DataGridTextColumn Header="Nombre" local:TableHeader.Key="shipName" Binding="{Binding Name}" Width="2*" MinWidth="140" />
+                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="140" />
+                                            <DataGridTextColumn Header="Región" local:TableHeader.Key="region" Binding="{Binding Region}" Width="*" MinWidth="110" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="95" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
                     </StackPanel>
@@ -1136,7 +1249,7 @@
                                 <StackPanel>
                                     <TextBlock Text="BUSCADOR DE ANILLOS PRÍSTINOS Y HOTSPOTS (SPANSH)" local:UiText.Key="spanshMiningTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,6" />
                                     <WrapPanel Margin="0,0,0,6">
-                                        <ComboBox x:Name="CmbSpanshMiningMineral" Width="200" SelectedIndex="0" Margin="0,0,8,6">
+                                        <ComboBox x:Name="CmbSpanshMiningMineral" Width="200" SelectedValuePath="Content" SelectedIndex="0" Margin="0,0,8,6">
                                             <ComboBoxItem Content="Platinum" />
                                             <ComboBoxItem Content="Painite" />
                                             <ComboBoxItem Content="Monazite" />
@@ -1444,12 +1557,56 @@
                                     </DataGrid>
                                 </StackPanel>
                             </Border>
+                            <Border x:Name="ArdentMarketCard" DockPanel.Dock="Bottom" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,12,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="PRECIOS DE MERCADO EN VIVO (ARDENT INSIGHT API)" local:UiText.Key="ardentMarketTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,6" />
+                                    <WrapPanel Margin="0,0,0,6">
+                                        <TextBox x:Name="TxtArdentCommodity" Width="200" Margin="0,0,6,4" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" ToolTip="Ej: Platinum, Tritium, Gold" />
+                                        <ComboBox x:Name="CmbArdentMode" Width="135" SelectedIndex="0" Margin="0,0,6,4">
+                                            <ComboBoxItem Content="💰 Mejor Venta" Tag="sell" />
+                                            <ComboBoxItem Content="🛒 Mejor Compra" Tag="buy" />
+                                        </ComboBox>
+                                        <Button x:Name="BtnSearchArdentMarket" Content="🔍 Consultar Ardent" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,4" Click="BtnSearchArdentMarket_Click" />
+                                    </WrapPanel>
+                                    <TextBlock x:Name="TxtArdentMarketStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
+                                    <DataGrid x:Name="GridArdentMarket" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed" MaxHeight="220"
+                                              Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
+                                              AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
+                                              ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
+                                            <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="2*" MinWidth="140" />
+                                            <DataGridTextColumn Header="Precio" local:TableHeader.Key="price" Binding="{Binding PriceDisplay}" Width="115" />
+                                            <DataGridTextColumn Header="Cantidad" local:TableHeader.Key="quantity" Binding="{Binding QuantityDisplay}" Width="90" />
+                                            <DataGridTextColumn Header="Pad" local:TableHeader.Key="landingPad" Binding="{Binding MaxLandingPad}" Width="55" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="85" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
                         </DockPanel>
                     </Border>
                     <Border x:Name="OperationsOutfittingSection" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16" Margin="0,14,0,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="Equipamiento" local:UiText.Key="outfittingTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,10" />
                             <TextBlock x:Name="TxtOutfittingStatus" DockPanel.Dock="Top" Text="No hay datos de equipamiento disponibles." Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                            <Border x:Name="StoredModulesCard" DockPanel.Dock="Bottom" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,12,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="MÓDULOS ALMACENADOS (Frontier cAPI)" local:UiText.Key="storedModulesTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,6" />
+                                    <DataGrid x:Name="GridStoredModules" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="220"
+                                              Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
+                                              AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
+                                              ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Módulo" local:TableHeader.Key="equipment" Binding="{Binding DisplayName}" Width="2*" MinWidth="160" />
+                                            <DataGridTextColumn Header="Ingeniería" local:TableHeader.Key="engineering" Binding="{Binding Engineering}" Width="*" MinWidth="120" />
+                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding StarSystem}" Width="140" />
+                                            <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="160" />
+                                            <DataGridTextColumn Header="Precio" local:TableHeader.Key="price" Binding="{Binding PriceDisplay}" Width="110" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
                             <DataGrid x:Name="GridOutfitting" AutoGenerateColumns="False" IsReadOnly="True"
                                       Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
                                       AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
@@ -1623,6 +1780,12 @@
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="Perfil del comandante" local:UiText.Key="profileTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,10" />
                             <TextBlock x:Name="TxtProfileStatus" DockPanel.Dock="Top" Text="Esperando eventos de perfil del Journal." Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                            <Border x:Name="InaraProfileCard" DockPanel.Dock="Top" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+                                <DockPanel>
+                                    <Button x:Name="BtnOpenInaraCommanderProfile" DockPanel.Dock="Right" Content="🌐 Inara" Style="{StaticResource HudButtonStyle}" Padding="8,3" Margin="8,0,0,0" Click="BtnOpenInaraCommanderProfile_Click" />
+                                    <TextBlock x:Name="TxtInaraProfileSummary" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </Border>
                             <StackPanel DockPanel.Dock="Top">
                                 <WrapPanel>
                                     <TextBox x:Name="TxtProfileSearch" Width="190" Margin="0,0,8,6" Padding="6,4" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" CaretBrush="{DynamicResource HudAccentBrush}" BorderBrush="{DynamicResource HudBorderBrush}" TextChanged="TableFilter_Changed" />
@@ -1691,15 +1854,18 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBox x:Name="TxtAiPrompt" Grid.Column="0" Background="#080A0E" Foreground="{StaticResource HudTextBrush}"
                                          CaretBrush="{DynamicResource HudAccentBrush}" BorderBrush="{DynamicResource HudBorderBrush}"
                                          Padding="10,7" VerticalContentAlignment="Center" KeyDown="TxtAiPrompt_KeyDown" />
-                                <Button x:Name="BtnAiHandsFree" Grid.Column="1" Content="🎙 Manos libres" local:UiText.Key="aiHandsFreeBtn"
-                                        Style="{StaticResource HudButtonStyle}" Padding="10,7" Margin="8,0,0,0" Click="BtnAiHandsFree_Click" />
-                                <Button x:Name="BtnAiVoiceInput" Grid.Column="2" Content="🎤 Hablar" local:UiText.Key="aiVoiceBtn"
+                                <Button x:Name="BtnAiVision" Grid.Column="1" Content="👁" local:UiText.Key="aiVisionBtn"
+                                        Style="{StaticResource HudButtonStyle}" Padding="10,7" Margin="8,0,0,0" Click="BtnAiVision_Click" />
+                                <Button x:Name="BtnAiHandsFree" Grid.Column="2" Content="🎙 Manos libres" local:UiText.Key="aiHandsFreeBtn"
+                                        Style="{StaticResource HudButtonStyle}" Padding="10,7" Margin="6,0,0,0" Click="BtnAiHandsFree_Click" />
+                                <Button x:Name="BtnAiVoiceInput" Grid.Column="3" Content="🎤 Hablar" local:UiText.Key="aiVoiceBtn"
                                         Style="{StaticResource HudButtonStyle}" Padding="10,7" Margin="6,0,0,0" Click="BtnAiVoiceInput_Click" />
-                                <Button x:Name="BtnSendAiPrompt" Grid.Column="3" Content="➤ Enviar" local:UiText.Key="aiSend"
+                                <Button x:Name="BtnSendAiPrompt" Grid.Column="4" Content="➤ Enviar" local:UiText.Key="aiSend"
                                         Style="{StaticResource HudButtonStyle}" Padding="14,7" Margin="6,0,0,0" Click="BtnSendAiPrompt_Click" />
                             </Grid>
                         </StackPanel>
@@ -1967,72 +2133,170 @@
                         <Border x:Name="ConfigIntegrationsSection" Visibility="Collapsed" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="14" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="INTEGRACIONES EXTERNAS" local:UiText.Key="integrationsTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,10" />
-                                    <CheckBox x:Name="ChkEnableSpanshSystemData" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,8" Click="ChkEnableSpanshSystemData_Click">
-                                        <TextBlock Text="Consultar datos comunitarios de Spansh para el sistema actual" TextWrapping="Wrap" />
-                                    </CheckBox>
-                                    <CheckBox x:Name="ChkEnableEddnUpload" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,8" Click="ChkEnableEddnUpload_Click">
-                                        <TextBlock Text="Enviar datos de exploración y estaciones a EDDN (Elite Dangerous Data Network)" local:UiText.Key="eddnToggle" TextWrapping="Wrap" />
-                                    </CheckBox>
 
-                                    <CheckBox x:Name="ChkEnableEdsmSync" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableEdsmSync_Click">
-                                        <TextBlock Text="Sincronizar comandante con EDSM (Elite Dangerous Star Map)" local:UiText.Key="edsmToggle" TextWrapping="Wrap" />
-                                    </CheckBox>
-                                    <Border x:Name="EdsmOptionsPanel" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
-                                        <WrapPanel>
-                                            <TextBlock Text="CMDR (EDSM):" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
-                                            <TextBox x:Name="TxtEdsmCommander" Width="180" Margin="0,0,12,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
-                                            <TextBlock Text="EDSM API Key:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
-                                            <TextBox x:Name="TxtEdsmApiKey" Width="240" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
-                                        </WrapPanel>
-                                    </Border>
-
-                                    <CheckBox x:Name="ChkEnableInaraSync" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableInaraSync_Click">
-                                        <TextBlock Text="Sincronizar comandante con Inara" local:UiText.Key="inaraToggle" TextWrapping="Wrap" />
-                                    </CheckBox>
-                                    <Border x:Name="InaraOptionsPanel" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
-                                        <WrapPanel>
-                                            <TextBlock Text="CMDR (Inara):" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
-                                            <TextBox x:Name="TxtInaraCommander" Width="180" Margin="0,0,12,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
-                                            <TextBlock Text="Inara API Key:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
-                                            <TextBox x:Name="TxtInaraApiKey" Width="240" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
-                                        </WrapPanel>
-                                    </Border>
-
-                                    <StackPanel x:Name="CommunitySyncActionsPanel" Visibility="Collapsed" Margin="0,2,0,0">
-                                        <WrapPanel Margin="0,0,0,6">
-                                            <Button x:Name="BtnSaveCommunitySync" Content="💾 Guardar claves" local:UiText.Key="saveCommunitySync" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,0" Click="BtnSaveCommunitySync_Click" />
-                                            <Button x:Name="BtnTestCommunitySync" Content="☁ Sincronizar ahora" local:UiText.Key="testCommunitySync" Style="{StaticResource HudButtonStyle}" Padding="8,4" Click="BtnTestCommunitySync_Click" />
-                                        </WrapPanel>
-                                        <TextBlock x:Name="TxtCommunitySyncStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+                                <!-- 1. FRONTIER DEVELOPMENTS (OFICIAL) -->
+                                <Border Background="#111722" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="FRONTIER DEVELOPMENTS (OFICIAL)" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                        <CheckBox x:Name="ChkEnableFrontierCapi" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableFrontierCapi_Click">
+                                            <TextBlock Text="Conectar con Frontier Companion API (cAPI — OAuth 2.0 + PKCE)" local:UiText.Key="frontierCapiToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <Border x:Name="FrontierCapiOptionsPanel" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="18,0,0,2">
+                                            <StackPanel>
+                                                <WrapPanel Margin="0,0,0,6">
+                                                    <Button x:Name="BtnFrontierAuthorize" Content="🔐 Conectar con Frontier" local:UiText.Key="frontierAuthorizeBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,4" Click="BtnFrontierAuthorize_Click" />
+                                                    <Button x:Name="BtnFrontierSyncNow" Content="🔄 Sincronizar cAPI" local:UiText.Key="frontierSyncBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,4" Click="BtnFrontierSyncNow_Click" />
+                                                    <Button x:Name="BtnFrontierDisconnect" Content="🔌 Desconectar" local:UiText.Key="frontierDisconnectBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,4" Click="BtnFrontierDisconnect_Click" />
+                                                </WrapPanel>
+                                                <TextBlock x:Name="TxtFrontierCapiStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
+                                                <Expander Header="Opciones avanzadas (Client ID / puerto callback)" Foreground="{StaticResource HudMutedBrush}" FontSize="11" IsExpanded="False">
+                                                    <StackPanel Margin="0,6,0,0">
+                                                        <WrapPanel Margin="0,0,0,6">
+                                                            <TextBlock Text="Client ID personalizado (vacío = HUDnopy oficial):" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                            <TextBox x:Name="TxtFrontierClientId" Width="260" Margin="0,0,12,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                            <TextBlock Text="Puerto callback:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                            <TextBox x:Name="TxtFrontierCallbackPort" Width="70" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" TextChanged="TxtFrontierCallbackPort_TextChanged" />
+                                                        </WrapPanel>
+                                                        <WrapPanel>
+                                                            <TextBlock Text="Redirect URI (registrar en Frontier Developer Zone):" local:UiText.Key="frontierRedirectHelp" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,4" FontSize="11" />
+                                                            <TextBox x:Name="TxtFrontierRedirectUri" Width="240" IsReadOnly="True" Padding="5,3" Background="#080A0E" Foreground="{DynamicResource HudSecondaryBrush}" BorderBrush="#33FFFFFF" FontFamily="Consolas" FontSize="11" Margin="0,0,0,4" />
+                                                        </WrapPanel>
+                                                    </StackPanel>
+                                                </Expander>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
+                                </Border>
 
-                                    <CheckBox x:Name="ChkEnableFrontierCapi" Foreground="{StaticResource HudTextBrush}" Margin="0,10,0,6" Click="ChkEnableFrontierCapi_Click">
-                                        <TextBlock Text="Conectar con Frontier Companion API (cAPI — OAuth 2.0 + PKCE)" local:UiText.Key="frontierCapiToggle" TextWrapping="Wrap" />
-                                    </CheckBox>
-                                    <Border x:Name="FrontierCapiOptionsPanel" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,8">
-                                        <StackPanel>
+                                <!-- 2. EDSM (ELITE DANGEROUS STAR MAP) -->
+                                <Border Background="#111722" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="EDSM (ELITE DANGEROUS STAR MAP)" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                        <CheckBox x:Name="ChkEnableEdsmSync" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableEdsmSync_Click">
+                                            <TextBlock Text="Sincronizar comandante con EDSM (Elite Dangerous Star Map)" local:UiText.Key="edsmToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <Border x:Name="EdsmOptionsPanel" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="18,0,0,2">
+                                            <StackPanel>
+                                                <WrapPanel Margin="0,0,0,4">
+                                                    <TextBlock Text="CMDR (EDSM):" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                    <TextBox x:Name="TxtEdsmCommander" Width="180" Margin="0,0,12,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                    <TextBlock Text="EDSM API Key:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                    <TextBox x:Name="TxtEdsmApiKey" Width="240" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                </WrapPanel>
+                                                <CheckBox x:Name="ChkEdsmAnnounceFirstDiscovery" Foreground="{StaticResource HudTextBrush}" Click="ChkEdsmAnnounceFirstDiscovery_Click">
+                                                    <TextBlock Text="Anunciar por voz (COVAS/TTS) al entrar en un sistema virgen en EDSM" local:UiText.Key="edsmAnnounceFirstDiscoveryToggle" TextWrapping="Wrap" />
+                                                </CheckBox>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 3. INARA -->
+                                <Border Background="#111722" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="INARA" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                        <CheckBox x:Name="ChkEnableInaraSync" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableInaraSync_Click">
+                                            <TextBlock Text="Sincronizar comandante con Inara" local:UiText.Key="inaraToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <Border x:Name="InaraOptionsPanel" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="18,0,0,2">
+                                            <StackPanel>
+                                                <WrapPanel Margin="0,0,0,6">
+                                                    <TextBlock Text="CMDR (Inara):" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                    <TextBox x:Name="TxtInaraCommander" Width="180" Margin="0,0,12,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                    <TextBlock Text="Inara API Key:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                    <TextBox x:Name="TxtInaraApiKey" Width="240" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                </WrapPanel>
+                                                <WrapPanel>
+                                                    <Button x:Name="BtnFetchInaraProfile" Content="👤 Cargar Perfil Inara" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,4" Click="BtnFetchInaraProfile_Click" />
+                                                    <Button x:Name="BtnFetchInaraCgs" Content="🎯 Cargar CGs desde Inara" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,4" Click="BtnFetchInaraCgs_Click" />
+                                                    <TextBlock x:Name="TxtInaraReadStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 4. DATOS COMUNITARIOS Y CIENCIA (EDDN / CANONN) -->
+                                <Border Background="#111722" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="DATOS COMUNITARIOS Y CIENCIA (EDDN / CANONN)" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                        <CheckBox x:Name="ChkEnableEddnUpload" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableEddnUpload_Click">
+                                            <TextBlock Text="Enviar datos de exploración y estaciones a EDDN (Elite Dangerous Data Network)" local:UiText.Key="eddnToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <CheckBox x:Name="ChkEnableCanonnUpload" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,4" Click="ChkEnableCanonnUpload_Click">
+                                            <TextBlock Text="Canonn R&amp;D: Enviar descubrimientos científicos y exobiología (Codex / ScanOrganic)" local:UiText.Key="canonnUploadToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <StackPanel x:Name="CommunitySyncActionsPanel" Visibility="Collapsed" Margin="0,6,0,0">
                                             <WrapPanel Margin="0,0,0,6">
-                                                <Button x:Name="BtnFrontierAuthorize" Content="🔐 Conectar con Frontier" local:UiText.Key="frontierAuthorizeBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,4" Click="BtnFrontierAuthorize_Click" />
-                                                <Button x:Name="BtnFrontierSyncNow" Content="🔄 Sincronizar cAPI" local:UiText.Key="frontierSyncBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,4" Click="BtnFrontierSyncNow_Click" />
-                                                <Button x:Name="BtnFrontierDisconnect" Content="🔌 Desconectar" local:UiText.Key="frontierDisconnectBtn" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,4" Click="BtnFrontierDisconnect_Click" />
+                                                <Button x:Name="BtnSaveCommunitySync" Content="💾 Guardar claves" local:UiText.Key="saveCommunitySync" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,8,0" Click="BtnSaveCommunitySync_Click" />
+                                                <Button x:Name="BtnTestCommunitySync" Content="☁ Sincronizar ahora" local:UiText.Key="testCommunitySync" Style="{StaticResource HudButtonStyle}" Padding="8,4" Click="BtnTestCommunitySync_Click" />
                                             </WrapPanel>
-                                            <TextBlock x:Name="TxtFrontierCapiStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
-                                            <Expander Header="Opciones avanzadas (Client ID / puerto callback)" Foreground="{StaticResource HudMutedBrush}" FontSize="11" IsExpanded="False">
-                                                <StackPanel Margin="0,6,0,0">
-                                                    <WrapPanel Margin="0,0,0,6">
-                                                        <TextBlock Text="Client ID personalizado (vacío = HUDnopy oficial):" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
-                                                        <TextBox x:Name="TxtFrontierClientId" Width="260" Margin="0,0,12,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
-                                                        <TextBlock Text="Puerto callback:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
-                                                        <TextBox x:Name="TxtFrontierCallbackPort" Width="70" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" TextChanged="TxtFrontierCallbackPort_TextChanged" />
-                                                    </WrapPanel>
-                                                    <WrapPanel>
-                                                        <TextBlock Text="Redirect URI (registrar en Frontier Developer Zone):" local:UiText.Key="frontierRedirectHelp" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,4" FontSize="11" />
-                                                        <TextBox x:Name="TxtFrontierRedirectUri" Width="240" IsReadOnly="True" Padding="5,3" Background="#080A0E" Foreground="{DynamicResource HudSecondaryBrush}" BorderBrush="#33FFFFFF" FontFamily="Consolas" FontSize="11" Margin="0,0,0,4" />
-                                                    </WrapPanel>
-                                                </StackPanel>
-                                            </Expander>
+                                            <TextBlock x:Name="TxtCommunitySyncStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                         </StackPanel>
-                                    </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 5. EXPLORACIÓN, RUTAS Y MERCADOS (SPANSH / EDASTRO / ARDENT) -->
+                                <Border Background="#111722" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="EXPLORACIÓN, RUTAS Y MERCADOS (SPANSH / EDASTRO / ARDENT)" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                        <CheckBox x:Name="ChkEnableSpanshSystemData" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableSpanshSystemData_Click">
+                                            <TextBlock Text="Consultar datos comunitarios de Spansh para el sistema actual" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <CheckBox x:Name="ChkEnableEdastroDssa" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableEdastroDssa_Click">
+                                            <TextBlock Text="EDAstro DSSA: Localizador de Fleet Carriers de apoyo en espacio profundo" local:UiText.Key="edastroDssaToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <CheckBox x:Name="ChkEnableArdentMarketApi" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,2" Click="ChkEnableArdentMarketApi_Click">
+                                            <TextBlock Text="Ardent Insight API: Consulta de precios de compra/venta de mercados en vivo" local:UiText.Key="ardentMarketToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 6. BGS Y ESCUADRÓN (ELITEBGS) -->
+                                <Border Background="#111722" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="BGS Y ESCUADRÓN (ELITEBGS)" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                        <CheckBox x:Name="ChkEnableEliteBgsWatchlist" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,4" Click="ChkEnableEliteBgsWatchlist_Click">
+                                            <TextBlock Text="EliteBGS v5: Seguimiento de facciones favoritas / escuadrón y alertas de conflicto" local:UiText.Key="eliteBgsToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <Border x:Name="EliteBgsOptionsPanel" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="18,0,0,2">
+                                            <StackPanel>
+                                                <WrapPanel Margin="0,0,0,4">
+                                                    <TextBlock Text="Facciones (separadas por coma):" local:UiText.Key="eliteBgsFactionsLabel" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,4" />
+                                                    <TextBox x:Name="TxtEliteBgsFactions" Width="280" Margin="0,0,8,4" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                    <Button x:Name="BtnSaveEliteBgs" Content="💾 Guardar y consultar" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,4" Click="BtnSaveEliteBgs_Click" />
+                                                </WrapPanel>
+                                                <TextBlock x:Name="TxtEliteBgsSettingsStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 7. DISCORD -->
+                                <Border Background="#111722" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,0,0,2">
+                                    <StackPanel>
+                                        <TextBlock Text="DISCORD (RICH PRESENCE Y WEBHOOKS)" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                        <CheckBox x:Name="ChkEnableDiscord" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,6" Click="ChkEnableDiscord_Click">
+                                            <TextBlock Text="Discord: Rich Presence en tu perfil y Webhooks de hitos (ELW, saltos de Carrier, BGS)" local:UiText.Key="discordRpcToggle" TextWrapping="Wrap" />
+                                        </CheckBox>
+                                        <Border x:Name="DiscordOptionsPanel" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="18,0,0,2">
+                                            <StackPanel>
+                                                <WrapPanel Margin="0,0,0,6">
+                                                    <TextBlock Text="Webhook URL:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,4" />
+                                                    <TextBox x:Name="TxtDiscordWebhookUrl" Width="320" Margin="0,0,8,4" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                    <Button x:Name="BtnSaveDiscordWebhook" Content="💾 Guardar" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,6,4" Click="BtnSaveDiscordWebhook_Click" />
+                                                    <Button x:Name="BtnTestDiscordWebhook" Content="📨 Probar" Style="{StaticResource HudButtonStyle}" Padding="8,4" Margin="0,0,0,4" Click="BtnTestDiscordWebhook_Click" />
+                                                </WrapPanel>
+                                                <WrapPanel Margin="0,0,0,4">
+                                                    <CheckBox x:Name="ChkDiscordWebhookElw" Content="Earth-Like Worlds (ELW)" Foreground="{StaticResource HudTextBrush}" Margin="0,0,12,4" Click="ChkDiscordWebhookEvents_Click" />
+                                                    <CheckBox x:Name="ChkDiscordWebhookCarrier" Content="Saltos de Fleet Carrier" Foreground="{StaticResource HudTextBrush}" Margin="0,0,12,4" Click="ChkDiscordWebhookEvents_Click" />
+                                                    <CheckBox x:Name="ChkDiscordWebhookBgs" Content="Conflictos EliteBGS" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,4" Click="ChkDiscordWebhookEvents_Click" />
+                                                </WrapPanel>
+                                                <TextBlock x:Name="TxtDiscordStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 

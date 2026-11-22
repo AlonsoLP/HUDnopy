@@ -31,6 +31,16 @@
   let lastStatusMatrixKey = null;
   let cachedNumberFormatLang = null;
   let cachedNumberFormatter = null;
+  let selectedGalnetIndex = 0;
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
   function switchTab(tabId, btn) {
     document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('nav.tabs button').forEach(el => el.classList.remove('active'));
@@ -363,6 +373,14 @@
           element.textContent = value;
           element.lang = sectionLanguage;
         });
+        document.querySelectorAll('[data-flight-placeholder]').forEach(element => {
+          const value = flightTranslations[element.dataset.flightPlaceholder];
+          if (typeof value === 'string' && value) element.placeholder = value;
+        });
+        document.querySelectorAll('[data-operations-placeholder]').forEach(element => {
+          const value = operationsTranslations[element.dataset.operationsPlaceholder];
+          if (typeof value === 'string' && value) element.placeholder = value;
+        });
         document.getElementById('materialsTitle').textContent = materialTranslations.title;
         for (const [prefix, searchKey] of [['market', 'marketSearch'], ['profile', 'profileSearch']]) {
           const search = document.getElementById(prefix + 'Search');
@@ -509,6 +527,9 @@
     ], operations.resourcesEmpty);
 
     // Full v0.2.0 Desktop <-> Web parity rendering
+    if (payload.appVersion) {
+      document.title = `HUDnopy v${payload.appVersion} // MFD WEB HUD`;
+    }
     const padBanner = document.getElementById('webLandingPadBanner');
     if (padBanner) {
       if (payload.landingPad) {
@@ -613,6 +634,79 @@
         ], '');
       }
     }
+    const fcOrdersSec = document.getElementById('webCarrierMarketOrdersSection');
+    const fcOrders = Array.isArray(s.CarrierMarketOrders) ? s.CarrierMarketOrders : [];
+    if (fcOrdersSec) {
+      fcOrdersSec.hidden = fcOrders.length === 0;
+      if (fcOrders.length > 0) {
+        renderTableRows('webCarrierMarketOrdersTableBody', fcOrders, [
+          item => item.OrderType,
+          item => item.Commodity,
+          item => formatCount(item.Quantity),
+          item => item.PriceDisplay || `${formatCount(item.Price)} CR`
+        ], '');
+      }
+    }
+    const fcServicesSec = document.getElementById('webCarrierServicesSection');
+    const fcServicesText = document.getElementById('webCarrierServicesText');
+    const fcServices = Array.isArray(s.CarrierServices) ? s.CarrierServices : [];
+    if (fcServicesSec && fcServicesText) {
+      fcServicesSec.hidden = fcServices.length === 0;
+      if (fcServices.length > 0) fcServicesText.textContent = fcServices.join(' · ');
+    }
+    // EDSM Discovery Badge + Inara Deep Link
+    const edsmCard = document.getElementById('webEdsmDiscoveryCard');
+    const edsmBadge = document.getElementById('webEdsmDiscoveryBadge');
+    const inaraLink = document.getElementById('webInaraSystemLink');
+    if (edsmCard && edsmBadge) {
+      const disc = s.EdsmDiscoveryIntel;
+      const inaraUrl = payload.inaraSystemUrl || '';
+      if (disc && disc.SystemName) {
+        edsmBadge.textContent = disc.DiscoveryBadge || '';
+        edsmBadge.style.color = disc.IsKnownInEdsm ? 'var(--hud-secondary)' : 'var(--hud-ok)';
+      } else {
+        edsmBadge.textContent = '';
+      }
+      if (inaraLink) {
+        inaraLink.href = inaraUrl || '#';
+        inaraLink.hidden = !inaraUrl;
+      }
+      edsmCard.hidden = !edsmBadge.textContent && !inaraUrl;
+    }
+    // Opt-in visibility for Ardent Market & EDAstro DSSA
+    const ardentSec = document.getElementById('webArdentMarketSection');
+    if (ardentSec) {
+      ardentSec.hidden = !(payload.enabledIntegrations && payload.enabledIntegrations.ardentMarketApi);
+    }
+    const dssaBtn = document.getElementById('btnWebNearestDssa');
+    if (dssaBtn) {
+      dssaBtn.hidden = !(payload.enabledIntegrations && payload.enabledIntegrations.edastroDssa);
+    }
+    // EliteBGS Watchlist
+    const bgsWatchCard = document.getElementById('webEliteBgsWatchlistCard');
+    const bgsWatchItems = Array.isArray(s.WatchedBgsFactions) ? s.WatchedBgsFactions : [];
+    const bgsEnabled = !!(payload.enabledIntegrations && payload.enabledIntegrations.eliteBgsWatchlist);
+    if (bgsWatchCard) {
+      bgsWatchCard.hidden = !bgsEnabled && bgsWatchItems.length === 0;
+      if (bgsWatchItems.length > 0) {
+        renderTableRows('webEliteBgsTableBody', bgsWatchItems, [
+          f => f.FactionName,
+          f => f.SystemName,
+          f => f.InfluenceDisplay,
+          f => f.State,
+          f => f.ActiveStates || '—',
+          f => f.PendingStates || '—'
+        ], '');
+      }
+    }
+    // Editable system note & surface bookmarks sync
+    const noteInput = document.getElementById('webSystemNoteInput');
+    if (noteInput && document.activeElement !== noteInput) {
+      noteInput.value = s.CurrentSystemNote || '';
+    }
+    if (Array.isArray(payload.surfaceBookmarks)) {
+      renderWebSurfaceBookmarks(payload.surfaceBookmarks);
+    }
 
     // Cargo instant sell value + colonisation cross-reference
     const cargoProfitEl = document.getElementById('webCargoTradeProfit');
@@ -699,19 +793,40 @@
       }
     }
 
-    // Engineering Wishlist (live)
-    const wishSec = document.getElementById('webWishlistSection');
+    // Engineering Wishlist (live + interactive blueprint planner)
     const wishRows = Array.isArray(payload.engineeringWishlist) ? payload.engineeringWishlist : [];
-    if (wishSec) {
-      wishSec.hidden = wishRows.length === 0;
-      if (wishRows.length > 0) {
-        renderTableRows('webWishlistTableBody', wishRows, [
-          r => r.MaterialName,
-          r => r.Category,
-          r => formatCount(r.Required),
-          r => formatCount(r.Owned),
-          r => r.StatusDisplay
-        ], '');
+    const bpSel = document.getElementById('webEngineeringBlueprint');
+    if (bpSel && Array.isArray(payload.engineeringCatalog) && bpSel.options.length === 0) {
+      bpSel.innerHTML = payload.engineeringCatalog.map(b => `<option value="${escapeHtml(b.Id || b.id || '')}">${escapeHtml(b.DisplayName || b.displayName || '')}</option>`).join('');
+    }
+    renderTableRows('webWishlistTableBody', wishRows, [
+      r => r.MaterialName,
+      r => r.Category,
+      r => formatCount(r.Required),
+      r => formatCount(r.Owned),
+      r => r.StatusDisplay
+    ], '');
+
+    // Mining filter sync
+    const mTargetsEl = document.getElementById('webMiningTargets');
+    if (mTargetsEl && document.activeElement !== mTargetsEl && typeof payload.miningTargets === 'string') {
+      mTargetsEl.value = payload.miningTargets;
+    }
+    const mPctEl = document.getElementById('webMiningMinPercent');
+    if (mPctEl && document.activeElement !== mPctEl && typeof payload.miningMinPercent === 'number') {
+      mPctEl.value = String(payload.miningMinPercent);
+    }
+
+    // Market colonisation summary
+    const mktColEl = document.getElementById('webMarketColonisationSummary');
+    if (mktColEl) {
+      const mktItems = (s.Market && Array.isArray(s.Market.Items)) ? s.Market.Items : [];
+      const colMatches = mktItems.filter(m => m.IsColonisationResource && m.Stock > 0);
+      if (colMatches.length > 0) {
+        mktColEl.textContent = `★ Colonisation supplies in stock here (${colMatches.length}): ${colMatches.slice(0, 5).map(m => `${m.DisplayName} (${formatCount(m.Stock)})`).join(', ')}`;
+        mktColEl.hidden = false;
+      } else {
+        mktColEl.hidden = true;
       }
     }
 
@@ -728,6 +843,20 @@
           x => x.StarSystem || '---',
           x => x.StationName || '---',
           x => x.ValueDisplay || `${formatCount(x.Value)} CR`
+        ], '');
+      }
+    }
+    const storedModsSec = document.getElementById('webStoredModulesSection');
+    const storedMods = Array.isArray(s.StoredModules) ? s.StoredModules : [];
+    if (storedModsSec) {
+      storedModsSec.hidden = storedMods.length === 0;
+      if (storedMods.length > 0) {
+        renderTableRows('webStoredModulesTableBody', storedMods, [
+          m => m.DisplayName || m.Name,
+          m => m.Engineering || '—',
+          m => m.StarSystem || '---',
+          m => m.StationName || '---',
+          m => m.PriceDisplay || '—'
         ], '');
       }
     }
@@ -762,6 +891,9 @@
     const galnetTbody = document.getElementById('webGalnetTableBody');
     const galnetBodyEl = document.getElementById('webGalnetBody');
     const articles = Array.isArray(payload.galnetArticles) ? payload.galnetArticles : [];
+    if (articles.length === 0 || selectedGalnetIndex >= articles.length) {
+      selectedGalnetIndex = 0;
+    }
     if (galnetTbody) {
       galnetTbody.innerHTML = '';
       if (articles.length === 0) {
@@ -776,7 +908,12 @@
         articles.forEach((art, idx) => {
           const tr = document.createElement('tr');
           tr.style.cursor = 'pointer';
-          tr.onclick = () => { if (galnetBodyEl) galnetBodyEl.textContent = `${art.Title}\n(${art.Date})\n\n${art.Body || ''}`; };
+          tr.classList.toggle('current-system', idx === selectedGalnetIndex);
+          tr.onclick = () => {
+            selectedGalnetIndex = idx;
+            galnetTbody.querySelectorAll('tr').forEach((row, rowIdx) => row.classList.toggle('current-system', rowIdx === idx));
+            if (galnetBodyEl) galnetBodyEl.textContent = `${art.Title}\n(${art.Date})\n\n${art.Body || ''}`;
+          };
           const tdDate = document.createElement('td');
           tdDate.textContent = art.Date || '';
           const tdTitle = document.createElement('td');
@@ -784,7 +921,7 @@
           tr.appendChild(tdDate);
           tr.appendChild(tdTitle);
           galnetTbody.appendChild(tr);
-          if (idx === 0 && galnetBodyEl && !galnetBodyEl.textContent) {
+          if (idx === selectedGalnetIndex && galnetBodyEl && !galnetBodyEl.textContent) {
             galnetBodyEl.textContent = `${art.Title}\n(${art.Date})\n\n${art.Body || ''}`;
           }
         });
@@ -1051,12 +1188,11 @@
     ], flightTranslations.modulesWaiting);
 
     const shipLocker = s.ShipLockerInventory || [];
+    window.__lastShipLocker = shipLocker;
     document.getElementById('shipLockerStatus').textContent = shipLocker.length === 0
       ? operations.shipLockerWaiting
       : formatOperation('shipLockerCount', shipLocker.length);
-    renderTableRows('shipLockerTableBody', shipLocker, [
-      i => i.DisplayName, i => i.Type, i => formatCount(i.Count)
-    ], operations.shipLockerWaiting);
+    renderWebShipLockerFilter();
 
     const engineers = s.Engineers || [];
     document.getElementById('engineersStatus').textContent = engineers.length === 0
@@ -1126,11 +1262,8 @@
     }
 
     const noteCard = document.getElementById('webSystemNoteCard');
-    if (s.CurrentSystemNote) {
-      document.getElementById('webSystemNoteText').textContent = s.CurrentSystemNote;
+    if (noteCard) {
       noteCard.hidden = false;
-    } else {
-      noteCard.hidden = true;
     }
 
     document.getElementById('webPowerplaySummary').textContent = s.PowerplaySummary
@@ -1184,21 +1317,7 @@
     document.getElementById('surfaceLiveCoords').textContent = s.HasLatLong
       ? `${s.BodyName || s.CurrentSystem || '---'} · LAT: ${Number(s.Latitude).toFixed(4)}° · LON: ${Number(s.Longitude).toFixed(4)}° · ALT: ${oneDecimal(s.Altitude)} m · ${flightTranslations.heading}: ${Math.round(s.Heading)}°`
       : flightTranslations.noSurface;
-    const tLat = parseFloat(document.getElementById('webTargetLat')?.value);
-    const tLon = parseFloat(document.getElementById('webTargetLon')?.value);
-    const guideEl = document.getElementById('webSurfaceGuidance');
-    if (Number.isFinite(tLat) && Number.isFinite(tLon) && s.HasLatLong) {
-      const toRad = Math.PI / 180;
-      const lat1 = s.Latitude * toRad, lat2 = tLat * toRad, dLon = (tLon - s.Longitude) * toRad, dLat = (tLat - s.Latitude) * toRad;
-      const y = Math.sin(dLon) * Math.cos(lat2), x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-      const bearing = Math.round(((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360) % 360;
-      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-      const distM = (s.PlanetRadius || 0) * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
-      const distStr = distM >= 1000 ? `${(distM / 1000).toFixed(2)} km` : `${Math.round(distM)} m`;
-      guideEl.textContent = flightTranslations.surfaceGuidanceResult.replace('{0}', bearing).replace('{1}', distStr);
-    } else {
-      guideEl.textContent = flightTranslations.surfaceGuidancePrompt;
-    }
+    updateWebSurfaceGuidance(s);
     renderTableRows('surfaceEventsTableBody', s.RecentSurfaceEvents || [], [
       e => e.Timestamp, e => e.EventType, e => e.BodyName || '—', e => e.Details || '—', e => e.CoordinatesDisplay || '—'
     ], flightTranslations.noSurface);
@@ -1500,6 +1619,23 @@
   }
 
   function renderProfile(payload) {
+    const inaraCard = document.getElementById('webInaraProfileCard');
+    const inaraText = document.getElementById('webInaraProfileText');
+    const inaraLink = document.getElementById('webInaraProfileLink');
+    const ip = payload.state && payload.state.InaraProfile;
+    const inaraOn = !!(payload.enabledIntegrations && payload.enabledIntegrations.inara);
+    if (inaraCard && inaraText) {
+      if (inaraOn && ip && ip.CommanderName) {
+        const parts = [`INARA · ${ip.CommanderName}`];
+        if (ip.SquadronName) parts.push(ip.SquadronRank ? `${ip.SquadronName} (${ip.SquadronRank})` : ip.SquadronName);
+        if (ip.PreferredAllegiance) parts.push(ip.PreferredAllegiance);
+        inaraText.textContent = parts.join('  ·  ');
+        if (inaraLink) inaraLink.href = ip.InaraUrl || '#';
+        inaraCard.hidden = false;
+      } else {
+        inaraCard.hidden = true;
+      }
+    }
     const rows = payload.operationsView.profile;
     document.getElementById('profileStatus').textContent = rows.length
       ? operationsTranslations.profileCount.replace('{0}', rows.length) : operationsTranslations.profileWaiting;
@@ -1551,7 +1687,7 @@
     if (!state.HasMaterialsTelemetry || materials.length === 0 || filtered.length === 0) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 4;
+      cell.colSpan = 5;
       cell.textContent = !state.HasMaterialsTelemetry
         ? text.unavailable
         : materials.length === 0
@@ -1571,7 +1707,8 @@
         material.DisplayName,
         categoryNames.get(material.Category) ?? material.Category,
         [text.unclassified, text.veryCommon, text.common, text.standard, text.rare, text.veryRare][material.Grade] ?? text.unclassified,
-        material.Count
+        material.CountWithCapacityDisplay || material.Count,
+        material.WishlistDisplay || '—'
       ];
       values.forEach(value => {
         const cell = document.createElement('td');
@@ -1692,10 +1829,6 @@
       renderDeck(lastPayload.deckBindings, lastPayload.hideUnassignedBindings);
   });
 
-  function sendWebAiPreFlight() {
-    sendWebAiPrompt('Run a concise tactical pre-flight check (fuel, limpets, FSD health, hull, missing mission cargo, route fuel stars) and give launch clearance or warnings.');
-  }
-
   function exportWebAiChat() {
     const log = document.getElementById('webAiChatLog');
     if (!log || !log.textContent.trim()) return;
@@ -1706,6 +1839,38 @@
     a.download = `HUDnopy-COVAS-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function postWebJson(url, payload) {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload ?? {})
+    });
+    return resp.json();
+  }
+
+  async function sendWebAiVision() {
+    const input = document.getElementById('webAiPrompt');
+    const prompt = (input?.value || '').trim();
+    if (input) input.value = '';
+    const log = document.getElementById('webAiChatLog');
+    const append = (who, msg) => {
+      if (!log) return;
+      log.textContent += `[${new Date().toLocaleTimeString()}] ${who}: ${msg}\n\n`;
+      log.scrollTop = log.scrollHeight;
+    };
+    append('CMDR', prompt ? `👁 ${prompt}` : '👁');
+    const btn = document.getElementById('btnWebAiVision');
+    if (btn) btn.disabled = true;
+    try {
+      const data = await postWebJson('/api/ai/vision', { prompt });
+      append('COVAS', data.reply || '---');
+    } catch (err) {
+      append('COVAS', String(err));
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function sendWebAiPrompt(overrideText) {
@@ -1722,12 +1887,7 @@
     const btn = document.getElementById('btnWebAiSend');
     btn.disabled = true;
     try {
-      const resp = await fetch('/api/ai/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      });
-      const data = await resp.json();
+      const data = await postWebJson('/api/ai/ask', { prompt });
       append('COVAS', data.reply || '---');
     } catch (err) {
       append('COVAS', String(err));
@@ -1739,7 +1899,7 @@
   let webAiRecognition = null;
   function toggleWebAiVoice() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { showToast('Web Speech API no soportada en este navegador'); return; }
+    if (!SR) { showToast(inputTranslations?.webSpeechUnsupported || 'Web Speech API is not supported in this browser'); return; }
     const btn = document.getElementById('btnWebAiMic');
     if (webAiRecognition) {
       webAiRecognition.stop();
@@ -1764,20 +1924,368 @@
     webAiRecognition.start();
   }
 
-  async function searchWebSpanshService(serviceKey) {
-    const status = document.getElementById('webSpanshServiceStatus');
-    const tbody = document.getElementById('webSpanshServiceTableBody');
-    if (status) status.textContent = 'Buscando en Spansh...';
+  async function runWebTableQuery(url, statusId, tbodyId, loadingText, itemsKey, rowHtmlFn, statusFormatter) {
+    const status = document.getElementById(statusId);
+    const tbody = document.getElementById(tbodyId);
+    if (status) status.textContent = loadingText;
     if (tbody) tbody.innerHTML = '';
     try {
-      const resp = await fetch(`/api/spansh/nearest?service=${encodeURIComponent(serviceKey)}`);
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (status) status.textContent = statusFormatter ? statusFormatter(data) : (data.message || '');
+      const items = data[itemsKey];
+      if (tbody && Array.isArray(items)) {
+        tbody.innerHTML = items.map(rowHtmlFn).join('');
+      }
+    } catch (err) {
+      if (status) status.textContent = String(err);
+    }
+  }
+
+  async function searchWebSpanshService(serviceKey) {
+    await runWebTableQuery(
+      `/api/spansh/nearest?service=${encodeURIComponent(serviceKey)}`,
+      'webSpanshServiceStatus', 'webSpanshServiceTableBody', 'Spansh...', 'results',
+      r => `<tr><td>${escapeHtml(r.systemName || '')}</td><td>${escapeHtml(r.stationName || '')}</td><td>${escapeHtml(r.distanceDisplay || '')}</td><td>${escapeHtml(r.landingPad || '')}</td></tr>`
+    );
+  }
+
+  async function searchWebSpanshBodies() {
+    const q = (document.getElementById('webSpanshBodyQuery')?.value || '').trim();
+    await runWebTableQuery(
+      `/api/spansh/bodies?query=${encodeURIComponent(q)}`,
+      'webDeepSearchStatus', 'webDeepSearchTableBody', 'Spansh Bodies...', 'results',
+      r => `<tr><td>${escapeHtml(r.bodyName || '')}</td><td>${escapeHtml(r.systemName || '')}</td><td>${escapeHtml(r.distanceDisplay || '')}</td><td>${escapeHtml(r.materialsSummary || r.subType || '')}</td></tr>`
+    );
+  }
+
+  async function searchWebSpanshCarriers(service) {
+    const sel = document.getElementById('webSpanshCarrierService');
+    const chosen = service || (sel ? sel.value : 'Vista Genomics');
+    await runWebTableQuery(
+      `/api/spansh/carriers?service=${encodeURIComponent(chosen)}`,
+      'webDeepSearchStatus', 'webDeepSearchTableBody', 'Spansh Carriers...', 'results',
+      r => `<tr><td>${escapeHtml(r.callsign || '')}</td><td>${escapeHtml(r.systemName || '')}</td><td>${escapeHtml(r.distanceDisplay || '')}</td><td>${escapeHtml(r.servicesSummary || '')}</td></tr>`
+    );
+  }
+
+  async function searchWebSpanshItem() {
+    const query = (document.getElementById('webSpanshItemQuery')?.value || '').trim();
+    const isShip = document.getElementById('webSpanshItemType')?.value === 'ship';
+    const lyr = !!document.getElementById('webSpanshItemLyr')?.checked;
+    await runWebTableQuery(
+      `/api/spansh/item?query=${encodeURIComponent(query)}&isShip=${isShip}&lyr=${lyr}`,
+      'webSpanshServiceStatus', 'webSpanshServiceTableBody', 'Spansh...', 'results',
+      r => `<tr><td>${escapeHtml(r.systemName || '')}</td><td>${escapeHtml(r.stationName || '')}</td><td>${escapeHtml(r.distanceDisplay || '')}</td><td>${escapeHtml(r.landingPad || '')}</td></tr>`
+    );
+  }
+
+  async function plotWebSpanshRoute() {
+    const mode = document.getElementById('webSpanshRouteMode')?.value || 'neutron';
+    const dest = (document.getElementById('webSpanshRouteDest')?.value || '').trim();
+    const range = document.getElementById('webSpanshRouteRange')?.value || '50';
+    await runWebTableQuery(
+      `/api/spansh/route?mode=${encodeURIComponent(mode)}&to=${encodeURIComponent(dest)}&range=${encodeURIComponent(range)}`,
+      'webSpanshRouteStatus', 'webSpanshRouteTableBody', 'Spansh Route...', 'waypoints',
+      w => `<tr><td>${escapeHtml(String(w.index || ''))}</td><td>${escapeHtml(w.systemName || '')}</td><td>${escapeHtml(w.distanceDisplay || '')}</td><td>${escapeHtml(w.details || '')}</td></tr>`
+    );
+  }
+
+  async function plotWebSpanshTrade() {
+    await runWebTableQuery(
+      '/api/spansh/trade',
+      'webSpanshTradeStatus', 'webSpanshTradeTableBody', 'Spansh Trade...', 'hops',
+      h => `<tr><td>${escapeHtml(String(h.hop || ''))}</td><td>${escapeHtml(h.routeDisplay || '')}</td><td>${escapeHtml(h.commodity || '')}</td><td>${escapeHtml(h.profitDisplay || '')}</td><td>${escapeHtml(h.distanceDisplay || '')}</td></tr>`
+    );
+  }
+
+  async function searchWebSpanshMining() {
+    const mineral = document.getElementById('webSpanshMiningMineral')?.value || 'Platinum';
+    await runWebTableQuery(
+      `/api/spansh/mining?mineral=${encodeURIComponent(mineral)}`,
+      'webSpanshMiningStatus', 'webSpanshMiningTableBody', 'Spansh Mining...', 'results',
+      r => `<tr><td>${escapeHtml(r.systemName || '')}</td><td>${escapeHtml(r.ringName || '')}</td><td>${escapeHtml(r.ringType || '')}</td><td>${escapeHtml(r.distanceDisplay || '')}</td><td>${escapeHtml(r.signals || '')}</td></tr>`
+    );
+  }
+
+  async function searchWebColonisationSupplier() {
+    await runWebTableQuery(
+      '/api/spansh/colonisation',
+      'webColonisationSupplierStatus', 'webColonisationSupplierTableBody', 'Spansh Colonisation...', 'results',
+      r => `<tr><td>${escapeHtml(r.systemName || '')}</td><td>${escapeHtml(r.stationName || '')}</td><td>${escapeHtml(r.distanceDisplay || '')}</td><td>${escapeHtml(r.landingPad || '')}</td></tr>`,
+      data => `${data.commodity ? data.commodity + ' — ' : ''}${data.message || ''}`
+    );
+  }
+
+  async function fetchWebEdsmIntel() {
+    const el = document.getElementById('webEdsmTrafficText');
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = 'EDSM...';
+    try {
+      const resp = await fetch('/api/edsm/intel');
+      const data = await resp.json();
+      if (data.success && data.intel) {
+        const i = data.intel;
+        const notePart = i.remoteComment ? ` · 📝 ${i.remoteComment}` : '';
+        el.textContent = `EDSM ${i.systemName}: Traffic ${i.trafficDay}/24h (${i.trafficWeek}/7d) · Deaths ${i.deathsDay}/24h (${i.deathsWeek}/7d)${notePart}`;
+        const noteInput = document.getElementById('webSystemNoteInput');
+        if (noteInput && !noteInput.value.trim() && i.remoteComment) {
+          noteInput.value = i.remoteComment;
+        }
+      } else {
+        el.textContent = data.message || 'EDSM unavailable';
+      }
+    } catch (err) {
+      el.textContent = String(err);
+    }
+  }
+
+  async function saveWebSystemNote() {
+    const input = document.getElementById('webSystemNoteInput');
+    if (!input) return;
+    try {
+      const data = await postWebJson('/api/system-note', { note: input.value || '' });
+      if (data.success) showToast((inputTranslations?.webNoteSaved || 'Note saved ({0})').replace('{0}', data.system));
+    } catch (err) {
+      showToast(String(err));
+    }
+  }
+
+  function updateWebSurfaceGuidance(stateArg) {
+    const s = stateArg || (lastPayload && lastPayload.state);
+    const guideEl = document.getElementById('webSurfaceGuidance');
+    const tapeEl = document.getElementById('webSurfaceCompassTape');
+    if (!guideEl) return;
+
+    const tLat = parseFloat((document.getElementById('webTargetLat')?.value || '').replace(',', '.'));
+    const tLon = parseFloat((document.getElementById('webTargetLon')?.value || '').replace(',', '.'));
+    if (!Number.isFinite(tLat) || !Number.isFinite(tLon)) {
+      if (tapeEl) tapeEl.hidden = true;
+      guideEl.textContent = flightTranslations.surfaceGuidancePrompt || '';
+      return;
+    }
+
+    if (!s || !s.HasLatLong) {
+      if (tapeEl) tapeEl.hidden = true;
+      guideEl.textContent = flightTranslations.noSurface || '';
+      return;
+    }
+
+    const toRad = Math.PI / 180;
+    const lat1 = s.Latitude * toRad;
+    const lat2 = tLat * toRad;
+    const dLon = (tLon - s.Longitude) * toRad;
+    const dLat = (tLat - s.Latitude) * toRad;
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    const bearing = ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+    const radius = s.PlanetRadius > 1000 ? s.PlanetRadius : 1000000;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    const distM = radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+    const distStr = distM >= 1000 ? `${(distM / 1000).toFixed(2)} km` : `${Math.round(distM)} m`;
+
+    const heading = Number.isFinite(s.Heading) ? s.Heading : 0;
+    const delta = ((bearing - heading + 540) % 360) - 180;
+    const arrow = delta < -25 ? '◀◀' : delta < -4 ? '◀' : delta <= 4 ? '▲' : delta <= 25 ? '▶' : '▶▶';
+
+    if (tapeEl) {
+      const slots = 21;
+      const center = Math.floor(slots / 2);
+      const chars = Array(slots).fill('·');
+      chars[center] = '│';
+      const offset = Math.round(Math.max(-center, Math.min(center, delta / 9)));
+      chars[center + offset] = '◆';
+      const hdgPad = String(Math.round(heading) % 360).padStart(3, '0');
+      const brgPad = String(Math.round(bearing) % 360).padStart(3, '0');
+      tapeEl.textContent = `${arrow}  [${chars.join('')}]  HDG ${hdgPad}°  ▸  BRG ${brgPad}°`;
+      tapeEl.hidden = false;
+    }
+
+    guideEl.textContent = `${arrow} ` + (flightTranslations.surfaceGuidanceResult || '{0}° · {1}')
+      .replace('{0}', Math.round(bearing))
+      .replace('{1}', distStr);
+  }
+
+  document.getElementById('webTargetLat')?.addEventListener('input', () => updateWebSurfaceGuidance());
+  document.getElementById('webTargetLon')?.addEventListener('input', () => updateWebSurfaceGuidance());
+
+  function targetWebLastExoSample() {
+    const s = lastPayload && lastPayload.state;
+    const exo = s && s.ExobiologyTracker;
+    if (!exo || typeof exo.LastSampleLatitude !== 'number' || typeof exo.LastSampleLongitude !== 'number') {
+      showToast(inputTranslations?.webNoExoCoords || 'No exobiology sample coordinates.');
+      return;
+    }
+    const latEl = document.getElementById('webTargetLat');
+    const lonEl = document.getElementById('webTargetLon');
+    if (latEl) latEl.value = exo.LastSampleLatitude.toFixed(4);
+    if (lonEl) lonEl.value = exo.LastSampleLongitude.toFixed(4);
+    if (typeof updateWebSurfaceGuidance === 'function') updateWebSurfaceGuidance();
+  }
+
+  async function saveWebSurfaceBookmark() {
+    const labelEl = document.getElementById('webBookmarkLabel');
+    const label = (labelEl?.value || '').trim();
+    try {
+      const data = await postWebJson('/api/surface/bookmarks', { action: 'add', label });
+      if (data.success) {
+        if (labelEl) labelEl.value = '';
+        renderWebSurfaceBookmarks(data.bookmarks || []);
+        showToast(inputTranslations?.webBookmarkSaved || 'Bookmark saved');
+      } else {
+        showToast(data.message || 'Error');
+      }
+    } catch (err) {
+      showToast(String(err));
+    }
+  }
+
+  async function deleteWebSurfaceBookmark(label) {
+    try {
+      const data = await postWebJson('/api/surface/bookmarks', { action: 'delete', label });
+      if (data.success) renderWebSurfaceBookmarks(data.bookmarks || []);
+    } catch { }
+  }
+
+  function navigateWebBookmark(lat, lon) {
+    const latEl = document.getElementById('webTargetLat');
+    const lonEl = document.getElementById('webTargetLon');
+    if (latEl) latEl.value = Number(lat).toFixed(4);
+    if (lonEl) lonEl.value = Number(lon).toFixed(4);
+    if (typeof updateWebSurfaceGuidance === 'function') updateWebSurfaceGuidance();
+  }
+
+  function renderWebSurfaceBookmarks(bookmarks) {
+    const tbody = document.getElementById('webSurfaceBookmarksTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = (bookmarks || []).map(b => {
+      const lat = b.latitude ?? b.Latitude ?? 0;
+      const lon = b.longitude ?? b.Longitude ?? 0;
+      const lbl = b.label ?? b.Label ?? '';
+      return `<tr><td>${escapeHtml(b.systemName ?? b.SystemName ?? '')}</td><td>${escapeHtml(b.bodyName ?? b.BodyName ?? '')}</td><td>${escapeHtml(lbl)}</td><td>${lat.toFixed(3)}, ${lon.toFixed(3)}</td><td><button class="deck-button" style="min-height:28px;padding:0 8px;" onclick="navigateWebBookmark(${lat},${lon})">🧭</button> <button class="deck-button" style="min-height:28px;padding:0 8px;" onclick="deleteWebSurfaceBookmark('${escapeHtml(lbl).replace(/'/g, '&#39;')}')">🗑</button></td></tr>`;
+    }).join('');
+  }
+
+  async function runWebAiQuick(action) {
+    const log = document.getElementById('webAiChatLog');
+    if (action === 'clear') {
+      await postWebJson('/api/ai/quick', { action: 'clear' });
+      if (log) log.textContent = '';
+      return;
+    }
+    try {
+      if (log) log.textContent += `[COVAS] (${action})...\n`;
+      const data = await postWebJson('/api/ai/quick', { action });
+      if (log) {
+        log.textContent += `[COVAS] ${data.reply || ''}\n\n`;
+        log.scrollTop = log.scrollHeight;
+      }
+    } catch (err) {
+      if (log) log.textContent += `[ERR] ${err}\n`;
+    }
+  }
+
+  async function speakWebGalnet(stop) {
+    try {
+      await postWebJson('/api/galnet/speak', stop ? { stop: true } : { index: selectedGalnetIndex || 0 });
+    } catch { }
+  }
+
+  async function analyzeWebExpedition() {
+    const el = document.getElementById('webExpeditionSummary');
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = inputTranslations?.webAnalyzingJournals || 'Analyzing journals...';
+    try {
+      const resp = await fetch('/api/expedition/analyze', { method: 'POST' });
+      const data = await resp.json();
+      if (data.success && data.stats) {
+        const st = data.stats;
+        el.textContent = `Journals: ${st.journalsScanned} · Jumps: ${st.totalJumps} (${Number(st.totalDistanceLy || 0).toFixed(1)} LY) · Systems: ${st.uniqueSystems} · ELW/WW/AW: ${st.earthLikeWorlds}/${st.waterWorlds}/${st.ammoniaWorlds} · Exo: ${st.organicsAnalysed} · Missions: ${st.missionsCompleted}`;
+      }
+    } catch (err) {
+      el.textContent = String(err);
+    }
+  }
+
+  async function resetWebCombatSession() {
+    await fetch('/api/combat/reset', { method: 'POST' });
+    showToast(inputTranslations?.webCombatReset || 'Combat session reset');
+  }
+
+  async function resetWebMiningSession() {
+    await fetch('/api/mining/reset', { method: 'POST' });
+    showToast(inputTranslations?.webMiningReset || 'Mining session reset');
+  }
+
+  async function saveWebMiningFilter() {
+    const targets = document.getElementById('webMiningTargets')?.value || '';
+    const minPercent = parseInt(document.getElementById('webMiningMinPercent')?.value || '25', 10) || 25;
+    await postWebJson('/api/mining/filter', { targets, minPercent });
+    showToast(inputTranslations?.webMiningFilterApplied || 'Mining filter applied');
+  }
+
+  async function updateWebWishlist(action) {
+    const bpId = document.getElementById('webEngineeringBlueprint')?.value || '';
+    const data = await postWebJson('/api/wishlist/update', { action, blueprintId: bpId });
+    if (data.success && Array.isArray(data.rows)) {
+      renderTableRows('webWishlistTableBody', data.rows, [
+        r => r.materialName ?? r.MaterialName,
+        r => r.category ?? r.Category,
+        r => formatCount(r.required ?? r.Required),
+        r => formatCount(r.owned ?? r.Owned),
+        r => r.statusDisplay ?? r.StatusDisplay
+      ], '');
+    }
+  }
+
+  function findWebWishlistTrader() {
+    const navBtn = document.querySelector('nav.tabs button[onclick*="\'nav\'"]');
+    if (navBtn) switchTab('nav', navBtn);
+    const sec = document.querySelector('#tab-nav .module-section[data-section-key="spansh-services"]');
+    if (sec) {
+      document.querySelectorAll('#tab-nav .module-section').forEach(el => el.classList.toggle('active', el === sec));
+      activeSectionByTab.set('tab-nav', sec.dataset.sectionTitle || null);
+      updateSectionTabs();
+    }
+    searchWebSpanshService('material_trader');
+  }
+
+  function renderWebShipLockerFilter() {
+    const items = Array.isArray(window.__lastShipLocker) ? window.__lastShipLocker : [];
+    const q = (document.getElementById('webShipLockerSearch')?.value || '').trim().toLowerCase();
+    const filtered = q ? items.filter(i => `${i.DisplayName || ''} ${i.Type || ''}`.toLowerCase().includes(q)) : items;
+    renderTableRows('shipLockerTableBody', filtered, [
+      i => i.DisplayName, i => i.Type, i => formatCount(i.Count)
+    ], operationsTranslations.shipLockerWaiting || '');
+  }
+
+  async function fetchWebNearestDssa() {
+    await runWebTableQuery(
+      '/api/dssa/nearest',
+      'webDeepSearchStatus', 'webDeepSearchTableBody', 'EDAstro DSSA...', 'carriers',
+      c => `<tr><td>${escapeHtml((c.callsign || '') + ' ' + (c.name || ''))}</td><td>${escapeHtml(c.systemName || '')}</td><td>${escapeHtml(c.distanceDisplay || '')}</td><td>${escapeHtml(c.region || '')}</td></tr>`
+    );
+  }
+
+  async function searchWebArdentMarket() {
+    const commodity = (document.getElementById('webArdentCommodity')?.value || '').trim();
+    const mode = document.getElementById('webArdentMode')?.value || 'sell';
+    await runWebTableQuery(
+      `/api/ardent/market?commodity=${encodeURIComponent(commodity)}&mode=${encodeURIComponent(mode)}`,
+      'webArdentStatus', 'webArdentTableBody', 'Ardent Insight...', 'offers',
+      o => `<tr><td>${escapeHtml(o.systemName || '')}</td><td>${escapeHtml(o.stationName || '')}</td><td>${escapeHtml(o.priceDisplay || '')}</td><td>${escapeHtml(o.quantityDisplay || '')}</td><td>${escapeHtml(o.maxLandingPad || '')}</td><td>${escapeHtml(o.distanceDisplay || '')}</td></tr>`
+    );
+  }
+
+  async function refreshWebEliteBgs() {
+    const status = document.getElementById('webEliteBgsStatus');
+    if (status) status.textContent = 'EliteBGS...';
+    try {
+      const resp = await fetch('/api/bgs/refresh', { method: 'POST' });
       const data = await resp.json();
       if (status) status.textContent = data.message || '';
-      if (tbody && Array.isArray(data.results)) {
-        tbody.innerHTML = data.results.map(r =>
-          `<tr><td>${escapeHtml(r.systemName || '')}</td><td>${escapeHtml(r.stationName || '')}</td><td>${escapeHtml(r.distanceDisplay || '')}</td><td>${escapeHtml(r.landingPad || '')}</td></tr>`
-        ).join('');
-      }
     } catch (err) {
       if (status) status.textContent = String(err);
     }

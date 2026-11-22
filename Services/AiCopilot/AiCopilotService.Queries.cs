@@ -8,6 +8,7 @@
 // -----------------------------------------------------------------------------
 
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -20,29 +21,55 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using HUDnopy.Models;
+using HUDnopy.Services.Integrations;
+using static HUDnopy.Services.JsonElementExtensions;
 
 namespace HUDnopy.Services;
 
 public sealed partial class AiCopilotService
 {
+    [GeneratedRegex(@"\[{1,2}\s*QUERY\s*[:|][^\]]*\]{1,2}", RegexOptions.IgnoreCase)]
+    private static partial Regex QueryTagRegex();
+
+    [GeneratedRegex(@"\[{1,2}\s*ACTION\s*[:|][^\]]*\]{1,2}", RegexOptions.IgnoreCase)]
+    private static partial Regex ActionTagRegex();
+
+    [GeneratedRegex(@"\[{1,2}\s*ACTION\s*[:|]\s*([A-Z_]+)\s*[:|]\s*[""']?([^\]""']+)[""']?\s*\]{1,2}", RegexOptions.IgnoreCase)]
+    private static partial Regex ActionCaptureRegex();
+
+    [GeneratedRegex(@"\[{1,2}\s*QUERY\s*[:|]\s*([A-Z_]+)(?:\s*[:|]\s*[""']?([^\]""']*)[""']?)?\s*\]{1,2}", RegexOptions.IgnoreCase)]
+    private static partial Regex QueryCaptureRegex();
+
+    [GeneratedRegex(@"\[\[(?:QUERY|ACTION)[:|][^\]]*\]\]", RegexOptions.IgnoreCase)]
+    private static partial Regex DoubleBracketTagRegex();
+
+    [GeneratedRegex(@"\s{2,}")]
+    private static partial Regex MultiWhitespaceRegex();
+
     internal static string StripInternalTags(string rawReply)
     {
         if (string.IsNullOrEmpty(rawReply))
             return "";
-        string noQuery = Regex.Replace(rawReply, @"\[\[QUERY[:|][^\]]*\]\]", "", RegexOptions.IgnoreCase);
-        return Regex.Replace(noQuery, @"\[\[ACTION[:|][^\]]*\]\]", "", RegexOptions.IgnoreCase).Trim();
+        string noQuery = QueryTagRegex().Replace(rawReply, "");
+        return ActionTagRegex().Replace(noQuery, "").Trim();
     }
 
-    private async Task<string> ProcessEmbeddedActionsAsync(AppConfig cfg, string rawReply)
+    private static readonly FrozenSet<string> DangerousHandsFreeBindings = new[]
+    {
+        "EjectAllCargo",
+        "SilentRunning"
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    private async Task<string> ProcessEmbeddedActionsAsync(AppConfig cfg, string rawReply, bool isHandsFree = false)
     {
         // Always strip any residual [[QUERY:...]] tags so internal syntax never leaks to chat or TTS
-        string sanitized = Regex.Replace(rawReply, @"\[\[QUERY[:|][^\]]*\]\]", "", RegexOptions.IgnoreCase).Trim();
+        string sanitized = QueryTagRegex().Replace(rawReply, "").Trim();
 
-        if (!cfg.AiAllowActions || !sanitized.Contains("[[ACTION", StringComparison.OrdinalIgnoreCase))
+        if (!cfg.AiAllowActions || !sanitized.Contains("ACTION", StringComparison.OrdinalIgnoreCase))
             return StripInternalTags(sanitized);
 
-        var matches = Regex.Matches(sanitized, @"\[\[ACTION[:|]\s*([A-Z_]+)\s*[:|]\s*([^\]]+)\]\]", RegexOptions.IgnoreCase);
-        string cleanText = Regex.Replace(sanitized, @"\[\[ACTION[:|][^\]]*\]\]", "", RegexOptions.IgnoreCase).Trim();
+        var matches = ActionCaptureRegex().Matches(sanitized);
+        string cleanText = ActionTagRegex().Replace(sanitized, "").Trim();
         var actionLogs = new List<string>();
 
         foreach (Match m in matches)
@@ -53,6 +80,11 @@ public sealed partial class AiCopilotService
             switch (kind)
             {
                 case "BIND":
+                    if (isHandsFree && DangerousHandsFreeBindings.Contains(param))
+                    {
+                        actionLogs.Add($"🛡 Seguridad manos libres: '{param}' bloqueado (usa Push-to-Talk o teclado para confirmar).");
+                        break;
+                    }
                     var (ok, msg) = await _inputSimulator.ExecuteActionAsync(param);
                     actionLogs.Add(ok ? $"⚡ {msg}" : $"⚠ {msg}");
                     break;
@@ -78,6 +110,11 @@ public sealed partial class AiCopilotService
                     }
 
                 case "SPANSH":
+                    if (!_configService.Current.EnableSpanshSystemData)
+                    {
+                        actionLogs.Add("⚠ Spansh está desactivado en Ajustes -> Integraciones.");
+                        break;
+                    }
                     SpanshServiceRequested?.Invoke(param);
                     var state = _fileWatcher.State;
                     var (sOk, results, sMsg) = await _spanshService.SearchNearestServicesAsync(param, state.CurrentSystem, state.StarPos);
@@ -177,6 +214,78 @@ public sealed partial class AiCopilotService
                     }
                     break;
 
+                case "WISHLIST_CLEAR":
+                    _configService.Current.EngineeringWishlistBlueprints?.Clear();
+                    _configService.Save();
+                    WishlistAddRequested?.Invoke("__CLEAR__");
+                    actionLogs.Add("★ Lista de deseos de ingeniería vaciada.");
+                    break;
+
+                case "PIP_PRESET":
+                    {
+                        string preset = (param ?? "balanced").Trim().ToLowerInvariant();
+                        string[] seq = preset switch
+                        {
+                            "combat" or "combate" or "attack" => ["ResetPowerDistribution", "IncreaseWeaponsPower", "IncreaseWeaponsPower", "IncreaseSystemsPower", "IncreaseWeaponsPower"],
+                            "tank" or "shields" or "escudos" => ["ResetPowerDistribution", "IncreaseSystemsPower", "IncreaseSystemsPower", "IncreaseWeaponsPower", "IncreaseSystemsPower"],
+                            "escape" or "huida" or "flee" => ["ResetPowerDistribution", "IncreaseSystemsPower", "IncreaseSystemsPower", "IncreaseEnginesPower", "IncreaseEnginesPower"],
+                            "explore" or "exploracion" or "speed" => ["ResetPowerDistribution", "IncreaseEnginesPower", "IncreaseEnginesPower", "IncreaseSystemsPower", "IncreaseEnginesPower"],
+                            "mining" or "mineria" => ["ResetPowerDistribution", "IncreaseWeaponsPower", "IncreaseWeaponsPower", "IncreaseEnginesPower", "IncreaseWeaponsPower"],
+                            _ => ["ResetPowerDistribution"]
+                        };
+                        foreach (string step in seq)
+                        {
+                            await _inputSimulator.ExecuteActionAsync(step);
+                            await Task.Delay(65);
+                        }
+                        actionLogs.Add($"⚡ Pips configurados: {preset}");
+                        break;
+                    }
+
+                case "MINING_FILTER":
+                    {
+                        string[] mfParts = param.Split('|', 2, StringSplitOptions.TrimEntries);
+                        if (mfParts.Length >= 1 && !string.IsNullOrWhiteSpace(mfParts[0]))
+                            _configService.Current.MiningTargetMinerals = mfParts[0];
+                        if (mfParts.Length == 2 && int.TryParse(mfParts[1].TrimEnd('%'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int minPct))
+                            _configService.Current.MiningMinPercent = Math.Clamp(minPct, 5, 80);
+                        _configService.Save();
+                        actionLogs.Add($"⛏ Filtro minería: {_configService.Current.MiningTargetMinerals} (≥{_configService.Current.MiningMinPercent}%)");
+                        break;
+                    }
+
+                case "RESET_SESSION":
+                    {
+                        string targetSess = (param ?? "").Trim().ToLowerInvariant();
+                        if (targetSess is "mining" or "mineria")
+                        {
+                            _fileWatcher.ResetMiningSession();
+                            actionLogs.Add("⛏ Sesión de minería reiniciada.");
+                        }
+                        else
+                        {
+                            _fileWatcher.ResetCombatSession();
+                            actionLogs.Add("⚔ Sesión de combate reiniciada.");
+                        }
+                        break;
+                    }
+
+                case "SURFACE_TARGET":
+                    {
+                        string[] coordParts = param.Split(new[] { '|', ',', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                        if (coordParts.Length >= 2 &&
+                            double.TryParse(coordParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double lat) &&
+                            double.TryParse(coordParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double lon) &&
+                            lat is >= -90 and <= 90 && lon is >= -180 and <= 180)
+                        {
+                            string latS = lat.ToString("0.0000", CultureInfo.InvariantCulture);
+                            string lonS = lon.ToString("0.0000", CultureInfo.InvariantCulture);
+                            SurfaceNavigateRequested?.Invoke($"COORDS:{latS}|{lonS}");
+                            actionLogs.Add($"🧭 Brújula de superficie fijada en {latS}°, {lonS}°");
+                        }
+                        break;
+                    }
+
                 case "REMEMBER":
                     if (!string.IsNullOrWhiteSpace(param))
                     {
@@ -249,6 +358,247 @@ public sealed partial class AiCopilotService
                         actionLogs.Add($"📝 Nota guardada en {sys}.");
                     }
                     break;
+
+                case "DISCORD":
+                    if (_discord is not null && !string.IsNullOrWhiteSpace(param))
+                    {
+                        var (dOk, dMsg) = await _discord.SendWebhookAsync("🛰 COVAS Report", param);
+                        actionLogs.Add(dOk ? $"📨 {dMsg}" : $"⚠ {dMsg}");
+                    }
+                    break;
+
+                case "DISCORD_SUMMARY":
+                    if (_discord is not null)
+                    {
+                        var st = _fileWatcher.State;
+                        string mode = (param ?? "session").Trim().ToLowerInvariant();
+                        string title = mode == "ship" ? $"🚀 {st.CommanderName} — Ship Status" : $"📊 {st.CommanderName} — Session Summary";
+                        string body = mode == "ship"
+                            ? $"**Ship:** {st.ShipType} ({st.ShipName} / {st.ShipIdent})\n**System:** `{st.CurrentSystem}`{(string.IsNullOrWhiteSpace(st.StationName) ? "" : $" — {st.StationName}")}\n**Hull:** {st.HullHealth:0}% | **Fuel:** {st.FuelMain:0.1}/{st.FuelMax:0.1} t | **Cargo:** {st.CargoUsed}/{st.CargoCapacity} t | **Credits:** {st.Credits:N0} CR"
+                            : $"**System:** `{st.CurrentSystem}` | **Ship:** {st.ShipType}\n**Net Credits:** {st.SessionStats.NetCredits:+#,0;-#,0;0} CR ({st.SessionStats.CreditsPerHour:N0} CR/h)\n**Systems:** {st.SessionStats.SystemsVisited} ({st.SessionStats.TotalDistanceLy:0.1} LY) | **Scans:** {st.SessionStats.BodiesScanned} | **Exobiology:** {st.SessionStats.OrganicsAnalysed} | **Missions:** {st.SessionStats.MissionsCompleted}";
+                        var (dsOk, dsMsg) = await _discord.SendWebhookAsync(title, body);
+                        actionLogs.Add(dsOk ? $"📨 {dsMsg}" : $"⚠ {dsMsg}");
+                    }
+                    break;
+
+                case "DISCORD_EXPEDITION":
+                    if (_discord is not null)
+                    {
+                        var exp = await ExpeditionAnalyticsService.AnalyzeFolderAsync(_configService.Current.JournalFolderPath, maxFiles: 100);
+                        string body = $"**Journals:** {exp.JournalsScanned:N0} | **Jumps:** {exp.TotalJumps:N0} ({exp.TotalDistanceLy:N1} LY)\n**Unique Systems:** {exp.UniqueSystems:N0} | **ELW/WW/AW:** {exp.EarthLikeWorlds}/{exp.WaterWorlds}/{exp.AmmoniaWorlds}\n**Exobiology:** {exp.OrganicsAnalysed:N0} | **Missions:** {exp.MissionsCompleted:N0} | **Earnings:** {exp.TotalBountiesAndSalesCredits:N0} CR";
+                        var (deOk, deMsg) = await _discord.SendWebhookAsync($"🧭 {_fileWatcher.State.CommanderName} — Expedition Report", body, 0x3498DB);
+                        actionLogs.Add(deOk ? $"📨 {deMsg}" : $"⚠ {deMsg}");
+                    }
+                    break;
+
+                case "DISCORD_SCREENSHOT":
+                    if (_discord is not null)
+                    {
+                        byte[]? shot = CapturePrimaryScreenJpeg(maxWidth: 1600, jpegQuality: 84);
+                        if (shot is { Length: > 0 })
+                        {
+                            var st = _fileWatcher.State;
+                            string caption = string.IsNullOrWhiteSpace(param) || param.Equals("now", StringComparison.OrdinalIgnoreCase)
+                                ? ""
+                                : $"{param}\n\n";
+                            string loc = !string.IsNullOrWhiteSpace(st.BodyName) ? $"{st.CurrentSystem} · {st.BodyName}" : st.CurrentSystem;
+                            string desc = $"{caption}**System:** `{loc}` | **Ship:** {st.ShipType} ({st.ShipName}) | **CMDR:** {st.CommanderName}";
+                            var (ssOk, ssMsg) = await _discord.SendWebhookWithImageAsync($"📸 {st.CommanderName} — Cockpit Capture", desc, shot);
+                            actionLogs.Add(ssOk ? $"📸 {ssMsg}" : $"⚠ {ssMsg}");
+                        }
+                        else
+                        {
+                            actionLogs.Add("⚠ No se pudo capturar la pantalla para Discord.");
+                        }
+                    }
+                    break;
+
+                case "DISCORD_CARRIER":
+                    if (_discord is not null)
+                    {
+                        var st = _fileWatcher.State;
+                        if (st.Carrier is { } fc)
+                        {
+                            string depLine = fc.DepartureTime.HasValue
+                                ? $"\n**Next Jump:** `{fc.Destination}` (<t:{fc.DepartureTime.Value.ToUnixTimeSeconds()}:R>)"
+                                : "";
+                            string svcs = st.CarrierServices.Count > 0 ? $"\n**Services:** {string.Join(", ", st.CarrierServices)}" : "";
+                            string body = $"**System:** `{fc.System}` | **Tritium:** {fc.Fuel?.ToString() ?? "?"} t\n**Free Space:** {fc.FreeSpace?.ToString("N0") ?? "?"}/{fc.Capacity?.ToString("N0") ?? "?"} t | **Balance:** {fc.Balance?.ToString("N0") ?? "?"} CR{depLine}{svcs}";
+                            var (dcOk, dcMsg) = await _discord.SendWebhookAsync($"🚢 {fc.Name} [{fc.Callsign}] — Carrier Status", body, 0xFF7100);
+                            actionLogs.Add(dcOk ? $"📨 {dcMsg}" : $"⚠ {dcMsg}");
+                        }
+                        else
+                        {
+                            actionLogs.Add("⚠ Sin datos de Fleet Carrier para publicar en Discord.");
+                        }
+                    }
+                    break;
+
+                case "DISCORD_BUILD":
+                    if (_discord is not null)
+                    {
+                        var st = _fileWatcher.State;
+                        string links = !string.IsNullOrWhiteSpace(st.LastLoadoutJson)
+                            ? $"\n🔗 **[Open in EDSY]({ShipLoadoutExportService.BuildEdsyUrl(st.LastLoadoutJson)})** · **[Open in Coriolis]({ShipLoadoutExportService.BuildCoriolisUrl(st.LastLoadoutJson)})**"
+                            : "";
+                        string body = $"**Ship:** {st.ShipType} ({st.ShipName} / {st.ShipIdent})\n**Hull:** {st.HullHealth:0}% | **Fuel:** {st.FuelMax:0.1} t | **Cargo:** {st.CargoCapacity} t{links}";
+                        var (dbOk, dbMsg) = await _discord.SendWebhookAsync($"🛠 {st.CommanderName} — Ship Loadout", body, 0x9B59B6);
+                        actionLogs.Add(dbOk ? $"📨 {dbMsg}" : $"⚠ {dbMsg}");
+                    }
+                    break;
+
+                case "ALERTS_CLEAR":
+                    if (_alertService is not null)
+                    {
+                        int cleared = _alertService.DismissAllActiveAlerts();
+                        _speechService.StopSpeaking();
+                        actionLogs.Add($"🔕 Alertas activas limpiadas ({cleared}).");
+                    }
+                    break;
+
+                case "HUD_MODE":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        UiNavigationRequested?.Invoke(param.Trim().ToLowerInvariant());
+                        actionLogs.Add($"🖥 Modo HUD: {param.Trim()}");
+                    }
+                    break;
+
+                case "BGS_WATCH_ADD":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        var list = EliteBgsWatchlistService.ParseWatchedFactionNames(cfg.EliteBgsWatchedFactions);
+                        if (!list.Contains(param.Trim(), StringComparer.OrdinalIgnoreCase))
+                        {
+                            list.Add(param.Trim());
+                            cfg.EliteBgsWatchedFactions = string.Join(", ", list);
+                            cfg.EnableEliteBgsWatchlist = true;
+                            _configService.Save();
+                        }
+                        if (_eliteBgsWatchlist is not null)
+                            await _eliteBgsWatchlist.RefreshAsync();
+                        actionLogs.Add($"🏛 Facción añadida a EliteBGS Watchlist: {param.Trim()}");
+                    }
+                    break;
+
+                case "BGS_WATCH_REMOVE":
+                    if (!string.IsNullOrWhiteSpace(param))
+                    {
+                        var list = EliteBgsWatchlistService.ParseWatchedFactionNames(cfg.EliteBgsWatchedFactions);
+                        int removed = list.RemoveAll(f => f.Contains(param.Trim(), StringComparison.OrdinalIgnoreCase));
+                        if (removed > 0)
+                        {
+                            cfg.EliteBgsWatchedFactions = string.Join(", ", list);
+                            _configService.Save();
+                            if (_eliteBgsWatchlist is not null)
+                                await _eliteBgsWatchlist.RefreshAsync();
+                            actionLogs.Add($"🏛 Eliminada de EliteBGS Watchlist ({removed}): {param.Trim()}");
+                        }
+                    }
+                    break;
+
+                case "INARA_OPEN":
+                    {
+                        string[] iParts = param.Split('|', 2, StringSplitOptions.TrimEntries);
+                        string iKind = iParts.Length >= 1 ? iParts[0] : "system";
+                        string iTarget = iParts.Length == 2 && !string.IsNullOrWhiteSpace(iParts[1])
+                            ? iParts[1]
+                            : _fileWatcher.State.CurrentSystem;
+                        if (!string.IsNullOrWhiteSpace(iTarget))
+                        {
+                            string url = CommunitySyncService.BuildInaraDeepLink(iKind, iTarget);
+                            try
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true });
+                                actionLogs.Add($"🌐 Inara abierto ({iKind}): {iTarget}");
+                            }
+                            catch (Exception ex)
+                            {
+                                actionLogs.Add($"⚠ No se pudo abrir Inara: {ex.Message}");
+                            }
+                        }
+                        break;
+                    }
+
+                case "CAPI_SYNC":
+                    if (_frontierCapi is not null)
+                    {
+                        var (cOk, cMsg) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
+                        actionLogs.Add(cOk ? $"🔄 {cMsg}" : $"⚠ {cMsg}");
+                    }
+                    break;
+
+                case "CAPI_JOURNAL":
+                    if (_frontierCapi is not null)
+                    {
+                        var (jOk, _, jMsg) = await _frontierCapi.FetchJournalHistoryAsync();
+                        actionLogs.Add(jOk ? $"📜 {jMsg}" : $"⚠ {jMsg}");
+                    }
+                    break;
+
+                case "BGS_REFRESH":
+                    if (_eliteBgsWatchlist is not null)
+                    {
+                        var (bOk, _, bMsg) = await _eliteBgsWatchlist.RefreshAsync();
+                        actionLogs.Add(bOk ? $"🏛 {bMsg}" : $"⚠ {bMsg}");
+                    }
+                    break;
+
+                case "DSSA_FIND":
+                    if (_edastroCanonn is not null)
+                    {
+                        var (dsOk, carriers, dsMsg) = await _edastroCanonn.GetNearestDssaCarriersAsync();
+                        if (dsOk && carriers.Count > 0)
+                        {
+                            var top = carriers[0];
+                            CopySystemRequested?.Invoke(top.SystemName);
+                            actionLogs.Add($"🛰 DSSA más cercano: {top.Callsign} {top.Name} en {top.SystemName} ({top.DistanceDisplay})");
+                        }
+                        else
+                        {
+                            actionLogs.Add($"⚠ {dsMsg}");
+                        }
+                    }
+                    break;
+
+                case "ARDENT_SEARCH":
+                    if (_ardentMarket is not null)
+                    {
+                        string[] aParts = param.Split('|', 2, StringSplitOptions.TrimEntries);
+                        string comm = aParts.Length > 0 ? aParts[0] : "";
+                        string mode = aParts.Length > 1 && aParts[1].Equals("buy", StringComparison.OrdinalIgnoreCase) ? "buy" : "sell";
+                        var (aOk, offers, aMsg) = await _ardentMarket.SearchCommodityAsync(comm, mode);
+                        if (aOk && offers.Count > 0)
+                        {
+                            var best = offers[0];
+                            actionLogs.Add($"💰 Ardent ({mode}): {best.StationName} en {best.SystemName} — {best.PriceDisplay} ({best.DistanceDisplay}, Pad {best.MaxLandingPad})");
+                        }
+                        else
+                        {
+                            actionLogs.Add($"⚠ {aMsg}");
+                        }
+                    }
+                    break;
+
+                case "GALAXY_REFRESH":
+                    {
+                        var snap = await _galaxyStatus.RefreshAsync();
+                        actionLogs.Add($"🌌 Servidor: {snap.ServerMessage} | BGS Tick: {(snap.LastBgsTickUtc?.ToString("yyyy-MM-dd HH:mm") ?? "?")}Z");
+                        break;
+                    }
+
+                case "TOGGLE_INTEGRATION":
+                    {
+                        string[] tgParts = param.Split('|', 2, StringSplitOptions.TrimEntries);
+                        if (tgParts.Length == 2)
+                        {
+                            string api = tgParts[0].ToLowerInvariant();
+                            bool enable = tgParts[1].Equals("on", StringComparison.OrdinalIgnoreCase) || tgParts[1].Equals("true", StringComparison.OrdinalIgnoreCase);
+                            string toggleMsg = ApplyIntegrationToggle(cfg, api, enable);
+                            actionLogs.Add(toggleMsg);
+                        }
+                        break;
+                    }
             }
         }
 
@@ -333,10 +683,21 @@ public sealed partial class AiCopilotService
             foreach (string alias in aliases)
             {
                 string normAlias = NormalizeVoiceMatchText(alias, null);
-                if (!string.IsNullOrWhiteSpace(normAlias) &&
-                    (normalizedInput.Equals(normAlias, StringComparison.Ordinal) ||
-                     normalizedInput.StartsWith(normAlias + " ", StringComparison.Ordinal) ||
-                     normalizedInput.EndsWith(" " + normAlias, StringComparison.Ordinal)))
+                if (string.IsNullOrWhiteSpace(normAlias))
+                    continue;
+
+                if (normalizedInput.Equals(normAlias, StringComparison.Ordinal) ||
+                    normalizedInput.StartsWith(normAlias + " ", StringComparison.Ordinal) ||
+                    normalizedInput.EndsWith(" " + normAlias, StringComparison.Ordinal))
+                {
+                    match = macro;
+                    break;
+                }
+
+                // Fuzzy tolerance for minor STT phonetic/spelling slips (Levenshtein distance)
+                int maxDist = normAlias.Length >= 10 ? 2 : (normAlias.Length >= 5 ? 1 : 0);
+                if (maxDist > 0 && Math.Abs(normalizedInput.Length - normAlias.Length) <= maxDist &&
+                    ComputeLevenshteinDistance(normalizedInput, normAlias) <= maxDist)
                 {
                     match = macro;
                     break;
@@ -399,7 +760,112 @@ public sealed partial class AiCopilotService
             else
                 sb.Append(' ');
         }
-        return Regex.Replace(sb.ToString(), @"\s{2,}", " ").Trim();
+        string cleaned = MultiWhitespaceRegex().Replace(sb.ToString(), " ").Trim();
+        // Strip common leading conversational fillers so voice macros & instant queries match reliably
+        string[] leadingFillers = ["por favor ", "oye ", "eh ", "please ", "hey ", "ok ", "okay ", "bitte ", "dis ", "ei "];
+        bool stripped;
+        do
+        {
+            stripped = false;
+            foreach (string filler in leadingFillers)
+            {
+                if (cleaned.StartsWith(filler, StringComparison.Ordinal))
+                {
+                    cleaned = cleaned[filler.Length..].TrimStart();
+                    stripped = true;
+                }
+            }
+        } while (stripped);
+        return cleaned;
+    }
+
+    internal static int ComputeLevenshteinDistance(string a, string b)
+    {
+        if (string.IsNullOrEmpty(a)) return b?.Length ?? 0;
+        if (string.IsNullOrEmpty(b)) return a.Length;
+
+        int n = a.Length, m = b.Length;
+        int[] prev = new int[m + 1];
+        int[] curr = new int[m + 1];
+        for (int j = 0; j <= m; j++) prev[j] = j;
+
+        for (int i = 1; i <= n; i++)
+        {
+            curr[0] = i;
+            for (int j = 1; j <= m; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                curr[j] = Math.Min(Math.Min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            (prev, curr) = (curr, prev);
+        }
+        return prev[m];
+    }
+
+    /// <summary>
+    /// Answers ultra-frequent single-stat cockpit voice queries in 0 ms / 0 LLM tokens.
+    /// </summary>
+    private (bool Matched, string Reply) TryAnswerInstantTelemetryQuery(AppConfig cfg, string rawPrompt)
+    {
+        string norm = NormalizeVoiceMatchText(rawPrompt, cfg.AiWakeWord);
+        if (string.IsNullOrWhiteSpace(norm))
+            return (false, "");
+
+        int wordCount = norm.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        if (wordCount > 6)
+            return (false, "");
+
+        var s = _fileWatcher.State;
+        bool isEs = string.Equals(cfg.InterfaceLanguage, "es-ES", StringComparison.OrdinalIgnoreCase);
+
+        if (norm is "combustible" or "nivel de combustible" or "cuanto combustible" or "cuanto combustible tengo"
+            or "fuel" or "fuel level" or "how much fuel" or "how much fuel left")
+        {
+            if (s.FuelMax <= 0) return (false, "");
+            double pct = Math.Clamp((s.FuelMain / s.FuelMax) * 100.0, 0, 100);
+            string msg = isEs
+                ? $"Combustible al {pct:0} por ciento, {s.FuelMain:0.1} de {s.FuelMax:0.1} toneladas."
+                : $"Fuel is at {pct:0} percent, {s.FuelMain:0.1} of {s.FuelMax:0.1} tons.";
+            return (true, msg);
+        }
+
+        if (norm is "casco" or "estado del casco" or "como esta el casco" or "integridad del casco"
+            or "hull" or "hull status" or "hull integrity")
+        {
+            string shields = s.ShieldsUp ? (isEs ? "escudos activos" : "shields online") : (isEs ? "escudos caídos" : "shields offline");
+            string msg = isEs
+                ? $"Casco al {s.HullHealth:0} por ciento, {shields}."
+                : $"Hull integrity at {s.HullHealth:0} percent, {shields}.";
+            return (true, msg);
+        }
+
+        if (norm is "plataforma" or "que plataforma" or "que plataforma tengo" or "donde aterrizo"
+            or "landing pad" or "which landing pad" or "where do i land")
+        {
+            if (s.AssignedLandingPad is int pad && pad > 0)
+            {
+                var padInfo = LandingPadLocatorService.Resolve(pad, s.AssignedLandingStationType);
+                return (true, padInfo.FormatGuidance(cfg.InterfaceLanguage));
+            }
+            return (true, isEs ? "No hay plataforma de aterrizaje asignada." : "No landing pad currently assigned.");
+        }
+
+        if (norm is "saltos" or "cuantos saltos" or "cuantos saltos quedan" or "saltos restantes"
+            or "jumps" or "jumps left" or "jumps remaining" or "how many jumps left")
+        {
+            int rem = Math.Max(0, s.NavRoute.Count - 1);
+            if (rem == 0)
+                return (true, isEs ? "No hay ruta de navegación activa." : "No active navigation route.");
+            string fuelNote = s.RouteHasNoFuelStar
+                ? (isEs ? " Atención: sin estrellas repostables en la ruta." : " Warning: no scoopable stars on route.")
+                : "";
+            string msg = isEs
+                ? $"Quedan {rem} saltos en la ruta.{fuelNote}"
+                : $"{rem} jumps remaining on route.{fuelNote}";
+            return (true, msg);
+        }
+
+        return (false, "");
     }
 
     /// <summary>
@@ -413,13 +879,13 @@ public sealed partial class AiCopilotService
         string firstReply,
         SentenceStreamSpeaker? streamSpeaker = null)
     {
-        var matches = Regex.Matches(firstReply, @"\[\[QUERY[:|]\s*([A-Z_]+)(?:\s*[:|]\s*([^\]]*))?\]\]", RegexOptions.IgnoreCase)
+        var matches = QueryCaptureRegex().Matches(firstReply)
             .Cast<Match>()
             .Take(3)
             .ToList();
 
         if (matches.Count == 0)
-            return Regex.Replace(firstReply, @"\[\[QUERY[:|][^\]]*\]\]", "", RegexOptions.IgnoreCase).Trim();
+            return QueryTagRegex().Replace(firstReply, "").Trim();
 
         var tasks = matches.Select(m => ExecuteQueryAsync(
             m.Groups[1].Value.Trim().ToUpperInvariant(),
@@ -443,14 +909,32 @@ public sealed partial class AiCopilotService
         if (!ok || string.IsNullOrWhiteSpace(secondReply))
             return string.Join("\n", results);
 
-        return Regex.Replace(secondReply, @"\[\[QUERY[:|][^\]]*\]\]", "", RegexOptions.IgnoreCase).Trim();
+        return QueryTagRegex().Replace(secondReply, "").Trim();
     }
+
+    private static readonly FrozenSet<string> CacheableRemoteQueries = new[]
+    {
+        "SYSTEM", "EDSM_TRAFFIC", "EDSM_DISTANCE", "EDSM_DISCOVERY", "EDSM_STATIONS", "EDSM_NEARBY",
+        "SPANSH", "SPANSH_BODIES", "SPANSH_CARRIERS", "SPANSH_TRADE", "SPANSH_MINING",
+        "ARDENT", "CARGO_BEST_SELL", "DSSA", "BGS", "INARA", "COMMUNITY_GOALS"
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private async Task<string> ExecuteQueryAsync(string kind, string param)
     {
+        bool isRemote = CacheableRemoteQueries.Contains(kind);
+        string cacheKey = $"{kind}|{param.Trim()}|{_fileWatcher.State.CurrentSystem}";
+        if (isRemote)
+        {
+            lock (_queryCache)
+            {
+                if (_queryCache.TryGetValue(cacheKey, out var cached) && cached.ExpiresUtc > DateTimeOffset.UtcNow)
+                    return cached.Result;
+            }
+        }
+
         try
         {
-            return kind switch
+            string result = kind switch
             {
                 "MATERIAL" => QueryMaterialInventory(param),
                 "EXPLORATION" => QueryExplorationReport(param),
@@ -458,17 +942,631 @@ public sealed partial class AiCopilotService
                 "REPORT" => QueryOperationalReport(param),
                 "PROFILE" => QueryProfileReport(param),
                 "FLEET" => QueryFleetReport(param),
+                "CARGO_PROFIT" => QueryCargoProfitReport(),
+                "WISHLIST" => QueryWishlistReport(),
+                "SURFACE" => QuerySurfaceReport(),
+                "PASSENGERS" => QueryPassengersReport(),
+                "SERVER" => QueryServerAndIntegrationsStatus(),
+                "ALERTS" => QueryActiveAlertsReport(),
+                "LANDING_PAD" => QueryLandingPadReport(),
+                "FUEL_EMERGENCY" => await QueryFuelEmergencyAsync(),
+                "EXPEDITION" => await QueryExpeditionSummaryAsync(),
+                "WEB_HUD" => QueryWebHudStatus(),
+                "COMMUNITY_GOALS" => await QueryCommunityGoalsAsync(),
+                "SPANSH_SYSTEM" => QuerySpanshSystemDump(),
                 "SYSTEM" => await QueryEdsmSystemAsync(param),
+                "EDSM_TRAFFIC" => await QueryEdsmTrafficAsync(param),
+                "EDSM_DISTANCE" => await QueryEdsmDistanceAsync(param),
+                "EDSM_DISCOVERY" => await QueryEdsmDiscoveryAsync(param),
+                "EDSM_STATIONS" => await QueryEdsmStationsAsync(param),
+                "EDSM_NEARBY" => await QueryEdsmNearbySystemsAsync(param),
                 "SPANSH" => await QuerySpanshNearestAsync(param),
+                "SPANSH_BODIES" => await QuerySpanshBodiesAsync(param),
+                "SPANSH_CARRIERS" => await QuerySpanshCarriersAsync(param),
+                "SPANSH_TRADE" => await QuerySpanshTradeLiveAsync(),
+                "SPANSH_MINING" => await QuerySpanshMiningLiveAsync(param),
+                "ARDENT" => await QueryArdentMarketAsync(param),
+                "CARGO_BEST_SELL" => await QueryCargoBestSellArdentAsync(),
+                "DSSA" => await QueryDssaNearestAsync(),
+                "BGS" => await QueryEliteBgsWatchlistAsync(),
+                "INARA" => await QueryInaraReadAsync(param),
                 "LOGBOOK" => await ExpeditionAnalyticsService.QueryLogbookAsync(_configService.Current.JournalFolderPath, param),
+                "CAPI_JOURNAL" => await QueryCapiJournalHistoryAsync(param),
                 "STATION" => await QueryStationSnapshotAsync(param),
+                "SYNTHESIS" => QuerySynthesisReadiness(),
+                "ODYSSEY_GEAR" => QueryOdysseyGearReport(),
+                "EXOBIO_VALUE" => QueryExobioAndCartoValueReport(),
+                "RECENT_EVENTS" => QueryRecentEventsReport(param),
                 _ => $"Consulta no soportada: {kind}"
             };
+
+            if (isRemote && !string.IsNullOrWhiteSpace(result) && !result.StartsWith("Error", StringComparison.OrdinalIgnoreCase))
+            {
+                lock (_queryCache)
+                {
+                    if (_queryCache.Count > 40)
+                        _queryCache.Clear();
+                    _queryCache[cacheKey] = (DateTimeOffset.UtcNow.AddSeconds(60), result);
+                }
+                _lastExternalQuerySummary = $"{kind}({param}): {Truncate(result, 420)}";
+                _lastExternalQueryUtc = DateTimeOffset.UtcNow;
+            }
+
+            return result;
         }
         catch (Exception ex)
         {
             return $"Error en consulta {kind}: {ex.Message}";
         }
+    }
+
+    private string QuerySynthesisReadiness() =>
+        BuildSynthesisReadinessReport(_fileWatcher.State.MaterialsInventory);
+
+    internal static string BuildSynthesisReadinessReport(IReadOnlyList<MaterialItem> inventory)
+    {
+        if (inventory is null || inventory.Count == 0)
+            return "Inventario de materiales vacío o aún no cargado.";
+
+        int CountOf(string name) => inventory
+            .Where(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(m.DisplayName, name, StringComparison.OrdinalIgnoreCase))
+            .Sum(static m => m.Count);
+
+        int Craftable(params (string Mat, int Req)[] reqs) =>
+            reqs.Min(r => CountOf(r.Mat) / r.Req);
+
+        int fsdBasic = Craftable(("vanadium", 2), ("germanium", 1));
+        int fsdStd = Craftable(("vanadium", 1), ("germanium", 1), ("cadmium", 2), ("niobium", 1));
+        int fsdPrem = Craftable(("carbon", 1), ("germanium", 1), ("arsenic", 1), ("niobium", 3), ("yttrium", 1), ("polonium", 1));
+        int lifeSupport = Craftable(("iron", 2), ("nickel", 1));
+        int afmuBasic = Craftable(("nickel", 2), ("zinc", 2), ("chromium", 2), ("vanadium", 3));
+        int srvRefuel = Craftable(("sulphur", 1), ("phosphorus", 1));
+        int srvRepair = Craftable(("iron", 2), ("nickel", 1));
+        int limpets = Craftable(("iron", 10), ("nickel", 10));
+
+        return $"Síntesis disponibles — Inyección FSD: Básica ×{fsdBasic}, Estándar ×{fsdStd}, Premium ×{fsdPrem} | Soporte vital O2: ×{lifeSupport} | Recarga AFMU básica: ×{afmuBasic} | SRV combustible: ×{srvRefuel}, reparación: ×{srvRepair} | Drones (×4): ×{limpets}.";
+    }
+
+    private async Task<string> QueryCapiJournalHistoryAsync(string dateParam)
+    {
+        if (_frontierCapi is null || !_configService.Current.EnableFrontierCapi || !_frontierCapi.IsConnected)
+            return "Frontier cAPI no está conectado o activado en Ajustes -> Integraciones.";
+
+        DateTime? targetDate = null;
+        if (!string.IsNullOrWhiteSpace(dateParam) &&
+            !dateParam.Equals("today", StringComparison.OrdinalIgnoreCase) &&
+            DateTime.TryParseExact(dateParam.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+        {
+            targetDate = parsed.Date;
+        }
+
+        var (_, _, msg) = await _frontierCapi.FetchJournalHistoryAsync(targetDate);
+        return msg;
+    }
+
+    private string QueryOdysseyGearReport()
+    {
+        var s = _fileWatcher.State;
+        var bp = s.BackpackInventory ?? new List<BackpackItem>();
+        string suitInfo = !string.IsNullOrWhiteSpace(s.ActiveSuit)
+            ? $"Traje: {s.ActiveSuit}{(string.IsNullOrWhiteSpace(s.ActiveSuitLoadout) ? "" : $" ({s.ActiveSuitLoadout})")} | "
+            : "";
+        string topItems = bp.Count > 0
+            ? string.Join(", ", bp.OrderByDescending(static i => i.Count).Take(8).Select(static i => $"{i.DisplayName} ×{i.Count}"))
+            : "Mochila vacía";
+        return $"Odyssey a pie: {suitInfo}{s.OnFootStatusDisplay} | Salud: {s.HealthDisplay} | Oxígeno: {s.OxygenDisplay} | Mochila ({bp.Sum(static i => i.Count)} ítems): {topItems}.";
+    }
+
+    private string QueryExobioAndCartoValueReport()
+    {
+        var s = _fileWatcher.State;
+        long totalRisk = s.UnsoldCartographyCredits + s.UnsoldExobiologyCredits;
+        string exoActive = s.ExobiologyTracker is { } exo
+            ? $" Muestra activa: {exo.Species} en {exo.BodyName} ({exo.SamplesCollected}/3, {exo.CurrentDistanceMeters:0}/{exo.RequiredDistanceMeters} m)."
+            : "";
+        var topBodies = s.ExplorationBodies
+            .Where(static b => (b.EstimatedCredits ?? 0) >= 250_000 || b.BiologicalSignalCount > 0)
+            .OrderByDescending(static b => b.EstimatedCredits ?? 0)
+            .Take(4)
+            .Select(static b => $"{b.BodyName} ({b.BodyType}, {(b.EstimatedCredits ?? 0):N0} CR{(b.BiologicalSignalCount > 0 ? $", {b.BiologicalSignalCount} bio" : "")})");
+        string bodiesStr = topBodies.Any() ? $" Cuerpos destacados en sistema: {string.Join(" | ", topBodies)}." : "";
+        return $"Datos sin vender en riesgo: {totalRisk:N0} CR total (Cartografía: {s.UnsoldCartographyCredits:N0} CR, Exobiología: {s.UnsoldExobiologyCredits:N0} CR).{exoActive}{bodiesStr}";
+    }
+
+    private string QueryRecentEventsReport(string filter)
+    {
+        var events = _fileWatcher.State.RecentEvents ?? new List<JournalEntryItem>();
+        if (events.Count == 0)
+            return "No hay eventos recientes registrados en el diario.";
+
+        IEnumerable<JournalEntryItem> seq = events;
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            string f = filter.Trim();
+            seq = seq.Where(e =>
+                e.EventType.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                e.Summary.Contains(f, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var list = seq.Take(8).Select(static e => $"[{e.Timestamp}] {e.EventType}: {e.Summary}").ToList();
+        return list.Count > 0
+            ? $"Últimos eventos del diario: {string.Join(" | ", list)}"
+            : $"No hay eventos recientes que coincidan con '{filter}'.";
+    }
+
+    private async Task<string> QueryEdsmDiscoveryAsync(string systemName)
+    {
+        if (!_configService.Current.EnableEdsmSync)
+            return "EDSM integration is disabled in Settings -> Integrations.";
+        string sys = string.IsNullOrWhiteSpace(systemName) ? _fileWatcher.State.CurrentSystem : systemName.Trim();
+        var intel = await _communitySync.FetchEdsmDiscoveryAndFactionsAsync(sys);
+        if (intel is null)
+            return $"Could not retrieve EDSM discovery intel for {sys}.";
+        string factions = intel.Factions.Count > 0
+            ? $" Factions: {string.Join(", ", intel.Factions.Take(3).Select(static f => $"{f.Name} {f.InfluenceDisplay} ({f.FactionState})"))}."
+            : "";
+        return $"{intel.SystemName}: {intel.DiscoveryBadge}.{factions}";
+    }
+
+    private async Task<string> QuerySpanshBodiesAsync(string materialQuery)
+    {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return "Spansh integration is disabled in Settings -> Integrations.";
+        var st = _fileWatcher.State;
+        var (ok, results, msg) = await _spanshService.SearchBodiesAsync(materialQuery, st.CurrentSystem, st.StarPos);
+        if (!ok || results.Count == 0)
+            return msg;
+        return string.Join(" | ", results.Take(5).Select(static b => $"{b.BodyName} ({b.SystemName}, {b.DistanceDisplay}, {b.GravityDisplay}: {b.MaterialsSummary})"));
+    }
+
+    private async Task<string> QuerySpanshCarriersAsync(string service)
+    {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return "Spansh integration is disabled in Settings -> Integrations.";
+        var st = _fileWatcher.State;
+        var (ok, results, msg) = await _spanshService.SearchFleetCarriersAsync(service, st.CurrentSystem, st.StarPos);
+        if (!ok || results.Count == 0)
+            return msg;
+        return string.Join(" | ", results.Take(5).Select(static c => $"{c.Callsign} in {c.SystemName} ({c.DistanceDisplay})"));
+    }
+
+    private async Task<string> QueryArdentMarketAsync(string param)
+    {
+        if (_ardentMarket is null || !_configService.Current.EnableArdentMarketApi)
+            return "Ardent Insight Market API is disabled in Settings -> Integrations.";
+        string[] parts = param.Split('|', 3, StringSplitOptions.TrimEntries);
+        string commodity = parts.Length > 0 ? parts[0] : "";
+        string mode = parts.Length > 1 && parts[1].Equals("buy", StringComparison.OrdinalIgnoreCase) ? "buy" : "sell";
+        bool includeCarriers = parts.Length > 2 && (parts[2].Contains("carrier", StringComparison.OrdinalIgnoreCase) || parts[2].Equals("true", StringComparison.OrdinalIgnoreCase));
+        var (ok, offers, msg) = await _ardentMarket.SearchCommodityAsync(commodity, mode, includeCarriers: includeCarriers);
+        if (!ok || offers.Count == 0)
+            return msg;
+        return string.Join(" | ", offers.Take(5).Select(static o => $"{o.StationName} ({o.SystemName}, {o.DistanceDisplay}, Pad {o.MaxLandingPad}): {o.PriceDisplay} x{o.QuantityDisplay}"));
+    }
+
+    private async Task<string> QueryDssaNearestAsync()
+    {
+        if (_edastroCanonn is null || !_configService.Current.EnableEdastroDssa)
+            return "EDAstro DSSA integration is disabled in Settings -> Integrations.";
+        var (ok, carriers, msg) = await _edastroCanonn.GetNearestDssaCarriersAsync();
+        if (!ok || carriers.Count == 0)
+            return msg;
+        return string.Join(" | ", carriers.Take(5).Select(static c => $"{c.Callsign} {c.Name} in {c.SystemName} ({c.DistanceDisplay}, {c.Region})"));
+    }
+
+    private async Task<string> QueryEliteBgsWatchlistAsync()
+    {
+        if (_eliteBgsWatchlist is null || !_configService.Current.EnableEliteBgsWatchlist)
+            return "EliteBGS Watchlist is disabled in Settings -> Integrations.";
+        var (ok, items, msg) = await _eliteBgsWatchlist.RefreshAsync();
+        if (!ok || items.Count == 0)
+            return msg;
+        return string.Join(" | ", items.Take(8).Select(static f => $"{f.FactionName} @ {f.SystemName}: {f.InfluenceDisplay} ({f.State}{(f.HasConflict ? " CONFLICT!" : "")})"));
+    }
+
+    private async Task<string> QueryInaraReadAsync(string param)
+    {
+        if (!_configService.Current.EnableInaraSync)
+            return "Inara integration is disabled in Settings -> Integrations.";
+        if (param.Equals("cgs", StringComparison.OrdinalIgnoreCase))
+        {
+            var (ok, goals, msg) = await _communitySync.FetchInaraCommunityGoalsAsync();
+            if (!ok || goals.Count == 0)
+                return msg;
+            return string.Join(" | ", goals.Take(4).Select(static g => $"{g.Title} @ {g.StarSystem} ({g.StationName})"));
+        }
+        var (pOk, profile, pMsg) = await _communitySync.FetchInaraCommanderProfileAsync(string.IsNullOrWhiteSpace(param) ? null : param);
+        if (!pOk || profile is null)
+            return pMsg;
+        return $"CMDR {profile.CommanderName}, Squadron: {profile.SquadronName} ({profile.SquadronRank}), Allegiance: {profile.PreferredAllegiance}.";
+    }
+
+    private string ApplyIntegrationToggle(AppConfig cfg, string api, bool enable)
+    {
+        switch (api)
+        {
+            case "frontier":
+            case "capi": cfg.EnableFrontierCapi = enable; break;
+            case "eddn": cfg.EnableEddnUpload = enable; break;
+            case "edsm": cfg.EnableEdsmSync = enable; break;
+            case "inara": cfg.EnableInaraSync = enable; break;
+            case "spansh": cfg.EnableSpanshSystemData = enable; break;
+            case "bgs":
+            case "elitebgs": cfg.EnableEliteBgsWatchlist = enable; break;
+            case "ardent": cfg.EnableArdentMarketApi = enable; break;
+            case "dssa":
+            case "edastro": cfg.EnableEdastroDssa = enable; break;
+            case "canonn": cfg.EnableCanonnUpload = enable; break;
+            case "discord":
+                cfg.EnableDiscord = enable;
+                if (enable) _ = _discord?.RefreshPresenceAsync();
+                else _discord?.DisconnectIpc();
+                break;
+            default:
+                return $"⚠ Integración desconocida: {api}";
+        }
+        _configService.Save();
+        return $"⚙ Integración '{api}' {(enable ? "activada" : "desactivada")}.";
+    }
+
+    internal string QueryCargoProfitReport()
+    {
+        var s = _fileWatcher.State;
+        if (s.CargoInventory.Count == 0)
+            return "Tu bodega de carga está vacía.";
+
+        var notes = new List<string>();
+        var marketItems = s.Market?.Items ?? new List<MarketCommodityItem>();
+        if (marketItems.Count > 0)
+        {
+            long totalSell = 0, totalProfit = 0;
+            foreach (var c in s.CargoInventory)
+            {
+                var m = marketItems.FirstOrDefault(x =>
+                    string.Equals(x.DisplayName, c.Name, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(x.Name, c.Name, StringComparison.OrdinalIgnoreCase));
+                if (m is not null && m.SellPrice > 0)
+                {
+                    totalSell += m.SellPrice * c.Count;
+                    if (m.MeanPrice > 0 && m.SellPrice > m.MeanPrice)
+                        totalProfit += (m.SellPrice - m.MeanPrice) * c.Count;
+                }
+            }
+            if (totalSell > 0)
+                notes.Add($"Valor de venta en {s.StationName}: {totalSell:N0} CR (beneficio est. sobre media: +{totalProfit:N0} CR)");
+        }
+        else
+        {
+            notes.Add("Sin mercado atracado para valorar venta local.");
+        }
+
+        if (s.Colonisation.Resources.Count > 0)
+        {
+            var matches = s.CargoInventory
+                .Where(c => s.Colonisation.Resources.Any(r => r.RequiredAmount > r.ProvidedAmount &&
+                    string.Equals(r.DisplayName, c.Name, StringComparison.OrdinalIgnoreCase)))
+                .Select(static c => $"{c.Name} ({c.Count} t)")
+                .ToList();
+            if (matches.Count > 0)
+                notes.Add($"Útil para colonización activa: {string.Join(", ", matches)}");
+        }
+
+        return $"Bodega ({s.CargoUsed}/{s.CargoCapacity} t): {string.Join(" | ", notes)}";
+    }
+
+    internal string QueryWishlistReport()
+    {
+        var cfg = _configService.Current;
+        if (cfg.EngineeringWishlistBlueprints is not { Count: > 0 })
+            return "No tienes planos añadidos a tu lista de deseos (Engineering Wishlist).";
+
+        var rows = EngineeringWishlistService.Evaluate(cfg.EngineeringWishlistBlueprints, _fileWatcher.State);
+        var missing = rows.Where(static r => r.Missing > 0).OrderByDescending(static r => r.Missing).Take(10)
+            .Select(static r => $"{r.MaterialName} ({r.Category}): faltan {r.Missing} (tienes {r.Owned}/{r.Required})").ToList();
+        return missing.Count == 0
+            ? $"Wishlist ({cfg.EngineeringWishlistBlueprints.Count} planos): ¡Tienes todos los materiales necesarios!"
+            : $"Wishlist ({cfg.EngineeringWishlistBlueprints.Count} planos) — Materiales faltantes: {string.Join(" | ", missing)}";
+    }
+
+    internal string QuerySurfaceReport()
+    {
+        var s = _fileWatcher.State;
+        var parts = new List<string>();
+        if (s.HasLatLong)
+            parts.Add($"Posición en {s.BodyName}: LAT {s.Latitude:0.000}, LON {s.Longitude:0.000}, ALT {s.Altitude:0} m, Rumbo {s.Heading:0}°, Gravedad {s.GravityDisplay}");
+        else
+            parts.Add("Sin telemetría activa de superficie.");
+
+        if (s.ExobiologyTracker is { } exo)
+            parts.Add($"Exobiología activa: {exo.Species} ({exo.SamplesCollected}/3 muestras, distancia {exo.CurrentDistanceMeters:0}/{exo.RequiredDistanceMeters} m)");
+
+        var bms = _configService.Current.SurfaceBookmarks ?? new List<SurfaceBookmarkItem>();
+        if (bms.Count > 0)
+            parts.Add($"Marcadores ({bms.Count}): {string.Join(", ", bms.Take(5).Select(static b => $"{b.Label}@{b.BodyName}"))}");
+
+        return string.Join(" | ", parts);
+    }
+
+    internal string QueryPassengersReport()
+    {
+        var s = _fileWatcher.State;
+        if (s.PassengerManifest.Count == 0)
+            return "No llevas pasajeros a bordo actualmente.";
+        return $"Pasajeros ({s.PassengerManifest.Count} grupos): {string.Join(" | ", s.PassengerManifest.Take(8).Select(static p => $"{p.Type} x{p.Count}{(p.Vip ? " VIP" : "")}{(p.Wanted ? " BUSCADO" : "")}"))}";
+    }
+
+    internal string QueryServerAndIntegrationsStatus()
+    {
+        var cfg = _configService.Current;
+        var snap = _galaxyStatus.Current;
+        var activeApis = new List<string>();
+        if (cfg.EnableFrontierCapi) activeApis.Add($"Frontier cAPI{(_frontierCapi?.IsConnected == true ? "(OK)" : "(NoAuth)")}");
+        if (cfg.EnableEddnUpload)
+            activeApis.Add(_communitySync.EddnUploadedCount > 0 ? $"EDDN({_communitySync.EddnUploadedCount} sent)" : "EDDN");
+        if (cfg.EnableEdsmSync) activeApis.Add("EDSM");
+        if (cfg.EnableInaraSync)
+            activeApis.Add(_communitySync.InaraUploadedCount > 0 ? $"Inara({_communitySync.InaraUploadedCount} sent)" : "Inara");
+        if (cfg.EnableSpanshSystemData) activeApis.Add("Spansh");
+        if (cfg.EnableEliteBgsWatchlist)
+        {
+            int watchedCount = _fileWatcher.State.WatchedBgsFactions.Count;
+            activeApis.Add(watchedCount > 0 ? $"EliteBGS({watchedCount} tracked)" : "EliteBGS");
+        }
+        if (cfg.EnableArdentMarketApi) activeApis.Add("Ardent");
+        if (cfg.EnableEdastroDssa) activeApis.Add("EDAstro-DSSA");
+        if (cfg.EnableCanonnUpload)
+            activeApis.Add(_edastroCanonn is { CanonnUploadedCount: > 0 } ? $"Canonn({_edastroCanonn.CanonnUploadedCount} sent)" : "Canonn");
+        if (cfg.EnableDiscord) activeApis.Add("Discord");
+
+        string server = string.IsNullOrWhiteSpace(snap.ServerMessage) ? "Sin datos" : snap.ServerMessage;
+        string tick = snap.LastBgsTickUtc.HasValue ? snap.LastBgsTickUtc.Value.ToString("yyyy-MM-dd HH:mm") + "Z" : "desconocido";
+        return $"Servidor Elite: {server} | Último Tick BGS: {tick} | Integraciones activas ({activeApis.Count}): {(activeApis.Count > 0 ? string.Join(", ", activeApis) : "ninguna")}";
+    }
+
+    private async Task<string> QueryCommunityGoalsAsync()
+    {
+        var s = _fileWatcher.State;
+        var goals = s.CommunityGoals;
+        if (goals.Count == 0 && _configService.Current.EnableInaraSync)
+        {
+            var (_, fetched, _) = await _communitySync.FetchInaraCommunityGoalsAsync();
+            goals = fetched;
+        }
+        if (goals.Count == 0)
+            return "No hay Community Goals activos cargados (activa Frontier cAPI o Inara Read API).";
+        return $"Community Goals ({goals.Count}): {string.Join(" | ", goals.Take(5).Select(static g => $"{g.Title} en {g.StarSystem} ({g.StationName}) — {g.ProgressDisplay}, caduca {g.ExpiryDisplay}"))}";
+    }
+
+    internal string QuerySpanshSystemDump()
+    {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return "Spansh System Data está desactivado en Ajustes -> Integraciones.";
+        var snap = _spanshService.State.Snapshot;
+        if (snap is null)
+            return "No hay volcado de Spansh cargado para el sistema actual.";
+        int landables = snap.Bodies.Count(static b => b.IsLandable == true);
+        return $"Spansh ({snap.Name}): {snap.BodyCount} cuerpos ({landables} aterrizables), {snap.StationCount} estaciones.";
+    }
+
+    private async Task<string> QueryEdsmTrafficAsync(string systemName)
+    {
+        if (!_configService.Current.EnableEdsmSync)
+            return "EDSM integration is disabled in Settings -> Integrations.";
+        string sys = string.IsNullOrWhiteSpace(systemName) ? _fileWatcher.State.CurrentSystem : systemName.Trim();
+        var intel = await _communitySync.FetchEdsmSystemIntelAsync(sys);
+        if (intel is null)
+            return $"No EDSM traffic data available for {sys}.";
+        string noteStr = !string.IsNullOrWhiteSpace(intel.RemoteComment) ? $" | EDSM note: {intel.RemoteComment}" : "";
+        return $"EDSM {intel.SystemName}: Traffic {intel.TrafficDay}/day ({intel.TrafficWeek}/week), Destructions {intel.DeathsDay}/day ({intel.DeathsWeek}/week){noteStr}.";
+    }
+
+    private async Task<string> QueryEdsmStationsAsync(string systemName)
+    {
+        if (!_configService.Current.EnableEdsmSync)
+            return "EDSM integration is disabled in Settings -> Integrations.";
+        string sys = string.IsNullOrWhiteSpace(systemName) ? _fileWatcher.State.CurrentSystem : systemName.Trim();
+        string url = $"https://www.edsm.net/api-system-v1/stations?systemName={Uri.EscapeDataString(sys)}";
+        using var resp = await _httpClient.GetAsync(url);
+        if (!resp.IsSuccessStatusCode)
+            return $"EDSM stations HTTP {(int)resp.StatusCode} for {sys}.";
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        if (!doc.RootElement.TryGetProperty("stations", out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
+            return $"No stations recorded in EDSM for {sys}.";
+
+        var list = new List<string>();
+        foreach (var st in arr.EnumerateArray().Take(12))
+        {
+            string name = GetStr(st, "name") ?? "";
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            string type = GetStr(st, "type") ?? "";
+            double dist = JsonElementExtensions.GetDouble(st, "distanceToArrival") ?? 0;
+            bool hasShipyard = st.TryGetProperty("haveShipyard", out var hs) && hs.ValueKind == JsonValueKind.True;
+            bool hasOutfitting = st.TryGetProperty("haveOutfitting", out var ho) && ho.ValueKind == JsonValueKind.True;
+            bool hasMarket = st.TryGetProperty("haveMarket", out var hm) && hm.ValueKind == JsonValueKind.True;
+            var tags = new List<string>();
+            if (hasMarket) tags.Add("Market");
+            if (hasShipyard) tags.Add("Shipyard");
+            if (hasOutfitting) tags.Add("Outfitting");
+            list.Add($"{name} ({type}, {dist:0} ls{(tags.Count > 0 ? ", " + string.Join("/", tags) : "")})");
+        }
+        return $"EDSM stations in {sys} ({arr.GetArrayLength()} total): {string.Join(" | ", list)}";
+    }
+
+    private async Task<string> QueryEdsmNearbySystemsAsync(string param)
+    {
+        if (!_configService.Current.EnableEdsmSync)
+            return "EDSM integration is disabled in Settings -> Integrations.";
+
+        string[] parts = (param ?? "").Split(new[] { '|', ':' }, 2, StringSplitOptions.TrimEntries);
+        string sys = parts.Length >= 1 && !string.IsNullOrWhiteSpace(parts[0]) ? parts[0] : _fileWatcher.State.CurrentSystem;
+        double radius = parts.Length == 2 && double.TryParse(parts[1].Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double r)
+            ? Math.Clamp(r, 5, 100)
+            : 20;
+
+        string url = $"https://www.edsm.net/api-v1/sphere-systems?systemName={Uri.EscapeDataString(sys)}&radius={radius.ToString("0", CultureInfo.InvariantCulture)}&showInformation=1";
+        using var resp = await _httpClient.GetAsync(url);
+        if (!resp.IsSuccessStatusCode)
+            return $"EDSM sphere-systems HTTP {(int)resp.StatusCode} for {sys}.";
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
+            return $"No nearby systems found in EDSM within {radius:0} LY of {sys}.";
+
+        var nearby = new List<(string Name, double Dist, string Eco)>();
+        foreach (var item in doc.RootElement.EnumerateArray())
+        {
+            string name = GetStr(item, "name") ?? "";
+            double dist = JsonElementExtensions.GetDouble(item, "distance") ?? 0;
+            if (string.IsNullOrWhiteSpace(name) || string.Equals(name, sys, StringComparison.OrdinalIgnoreCase))
+                continue;
+            string eco = item.TryGetProperty("information", out var info) && info.ValueKind == JsonValueKind.Object
+                ? (GetStr(info, "economy") ?? "")
+                : "";
+            nearby.Add((name, dist, eco));
+        }
+
+        var top = nearby.OrderBy(static x => x.Dist).Take(12)
+            .Select(static x => $"{x.Name} ({x.Dist:0.1} LY{(string.IsNullOrWhiteSpace(x.Eco) ? "" : ", " + x.Eco)})");
+        return $"EDSM systems within {radius:0} LY of {sys} ({nearby.Count} found): {string.Join(" | ", top)}";
+    }
+
+    private async Task<string> QueryEdsmDistanceAsync(string param)
+    {
+        if (!_configService.Current.EnableEdsmSync)
+            return "EDSM integration is disabled in Settings -> Integrations.";
+        string[] parts = (param ?? "").Split('|', 2, StringSplitOptions.TrimEntries);
+        string fromSys = parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]) ? parts[0] : _fileWatcher.State.CurrentSystem;
+        string toSys = parts.Length == 2 ? parts[1] : (parts.Length == 1 ? parts[0] : "");
+        if (string.IsNullOrWhiteSpace(fromSys) || string.IsNullOrWhiteSpace(toSys))
+            return "Provide origin and destination systems.";
+
+        var c1 = await FetchEdsmCoordsAsync(fromSys);
+        var c2 = await FetchEdsmCoordsAsync(toSys);
+        if (c1 is null || c2 is null)
+            return $"Could not resolve EDSM 3D coordinates for '{fromSys}' or '{toSys}'.";
+
+        double dx = c2.Value.X - c1.Value.X;
+        double dy = c2.Value.Y - c1.Value.Y;
+        double dz = c2.Value.Z - c1.Value.Z;
+        double dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+        return $"3D distance from {fromSys} to {toSys}: {dist:0.2} LY.";
+    }
+
+    private async Task<(double X, double Y, double Z)?> FetchEdsmCoordsAsync(string systemName)
+    {
+        if (string.Equals(systemName, _fileWatcher.State.CurrentSystem, StringComparison.OrdinalIgnoreCase) &&
+            _fileWatcher.State.StarPos is { Length: 3 } sp)
+        {
+            return (sp[0], sp[1], sp[2]);
+        }
+
+        try
+        {
+            string url = $"https://www.edsm.net/api-v1/system?systemName={Uri.EscapeDataString(systemName)}&showCoordinates=1";
+            using var resp = await _httpClient.GetAsync(url);
+            if (!resp.IsSuccessStatusCode) return null;
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("coords", out var c) && c.ValueKind == JsonValueKind.Object)
+            {
+                return (c.GetProperty("x").GetDouble(), c.GetProperty("y").GetDouble(), c.GetProperty("z").GetDouble());
+            }
+        }
+        catch
+        {
+        }
+        return null;
+    }
+
+    private async Task<string> QuerySpanshTradeLiveAsync()
+    {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return "Spansh integration is disabled in Settings -> Integrations.";
+        var st = _fileWatcher.State;
+        var (ok, hops, msg) = await _spanshService.PlotTradeRouteAsync(st.CurrentSystem, st.StationName, st.CargoCapacity, st.Credits, 30, true);
+        if (!ok || hops.Count == 0)
+            return msg;
+        return string.Join(" | ", hops.Take(3).Select(static h => $"Hop {h.Hop}: {h.RouteDisplay} — {h.Commodity} ({h.ProfitDisplay}, {h.DistanceDisplay})"));
+    }
+
+    private async Task<string> QuerySpanshMiningLiveAsync(string mineral)
+    {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return "Spansh integration is disabled in Settings -> Integrations.";
+        var st = _fileWatcher.State;
+        string target = string.IsNullOrWhiteSpace(mineral) ? "Platinum" : mineral.Trim();
+        var (ok, rings, msg) = await _spanshService.SearchMiningRingsAsync(target, st.CurrentSystem, st.StarPos);
+        if (!ok || rings.Count == 0)
+            return msg;
+        return string.Join(" | ", rings.Take(5).Select(static r => $"{r.RingName} ({r.SystemName}, {r.DistanceDisplay}, {r.RingType}): {r.Signals}"));
+    }
+
+    private async Task<string> QueryCargoBestSellArdentAsync()
+    {
+        if (_ardentMarket is null || !_configService.Current.EnableArdentMarketApi)
+            return "Ardent Insight Market API is disabled in Settings -> Integrations.";
+        var st = _fileWatcher.State;
+        if (st.CargoInventory.Count == 0)
+            return "Your ship cargo hold is empty.";
+        var topCargo = st.CargoInventory.OrderByDescending(static c => c.Count).First();
+        string comm = !string.IsNullOrWhiteSpace(topCargo.DisplayName) ? topCargo.DisplayName : topCargo.Name;
+        var (ok, offers, msg) = await _ardentMarket.SearchCommodityAsync(comm, "sell", st.CurrentSystem);
+        if (!ok || offers.Count == 0)
+            return $"No Ardent sell offers found for {comm}: {msg}";
+        var topOffers = offers.Take(3).Select(o => $"{o.StationName} ({o.SystemName}, {o.DistanceDisplay}, Pad {o.MaxLandingPad}): {o.PriceDisplay}/t (~{o.Price * topCargo.Count:N0} CR total)");
+        return $"Best Ardent sell stations for {topCargo.Count}t {comm}: {string.Join(" | ", topOffers)}";
+    }
+
+    internal string QueryActiveAlertsReport()
+    {
+        if (_alertService is null)
+            return "Alert service is unavailable.";
+        var active = _alertService.ActiveAlerts;
+        if (active.Count == 0)
+            return "No active tactical alerts right now.";
+        return $"Active alerts ({active.Count}): {string.Join(" | ", active.Take(6).Select(static a => $"[{a.Severity}] {a.Title}: {a.Message}"))}";
+    }
+
+    internal string QueryLandingPadReport()
+    {
+        var s = _fileWatcher.State;
+        if (s.AssignedLandingPad is not int pad || pad <= 0)
+            return "No landing pad is currently assigned.";
+        var info = LandingPadLocatorService.Resolve(pad, s.AssignedLandingStationType);
+        return $"Pad {pad} at {(string.IsNullOrWhiteSpace(s.AssignedLandingStation) ? s.StationName : s.AssignedLandingStation)}: {info.FormatGuidance(_configService.Current.InterfaceLanguage)}";
+    }
+
+    internal string QueryWebHudStatus() =>
+        WebHudStatusProvider?.Invoke() ?? "Web HUD status is unavailable.";
+
+    private async Task<string> QueryFuelEmergencyAsync()
+    {
+        var s = _fileWatcher.State;
+        double pct = s.FuelMax > 0 ? (s.FuelMain / s.FuelMax) * 100.0 : 0;
+        var parts = new List<string>
+        {
+            $"Fuel: {s.FuelMain:0.1}/{s.FuelMax:0.1} t ({pct:0}%). Next scoopable on route: {(s.RouteHasNoFuelStar ? "NONE" : (s.JumpsToNextFuelStar?.ToString() ?? "N/A"))}."
+        };
+
+        if (_configService.Current.EnableSpanshSystemData)
+        {
+            var (ok, carriers, _) = await _spanshService.SearchFleetCarriersAsync("Refuel", s.CurrentSystem, s.StarPos, maxDistanceLy: 150);
+            if (ok && carriers.Count > 0)
+            {
+                var nearest = carriers[0];
+                CopySystemRequested?.Invoke(nearest.SystemName);
+                parts.Add($"Nearest Refuel Carrier: {nearest.Callsign} in {nearest.SystemName} ({nearest.DistanceDisplay}, system copied to clipboard).");
+            }
+        }
+        return string.Join(" ", parts);
+    }
+
+    private async Task<string> QueryExpeditionSummaryAsync()
+    {
+        var exp = await ExpeditionAnalyticsService.AnalyzeFolderAsync(_configService.Current.JournalFolderPath, maxFiles: 100);
+        return $"Expedition ({exp.JournalsScanned} journals): {exp.TotalJumps:N0} jumps, {exp.TotalDistanceLy:N1} LY, {exp.UniqueSystems:N0} unique systems, {exp.EarthLikeWorlds} ELW / {exp.WaterWorlds} WW / {exp.AmmoniaWorlds} AW, {exp.OrganicsAnalysed} exobiology, {exp.MissionsCompleted} missions, {exp.TotalBountiesAndSalesCredits:N0} CR earned.";
     }
 
     internal string QueryMaterialInventory(string query)
@@ -904,6 +2002,40 @@ public sealed partial class AiCopilotService
                 : $"Flota almacenada ({s.StoredShips.Count} naves en total): {string.Join(" | ", ships)}";
         }
 
+        if (lower.StartsWith("modules", StringComparison.Ordinal))
+        {
+            if (s.StoredModules.Count == 0)
+                return "No hay módulos almacenados cargados (conecta Frontier cAPI en Ajustes -> Integraciones).";
+            string filter = (p.Contains(':') || p.Contains('|')) ? p.Split(new[] { ':', '|' }, 2)[1].Trim() : "";
+            var mods = s.StoredModules
+                .Where(m => string.IsNullOrWhiteSpace(filter) ||
+                            m.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                            m.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                            m.StarSystem.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .Take(15)
+                .Select(static m => $"{m.DisplayName}{(string.IsNullOrWhiteSpace(m.Engineering) ? "" : $" [{m.Engineering}]")} en {m.StarSystem} ({m.StationName})")
+                .ToList();
+            return mods.Count == 0
+                ? $"No se encontró ningún módulo almacenado que coincida con '{filter}'."
+                : $"Módulos almacenados ({s.StoredModules.Count} totales): {string.Join(" | ", mods)}";
+        }
+
+        if (lower == "orders")
+        {
+            if (s.CarrierMarketOrders.Count == 0)
+                return "No hay órdenes de mercado activas en el portanaves (cAPI).";
+            var orders = s.CarrierMarketOrders.Take(15)
+                .Select(static o => $"{o.OrderType} {o.Commodity} x{o.Quantity} a {o.PriceDisplay}");
+            return $"Órdenes de mercado del portanaves ({s.CarrierMarketOrders.Count}): {string.Join(" | ", orders)}";
+        }
+
+        if (lower == "services")
+        {
+            return s.CarrierServices.Count == 0
+                ? "No hay servicios activos del portanaves registrados."
+                : $"Servicios activos en el portanaves: {string.Join(", ", s.CarrierServices)}";
+        }
+
         if (lower == "bartender")
         {
             if (s.CarrierMaterials.Count == 0)
@@ -927,14 +2059,17 @@ public sealed partial class AiCopilotService
         if (s.Carrier is not { } fc)
             return "No hay datos de portanaves registrados en esta sesión.";
 
-        // Estimate weekly base upkeep (~10M CR/week typical average if exact upkeep not exposed)
         long balance = fc.Balance ?? 0;
-        double estWeeks = balance > 0 ? balance / 10_000_000.0 : 0;
-        return $"Portanaves {fc.Name} [{fc.Callsign}] en {fc.System}: Tritio {fc.Fuel?.ToString() ?? "?"} t (salto máx. {fc.JumpRange?.ToString("0") ?? "500"} AL), espacio libre {fc.FreeSpace?.ToString("N0") ?? "?"}/{fc.Capacity?.ToString("N0") ?? "?"} t, saldo {balance:N0} CR (disponible {fc.Available?.ToString("N0") ?? "?"} CR, reserva {fc.Reserve?.ToString("N0") ?? "?"} CR, autonomía estimada ~{estWeeks:0} semanas a 10M/sem).";
+        long upkeep = fc.WeeklyUpkeep is > 0 ? fc.WeeklyUpkeep.Value : 10_000_000;
+        double estWeeks = balance > 0 ? balance / (double)upkeep : 0;
+        string upkeepLabel = fc.WeeklyUpkeep is > 0 ? $"{upkeep:N0} CR/sem real" : "~10M/sem est.";
+        return $"Portanaves {fc.Name} [{fc.Callsign}] en {fc.System}: Tritio {fc.Fuel?.ToString() ?? "?"} t (salto máx. {fc.JumpRange?.ToString("0") ?? "500"} AL), espacio libre {fc.FreeSpace?.ToString("N0") ?? "?"}/{fc.Capacity?.ToString("N0") ?? "?"} t, saldo {balance:N0} CR (disponible {fc.Available?.ToString("N0") ?? "?"} CR, reserva {fc.Reserve?.ToString("N0") ?? "?"} CR, autonomía ~{estWeeks:0} semanas a {upkeepLabel}).";
     }
 
     private async Task<string> QueryEdsmSystemAsync(string systemName)
     {
+        if (!_configService.Current.EnableEdsmSync)
+            return "EDSM integration is disabled in Settings -> Integrations.";
         if (string.IsNullOrWhiteSpace(systemName))
             return "Nombre de sistema vacío.";
 
@@ -990,6 +2125,8 @@ public sealed partial class AiCopilotService
 
     private async Task<string> QuerySpanshNearestAsync(string serviceKey)
     {
+        if (!_configService.Current.EnableSpanshSystemData)
+            return "Spansh integration is disabled in Settings -> Integrations.";
         var state = _fileWatcher.State;
         var (ok, results, msg) = await _spanshService.SearchNearestServicesAsync(serviceKey, state.CurrentSystem, state.StarPos);
         if (!ok || results.Count == 0)
@@ -1018,8 +2155,8 @@ public sealed partial class AiCopilotService
                 return QueryStationSnapshot(param);
             }
 
-            // Live EDSM fallback if local Shipyard.json is missing or hit the Odyssey 1-ship bug
-            if (s.Docked && !string.IsNullOrWhiteSpace(s.CurrentSystem) && !string.IsNullOrWhiteSpace(s.StationName))
+            // Live EDSM fallback if local Shipyard.json is missing or hit the Odyssey 1-ship bug (only when EDSM is enabled)
+            if (_configService.Current.EnableEdsmSync && s.Docked && !string.IsNullOrWhiteSpace(s.CurrentSystem) && !string.IsNullOrWhiteSpace(s.StationName))
             {
                 var edsm = await EliteFileWatcherService.FetchEdsmShipyardAsync(s.CurrentSystem, s.StationName);
                 if (edsm is { Items.Count: > 0 })

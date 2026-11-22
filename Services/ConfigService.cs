@@ -52,7 +52,7 @@ public class ConfigService
             if (File.Exists(_configPath))
             {
                 string json = File.ReadAllText(_configPath);
-                var cfg = JsonSerializer.Deserialize<AppConfig>(json);
+                var cfg = JsonSerializer.Deserialize(json, AppConfigJsonContext.Default.AppConfig);
                 if (cfg != null)
                 {
                     Current = cfg;
@@ -223,11 +223,9 @@ public class ConfigService
         ConfigChanged?.Invoke(Current);
     }
 
-    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
-
     private void WriteConfig()
     {
-        string json = JsonSerializer.Serialize(Current, IndentedJsonOptions);
+        string json = JsonSerializer.Serialize(Current, AppConfigJsonContext.Default.AppConfig);
         File.WriteAllText(_configPath, json);
     }
 

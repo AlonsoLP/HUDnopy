@@ -9,6 +9,8 @@
 // -----------------------------------------------------------------------------
 
 using System;
+using System.Buffers;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -66,6 +68,15 @@ public sealed record ExpeditionStatsSnapshot(
 /// </summary>
 public static class ExpeditionAnalyticsService
 {
+    // SIMD-accelerated pre-filter to skip ~85% of irrelevant Journal lines without allocating a JsonDocument
+    private static readonly SearchValues<string> TrackedEventMarkers = SearchValues.Create(
+        [
+            "\"FSDJump\"", "\"Scan\"", "\"ScanOrganic\"", "\"MissionCompleted\"",
+            "\"SellExplorationData\"", "\"MultiSellExplorationData\"", "\"SellOrganicData\"",
+            "\"RedeemVoucher\"", "\"Fileheader\"", "\"LoadGame\"", "\"Location\""
+        ],
+        StringComparison.Ordinal);
+
     /// <summary>
     /// Parses up to <paramref name="maxFiles"/> recent Journal.*.log files in <paramref name="journalFolder"/>.
     /// </summary>
@@ -84,21 +95,16 @@ public static class ExpeditionAnalyticsService
                 .Take(Math.Clamp(maxFiles, 1, 300))
                 .ToList();
 
-            int jumps = 0;
-            double totalLy = 0;
-            var systems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var elwBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var wwBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var awBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            int organics = 0;
-            int missions = 0;
-            long earnings = 0;
-            DateTimeOffset? earliest = null;
-            DateTimeOffset? latest = null;
-
-            foreach (string file in files)
+            var partials = new ConcurrentBag<FileStats>();
+            var parallelOptions = new ParallelOptions
             {
-                ct.ThrowIfCancellationRequested();
+                MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 2, 8),
+                CancellationToken = ct
+            };
+
+            Parallel.ForEach(files, parallelOptions, file =>
+            {
+                var local = new FileStats();
                 try
                 {
                     using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -106,7 +112,7 @@ public static class ExpeditionAnalyticsService
                     string? line;
                     while ((line = sr.ReadLine()) is not null)
                     {
-                        if (string.IsNullOrWhiteSpace(line) || line[0] != '{')
+                        if (string.IsNullOrWhiteSpace(line) || line[0] != '{' || !line.AsSpan().ContainsAny(TrackedEventMarkers))
                             continue;
 
                         try
@@ -121,21 +127,21 @@ public static class ExpeditionAnalyticsService
                                 DateTimeOffset.TryParse(tsProp.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var ts))
                             {
                                 var utc = ts.ToUniversalTime();
-                                if (!earliest.HasValue || utc < earliest.Value) earliest = utc;
-                                if (!latest.HasValue || utc > latest.Value) latest = utc;
+                                if (!local.Earliest.HasValue || utc < local.Earliest.Value) local.Earliest = utc;
+                                if (!local.Latest.HasValue || utc > local.Latest.Value) local.Latest = utc;
                             }
 
                             string evt = evProp.GetString() ?? "";
                             switch (evt)
                             {
                                 case "FSDJump":
-                                    jumps++;
+                                    local.Jumps++;
                                     if (root.TryGetProperty("JumpDist", out var jd) && jd.TryGetDouble(out double d))
-                                        totalLy += d;
+                                        local.TotalLy += d;
                                     if (root.TryGetProperty("StarSystem", out var ss) && ss.ValueKind == JsonValueKind.String)
                                     {
                                         string name = ss.GetString() ?? "";
-                                        if (!string.IsNullOrWhiteSpace(name)) systems.Add(name);
+                                        if (!string.IsNullOrWhiteSpace(name)) local.Systems.Add(name);
                                     }
                                     break;
 
@@ -148,9 +154,9 @@ public static class ExpeditionAnalyticsService
                                             : "";
                                         if (!string.IsNullOrWhiteSpace(body))
                                         {
-                                            if (pclass.Equals("Earthlike body", StringComparison.OrdinalIgnoreCase)) elwBodies.Add(body);
-                                            else if (pclass.Equals("Water world", StringComparison.OrdinalIgnoreCase)) wwBodies.Add(body);
-                                            else if (pclass.Equals("Ammonia world", StringComparison.OrdinalIgnoreCase)) awBodies.Add(body);
+                                            if (pclass.Equals("Earthlike body", StringComparison.OrdinalIgnoreCase)) local.ElwBodies.Add(body);
+                                            else if (pclass.Equals("Water world", StringComparison.OrdinalIgnoreCase)) local.WwBodies.Add(body);
+                                            else if (pclass.Equals("Ammonia world", StringComparison.OrdinalIgnoreCase)) local.AwBodies.Add(body);
                                         }
                                     }
                                     break;
@@ -160,26 +166,26 @@ public static class ExpeditionAnalyticsService
                                         st.ValueKind == JsonValueKind.String &&
                                         string.Equals(st.GetString(), "Analyse", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        organics++;
+                                        local.Organics++;
                                     }
                                     break;
 
                                 case "MissionCompleted":
-                                    missions++;
+                                    local.Missions++;
                                     if (root.TryGetProperty("Reward", out var rew) && rew.TryGetInt64(out long rCr))
-                                        earnings += rCr;
+                                        local.Earnings += rCr;
                                     break;
 
                                 case "SellExplorationData":
                                 case "MultiSellExplorationData":
                                 case "SellOrganicData":
                                     if (root.TryGetProperty("TotalEarnings", out var te) && te.TryGetInt64(out long teCr))
-                                        earnings += teCr;
+                                        local.Earnings += teCr;
                                     break;
 
                                 case "RedeemVoucher":
                                     if (root.TryGetProperty("Amount", out var amt) && amt.TryGetInt64(out long amtCr))
-                                        earnings += amtCr;
+                                        local.Earnings += amtCr;
                                     break;
                             }
                         }
@@ -193,6 +199,35 @@ public static class ExpeditionAnalyticsService
                 {
                     // Skip unreadable files.
                 }
+
+                partials.Add(local);
+            });
+
+            int jumps = 0;
+            double totalLy = 0;
+            var systems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var elwBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var wwBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var awBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int organics = 0;
+            int missions = 0;
+            long earnings = 0;
+            DateTimeOffset? earliest = null;
+            DateTimeOffset? latest = null;
+
+            foreach (var p in partials)
+            {
+                jumps += p.Jumps;
+                totalLy += p.TotalLy;
+                systems.UnionWith(p.Systems);
+                elwBodies.UnionWith(p.ElwBodies);
+                wwBodies.UnionWith(p.WwBodies);
+                awBodies.UnionWith(p.AwBodies);
+                organics += p.Organics;
+                missions += p.Missions;
+                earnings += p.Earnings;
+                if (p.Earliest.HasValue && (!earliest.HasValue || p.Earliest.Value < earliest.Value)) earliest = p.Earliest;
+                if (p.Latest.HasValue && (!latest.HasValue || p.Latest.Value > latest.Value)) latest = p.Latest;
             }
 
             return new ExpeditionStatsSnapshot(
@@ -209,6 +244,30 @@ public static class ExpeditionAnalyticsService
                 earliest,
                 latest);
         }, ct);
+    }
+
+    private sealed class FileStats
+    {
+        public int Jumps;
+        public double TotalLy;
+        public readonly HashSet<string> Systems = new(StringComparer.OrdinalIgnoreCase);
+        public readonly HashSet<string> ElwBodies = new(StringComparer.OrdinalIgnoreCase);
+        public readonly HashSet<string> WwBodies = new(StringComparer.OrdinalIgnoreCase);
+        public readonly HashSet<string> AwBodies = new(StringComparer.OrdinalIgnoreCase);
+        public int Organics;
+        public int Missions;
+        public long Earnings;
+        public DateTimeOffset? Earliest;
+        public DateTimeOffset? Latest;
+    }
+
+    private sealed class LogbookMatchStats
+    {
+        public int VisitCount;
+        public DateTimeOffset? FirstVisit;
+        public DateTimeOffset? LastVisit;
+        public string? MatchedSystemName;
+        public int ElwMatches;
     }
 
     /// <summary>
@@ -247,15 +306,16 @@ public static class ExpeditionAnalyticsService
                 .Take(Math.Clamp(maxFiles, 1, 200))
                 .ToList();
 
-            int visitCount = 0;
-            DateTimeOffset? firstVisit = null;
-            DateTimeOffset? lastVisit = null;
-            string matchedSystemName = systemFilter;
-            int elwMatches = 0;
-
-            foreach (string file in files)
+            var matchPartials = new ConcurrentBag<LogbookMatchStats>();
+            var parallelOptions = new ParallelOptions
             {
-                ct.ThrowIfCancellationRequested();
+                MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 2, 8),
+                CancellationToken = ct
+            };
+
+            Parallel.ForEach(files, parallelOptions, file =>
+            {
+                var local = new LogbookMatchStats();
                 try
                 {
                     using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -282,15 +342,15 @@ public static class ExpeditionAnalyticsService
                                     : "";
                                 if (!string.IsNullOrWhiteSpace(sys) && sys.Contains(systemFilter, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    matchedSystemName = sys;
-                                    visitCount++;
+                                    local.MatchedSystemName = sys;
+                                    local.VisitCount++;
                                     if (root.TryGetProperty("timestamp", out var tsProp) &&
                                         tsProp.ValueKind == JsonValueKind.String &&
                                         DateTimeOffset.TryParse(tsProp.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var ts))
                                     {
                                         var utc = ts.ToUniversalTime();
-                                        if (!firstVisit.HasValue || utc < firstVisit.Value) firstVisit = utc;
-                                        if (!lastVisit.HasValue || utc > lastVisit.Value) lastVisit = utc;
+                                        if (!local.FirstVisit.HasValue || utc < local.FirstVisit.Value) local.FirstVisit = utc;
+                                        if (!local.LastVisit.HasValue || utc > local.LastVisit.Value) local.LastVisit = utc;
                                     }
                                 }
                             }
@@ -299,7 +359,7 @@ public static class ExpeditionAnalyticsService
                                      pc.ValueKind == JsonValueKind.String &&
                                      pc.GetString()!.Equals("Earthlike body", StringComparison.OrdinalIgnoreCase))
                             {
-                                elwMatches++;
+                                local.ElwMatches++;
                             }
                         }
                         catch
@@ -312,6 +372,25 @@ public static class ExpeditionAnalyticsService
                 {
                     // Skip unreadable files.
                 }
+
+                if (local.VisitCount > 0 || local.ElwMatches > 0)
+                    matchPartials.Add(local);
+            });
+
+            int visitCount = 0;
+            DateTimeOffset? firstVisit = null;
+            DateTimeOffset? lastVisit = null;
+            string matchedSystemName = systemFilter;
+            int elwMatches = 0;
+
+            foreach (var m in matchPartials)
+            {
+                visitCount += m.VisitCount;
+                elwMatches += m.ElwMatches;
+                if (!string.IsNullOrWhiteSpace(m.MatchedSystemName))
+                    matchedSystemName = m.MatchedSystemName;
+                if (m.FirstVisit.HasValue && (!firstVisit.HasValue || m.FirstVisit.Value < firstVisit.Value)) firstVisit = m.FirstVisit;
+                if (m.LastVisit.HasValue && (!lastVisit.HasValue || m.LastVisit.Value > lastVisit.Value)) lastVisit = m.LastVisit;
             }
 
             if (visitCount == 0)

@@ -82,9 +82,14 @@ public sealed partial class AiCopilotService
         sb.AppendLine("- Misiones/Masacres: [[QUERY:MISSIONS|<summary|urgent|rewards|massacre|cargo>]]");
         sb.AppendLine("- Informes: [[QUERY:REPORT|<colonisation|session|combat|mining|ship>]]");
         sb.AppendLine("- Perfil/Ingenieros: [[QUERY:PROFILE|<ranks|engineers|all>]]");
-        sb.AppendLine("- Flota/Carrier: [[QUERY:FLEET|<ships|ships:<nombre>|carrier|bartender|cargo>]]");
-        sb.AppendLine("- Otro sistema EDSM: [[QUERY:SYSTEM|<NombreSistema>]] | Spansh: [[QUERY:SPANSH|<material_trader|tech_broker|interstellar_factors|tritium>]]");
-        sb.AppendLine("- Bitácora Journals: [[QUERY:LOGBOOK|<summary|system:Nombre>]] | Estación local: [[QUERY:STATION|<shipyard|outfitting|market>|<filtro>]]");
+        sb.AppendLine("- Flota/Carrier: [[QUERY:FLEET|<ships|ships:<nombre>|modules|modules:<nombre>|carrier|orders|services|bartender|cargo>]]");
+        sb.AppendLine("- Carga/Wishlist/Superficie/Pasajeros/CG/Servidor: [[QUERY:CARGO_PROFIT|now]] | [[QUERY:WISHLIST|now]] | [[QUERY:SURFACE|now]] | [[QUERY:PASSENGERS|now]] | [[QUERY:COMMUNITY_GOALS|now]] | [[QUERY:SERVER|status]]");
+        sb.AppendLine("- Alertas/Aterrizaje/Combustible/Expedición/WebHUD: [[QUERY:ALERTS|active]] | [[QUERY:LANDING_PAD|now]] | [[QUERY:FUEL_EMERGENCY|now]] | [[QUERY:EXPEDITION|now]] | [[QUERY:WEB_HUD|now]]");
+        sb.AppendLine("- Síntesis/Odyssey/Valor sin vender/Eventos recientes: [[QUERY:SYNTHESIS|now]] | [[QUERY:ODYSSEY_GEAR|now]] | [[QUERY:EXOBIO_VALUE|now]] | [[QUERY:RECENT_EVENTS|<filtro>]]");
+        sb.AppendLine("- Otro sistema EDSM: [[QUERY:SYSTEM|<NombreSistema>]] | Tráfico/Peligro EDSM: [[QUERY:EDSM_TRAFFIC|<NombreSistema>]] | Distancia 3D: [[QUERY:EDSM_DISTANCE|<Origen>|<Destino>]] | Descubrimiento EDSM: [[QUERY:EDSM_DISCOVERY|<NombreSistema>]] | Estaciones EDSM: [[QUERY:EDSM_STATIONS|<NombreSistema>]] | Sistemas cercanos EDSM: [[QUERY:EDSM_NEARBY|<Sistema>|<RadioAL>]] | Dump Spansh actual: [[QUERY:SPANSH_SYSTEM|now]]");
+        sb.AppendLine("- Spansh servicios/cuerpos/carriers/comercio/minería: [[QUERY:SPANSH|<material_trader|tech_broker|interstellar_factors|tritium>]] | [[QUERY:SPANSH_BODIES|<Material>]] | [[QUERY:SPANSH_CARRIERS|<Servicio>]] | [[QUERY:SPANSH_TRADE|now]] | [[QUERY:SPANSH_MINING|<Mineral>]]");
+        sb.AppendLine("- Mercados Ardent / Mejor venta bodega / DSSA / EliteBGS / Inara: [[QUERY:ARDENT|<Mercancía>|<sell|buy>|<opcional:carriers>]] | [[QUERY:CARGO_BEST_SELL|now]] | [[QUERY:DSSA|nearest]] | [[QUERY:BGS|watchlist]] | [[QUERY:INARA|<CMDR|cgs>]]");
+        sb.AppendLine("- Bitácora Journals: [[QUERY:LOGBOOK|<summary|system:Nombre>]] | Diario oficial Frontier: [[QUERY:CAPI_JOURNAL|<today|YYYY-MM-DD>]] | Estación local: [[QUERY:STATION|<shipyard|outfitting|market>|<filtro>]]");
 
         if (cfg.AiAllowActions)
         {
@@ -92,11 +97,14 @@ public sealed partial class AiCopilotService
             sb.AppendLine("=== ACCIONES (OPCIONAL, AL FINAL) ===");
             sb.AppendLine($"- Control/Macro: [[ACTION:BIND|<ActionId>]] → {BuildDynamicBindingsPromptList(s)}");
             sb.AppendLine("- GalNet voz completa: [[ACTION:GALNET_READ|<1..N>]] | Spansh: [[ACTION:SPANSH|<material_trader|tech_broker|interstellar_factors|tritium>]]");
-            sb.AppendLine("- Ruta Spansh: [[ACTION:SPANSH_ROUTE|<neutron|riches|exomastery|carrier>|<Destino>]] | Ítem: [[ACTION:SPANSH_ITEM|<Nombre>|<true|false LYR>]]");
+            sb.AppendLine("- Ruta Spansh: [[ACTION:SPANSH_ROUTE|<neutron|riches|exomastery|carrier|ammonia|tourist|galaxy>|<Destino>]] | Ítem: [[ACTION:SPANSH_ITEM|<Nombre>|<true|false LYR>]]");
             sb.AppendLine("- Comercio/Minería/Colonización: [[ACTION:SPANSH_TRADE|now]] | [[ACTION:SPANSH_MINING|<Mineral>]] | [[ACTION:COLONISATION_SUPPLIER|now]]");
-            sb.AppendLine("- Wishlist: [[ACTION:WISHLIST_ADD|<fsd_range_g5|fsd_mass_manager|thrusters_dirty_g5|pp_armoured_g5|pp_overcharged_g5|pd_charge_g5|shield_thermal_g5|mc_overcharged_g5|hull_heavy_g5|odyssey_suit_g5|odyssey_weapon_g5>]]");
-            sb.AppendLine("- Memoria/Timer/Voz/Pausa: [[ACTION:REMEMBER|<dato>]] | [[ACTION:FORGET|<texto>]] | [[ACTION:TIMER|<min>|<motivo>]] | [[ACTION:TRITIUM_CALC|<AL>]] | [[ACTION:VOICE_RATE|<+1|-1|0>]] | [[ACTION:DELAY|<ms>]]");
-            sb.AppendLine("- Utilidades: [[ACTION:NOTE|<texto>]] | [[ACTION:COPY|<Sistema>]] | [[ACTION:BOOKMARK|<Etiqueta>]] | [[ACTION:NAV_BOOKMARK|<Etiqueta|EXO>]] | [[ACTION:EXPORT_SHIP|<edsy|coriolis>]] | [[ACTION:UI|<dashboard|flight|navigation|operations|inventory|activity|controls|minihud>]]");
+            sb.AppendLine("- Integraciones y alertas: [[ACTION:CAPI_SYNC|now]] | [[ACTION:CAPI_JOURNAL|today]] | [[ACTION:BGS_REFRESH|now]] | [[ACTION:BGS_WATCH_ADD|<Facción>]] | [[ACTION:BGS_WATCH_REMOVE|<Facción>]] | [[ACTION:GALAXY_REFRESH|now]] | [[ACTION:ALERTS_CLEAR|now]] | [[ACTION:INARA_OPEN|<system|station|commodity|commander>|<Objetivo>]]");
+            sb.AppendLine("- Activar/Desactivar APIs: [[ACTION:TOGGLE_INTEGRATION|<frontier|eddn|edsm|inara|spansh|bgs|ardent|dssa|canonn|discord>|<on|off>]]");
+            sb.AppendLine("- Wishlist: [[ACTION:WISHLIST_ADD|<fsd_range_g5|fsd_mass_manager|thrusters_dirty_g5|pp_armoured_g5|pp_overcharged_g5|pd_charge_g5|shield_thermal_g5|mc_overcharged_g5|hull_heavy_g5|odyssey_suit_g5|odyssey_weapon_g5>]] | [[ACTION:WISHLIST_CLEAR|now]]");
+            sb.AppendLine("- Pips/Minería/Sesión/Superficie: [[ACTION:PIP_PRESET|<combat|tank|escape|explore|mining|balanced>]] | [[ACTION:MINING_FILTER|<minerales>|<porcentaje>]] | [[ACTION:RESET_SESSION|<combat|mining>]] | [[ACTION:SURFACE_TARGET|<lat>|<lon>]]");
+            sb.AppendLine("- Memoria/Timer/Voz/Pausa/Discord: [[ACTION:REMEMBER|<dato>]] | [[ACTION:FORGET|<texto>]] | [[ACTION:TIMER|<min>|<motivo>]] | [[ACTION:TRITIUM_CALC|<AL>]] | [[ACTION:VOICE_RATE|<+1|-1|0>]] | [[ACTION:DISCORD|<Mensaje>]] | [[ACTION:DISCORD_SUMMARY|<session|ship>]] | [[ACTION:DISCORD_EXPEDITION|now]] | [[ACTION:DISCORD_SCREENSHOT|<Pie de foto>]] | [[ACTION:DISCORD_CARRIER|now]] | [[ACTION:DISCORD_BUILD|now]] | [[ACTION:DELAY|<ms>]]");
+            sb.AppendLine("- Utilidades/Ventana: [[ACTION:NOTE|<texto>]] | [[ACTION:COPY|<Sistema>]] | [[ACTION:BOOKMARK|<Etiqueta>]] | [[ACTION:NAV_BOOKMARK|<Etiqueta|EXO>]] | [[ACTION:EXPORT_SHIP|<edsy|coriolis>]] | [[ACTION:HUD_MODE|<minihud|fullscreen|normal>]] | [[ACTION:UI|<dashboard|flight|navigation|operations|inventory|activity|controls|minihud>]]");
         }
 
         // =====================================================================
@@ -115,6 +123,14 @@ public sealed partial class AiCopilotService
             sb.AppendLine();
             sb.AppendLine("=== DATOS ANALÍTICOS PRE-CARGADOS PARA ESTA CONSULTA ===");
             sb.AppendLine(preInjected);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_lastExternalQuerySummary) &&
+            DateTimeOffset.UtcNow - _lastExternalQueryUtc <= TimeSpan.FromMinutes(5))
+        {
+            sb.AppendLine();
+            sb.AppendLine("=== ÚLTIMA CONSULTA EXTERNA (REFERENCIA PARA SEGUIMIENTO) ===");
+            sb.AppendLine(_lastExternalQuerySummary);
         }
 
         return sb.ToString();
@@ -249,6 +265,11 @@ public sealed partial class AiCopilotService
             if (s.SystemFactions.Count > 0)
                 root["factions"] = s.SystemFactions.OrderByDescending(static f => f.InfluencePercent).Take(3)
                     .Select(static f => $"{f.Name}:{f.InfluenceDisplay}({f.FactionState})").ToList();
+            if (s.EdsmDiscoveryIntel is { } edsmDisc && !string.IsNullOrWhiteSpace(edsmDisc.SystemName))
+                root["edsmDiscovery"] = edsmDisc.DiscoveryBadge;
+            if (s.WatchedBgsFactions.Count > 0)
+                root["bgsWatch"] = s.WatchedBgsFactions.Take(4)
+                    .Select(static f => $"{f.FactionName}@{f.SystemName}:{f.InfluenceDisplay}({f.State})").ToList();
             var gSnap = _galaxyStatus.Current;
             if (!string.IsNullOrWhiteSpace(gSnap.ServerMessage) || gSnap.LastBgsTickUtc.HasValue)
                 root["server"] = $"{gSnap.ServerMessage ?? "?"} | BGS:{(gSnap.LastBgsTickUtc.HasValue ? gSnap.LastBgsTickUtc.Value.ToString("yyyy-MM-dd HH:mm") + "Z" : "?")}";
@@ -276,8 +297,16 @@ public sealed partial class AiCopilotService
             }
             if (s.StoredShips.Count > 0)
                 root["storedShips"] = s.StoredShips.Count;
+            if (s.StoredModules.Count > 0)
+                root["storedModules"] = s.StoredModules.Count;
+            if (s.CarrierMarketOrders.Count > 0)
+                root["carrierOrders"] = s.CarrierMarketOrders.Count;
+            if (s.CarrierServices.Count > 0)
+                root["carrierServices"] = string.Join(", ", s.CarrierServices);
             if (s.CommunityGoals.Count > 0)
                 root["cg"] = s.CommunityGoals.Take(2).Select(static c => $"{c.Title}@{c.StarSystem}").ToList();
+            if (s.InaraProfile is { } ip && !string.IsNullOrWhiteSpace(ip.CommanderName))
+                root["inara"] = $"{ip.CommanderName} ({ip.SquadronName})";
         }
 
         if (wantGalnet && _galnetService.Articles.Count > 0)
@@ -363,24 +392,64 @@ public sealed partial class AiCopilotService
         // 5. Profile ranks & engineers
         if (ContainsAny(p, "rango", "rank", "perfil"))
             chunks.Add(QueryProfileReport("ranks"));
+        if (ContainsAny(p, "escuadron", "squadron", "inara") && s.InaraProfile is { } ip && !string.IsNullOrWhiteSpace(ip.CommanderName))
+            chunks.Add($"Inara: {ip.CommanderName} | Escuadrón: {(string.IsNullOrWhiteSpace(ip.SquadronName) ? "ninguno" : $"{ip.SquadronName} ({ip.SquadronRank})")} | Lealtad: {ip.PreferredAllegiance}");
         if (ContainsAny(p, "ingeniero", "engineer") && ContainsAny(p, "grado", "desbloque", "falta", "subir", "pendiente", "tengo"))
             chunks.Add(QueryProfileReport("engineers"));
 
         // 6. Fleet & Carrier reports
         if (ContainsAny(p, "flota", "almacenad", "aparcad", "donde tengo", "cuantas naves", "stored"))
             chunks.Add(QueryFleetReport("ships"));
+        if (ContainsAny(p, "modulos almacenados", "modulo guardado", "donde guarde", "stored modules"))
+            chunks.Add(QueryFleetReport("modules"));
+        if (ContainsAny(p, "ordenes de mercado", "ordenes del portanaves", "carrier orders"))
+            chunks.Add(QueryFleetReport("orders"));
+        if (ContainsAny(p, "servicios del portanaves", "servicios activos", "carrier services"))
+            chunks.Add(QueryFleetReport("services"));
         if (ContainsAny(p, "bartender"))
             chunks.Add(QueryFleetReport("bartender"));
         if (ContainsAny(p, "portanaves", "carrier") && ContainsAny(p, "mantenimiento", "semanas", "autonomia", "saldo", "finanz", "informe"))
             chunks.Add(QueryFleetReport("carrier"));
 
-        // 7. Local Station Shipyard / Outfitting
+        // 7. Local Station Shipyard / Outfitting / Cargo Profit
         if (ContainsAny(p, "astillero", "shipyard", "naves disponibles", "que naves", "comprar nave", "venden naves"))
             chunks.Add(QueryStationSnapshot("shipyard"));
         if (ContainsAny(p, "equipamiento", "outfitting"))
             chunks.Add(QueryStationSnapshot("outfitting"));
+        if (ContainsAny(p, "vale mi carga", "vender mi carga", "beneficio de la carga", "cargo profit", "valor de la bodega"))
+            chunks.Add(QueryCargoProfitReport());
 
-        return string.Join("\n", chunks.Take(3));
+        // 8. Wishlist, Surface, Passengers, Server & Integrations status
+        if (ContainsAny(p, "wishlist", "lista de deseos", "que me falta para ingenier"))
+            chunks.Add(QueryWishlistReport());
+        if (ContainsAny(p, "coordenada", "latitud", "longitud", "marcador", "superficie", "bookmark"))
+            chunks.Add(QuerySurfaceReport());
+        if (ContainsAny(p, "pasajero", "cabina", "passenger"))
+            chunks.Add(QueryPassengersReport());
+        if (ContainsAny(p, "servidor", "tick", "integracion", "apis activas", "server status"))
+            chunks.Add(QueryServerAndIntegrationsStatus());
+        if (ContainsAny(p, "virgen", "descubierto", "first discovery", "conocido en edsm") && s.EdsmDiscoveryIntel is { } edsmD)
+            chunks.Add($"{edsmD.SystemName}: {edsmD.DiscoveryBadge}");
+        if (ContainsAny(p, "watchlist", "facciones seguidas", "conflicto", "guerra", "eleccion") && s.WatchedBgsFactions.Count > 0)
+            chunks.Add($"EliteBGS Watchlist: {string.Join(" | ", s.WatchedBgsFactions.Take(6).Select(static f => $"{f.FactionName}@{f.SystemName}: {f.InfluenceDisplay} ({f.State})"))}");
+        if (ContainsAny(p, "dssa") && s.NearestDssaCarriers.Count > 0)
+            chunks.Add($"DSSA cercanos en caché: {string.Join(" | ", s.NearestDssaCarriers.Take(4).Select(static c => $"{c.Callsign} {c.Name} en {c.SystemName} ({c.DistanceDisplay})"))}");
+        if (ContainsAny(p, "plataforma", "landing pad", "donde aterrizo", "bahia"))
+            chunks.Add(QueryLandingPadReport());
+        if (ContainsAny(p, "alerta", "aviso", "peligro activo", "active alerts"))
+            chunks.Add(QueryActiveAlertsReport());
+        if (ContainsAny(p, "web hud", "web mfd", "codigo de sesion", "url del servidor"))
+            chunks.Add(QueryWebHudStatus());
+        if (ContainsAny(p, "sintesis", "sintetizar", "synthesis", "inyeccion fsd", "fsd injection", "oxigeno", "afmu"))
+            chunks.Add(QuerySynthesisReadiness());
+        if (ContainsAny(p, "a pie", "traje", "on foot", "suit", "mochila", "backpack"))
+            chunks.Add(QueryOdysseyGearReport());
+        if (ContainsAny(p, "sin vender", "en riesgo", "unsold", "valor exobio", "cartografia acumulada"))
+            chunks.Add(QueryExobioAndCartoValueReport());
+        if (ContainsAny(p, "acaba de pasar", "ultimo evento", "ultimos eventos", "recent events", "what happened"))
+            chunks.Add(QueryRecentEventsReport(""));
+
+        return string.Join("\n", chunks.Take(4));
     }
 
     private static bool ContainsAny(string text, params string[] terms)

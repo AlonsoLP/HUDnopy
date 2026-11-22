@@ -74,14 +74,10 @@ public sealed class PiperTtsService : IDisposable
 
     public PiperTtsService()
     {
-        BaseDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HUDnopy",
-            "Piper");
+        BaseDirectory = HttpClientHeaderDefaults.GetLocalDataPath("Piper");
         VoicesDirectory = Path.Combine(BaseDirectory, "voices");
         var handler = new HttpClientHandler { AllowAutoRedirect = true };
-        _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(5) };
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("HUDnopy", "0.1"));
+        _httpClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromMinutes(5), handler);
     }
 
     private static bool IsValidPiperBinary(string exePath)

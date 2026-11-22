@@ -134,19 +134,6 @@
             <button class="deck-button" onclick="sendCmd('SystemMapOpen')" data-flight-key="systemMap">🪐 Mapa del Sistema</button>
           </div>
         </div>
-        <div class="hud-card wide-card module-section" data-section-title="Telemetría a pie" data-section-key="on-foot">
-          <h3><span data-flight-key="onFootTitle">Telemetría a pie</span></h3>
-          <p id="onFootStatus" style="color:var(--hud-muted);margin-bottom:10px;">Sin estado a pie</p>
-          <div class="nav-telemetry-grid">
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="oxygen">Oxígeno</div><div class="nav-telemetry-value" id="onFootOxygen">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="health">Salud</div><div class="nav-telemetry-value" id="onFootHealth">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="temperature">Temperatura</div><div class="nav-telemetry-value" id="onFootTemperature">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="gravity">Gravedad</div><div class="nav-telemetry-value" id="onFootGravity">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="weapon">Arma seleccionada</div><div class="nav-telemetry-value" id="onFootWeapon">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="suit">Traje</div><div class="nav-telemetry-value" id="activeSuit">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="loadout">Equipamiento</div><div class="nav-telemetry-value" id="activeSuitLoadout">---</div></div>
-          </div>
-        </div>
         <div class="hud-card full-width-card module-section" data-section-title="Módulos y vehículos" data-section-key="ship-modules">
           <h3><span data-flight-key="modulesTitle">Módulos instalados, energía y vehículos</span></h3>
           <div id="vehicleTelemetryBox" style="padding:10px;border:1px solid var(--hud-secondary);background:var(--hud-panel-alt);margin-bottom:10px;" hidden>
@@ -164,8 +151,21 @@
             <tbody id="shipModulesTableBody"></tbody>
           </table></div>
         </div>
+        <div class="hud-card wide-card module-section" data-section-title="Telemetría a pie" data-section-key="on-foot">
+          <h3><span data-flight-key="onFootTitle">Telemetría a pie</span></h3>
+          <p id="onFootStatus" style="color:var(--hud-muted);margin-bottom:10px;">Sin estado a pie</p>
+          <div class="nav-telemetry-grid">
+            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="oxygen">Oxígeno</div><div class="nav-telemetry-value" id="onFootOxygen">---</div></div>
+            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="health">Salud</div><div class="nav-telemetry-value" id="onFootHealth">---</div></div>
+            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="temperature">Temperatura</div><div class="nav-telemetry-value" id="onFootTemperature">---</div></div>
+            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="gravity">Gravedad</div><div class="nav-telemetry-value" id="onFootGravity">---</div></div>
+            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="weapon">Arma seleccionada</div><div class="nav-telemetry-value" id="onFootWeapon">---</div></div>
+            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="suit">Traje</div><div class="nav-telemetry-value" id="activeSuit">---</div></div>
+            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="loadout">Equipamiento</div><div class="nav-telemetry-value" id="activeSuitLoadout">---</div></div>
+          </div>
+        </div>
         <div class="hud-card operations-section module-section" data-section-title="Combate y Masacres" data-section-key="combat">
-          <h3><span data-operations-key="combatTitle">Sesión de combate, recompensas y masacres</span></h3>
+          <h3><span data-operations-key="combatTitle">Sesión de combate, recompensas y masacres</span><button class="split-mfd-btn" type="button" onclick="resetWebCombatSession()" data-operations-key="miningResetSession">🔄 Reiniciar sesión</button></h3>
           <p id="webCombatSessionStats" style="color:var(--hud-secondary);font-weight:700;margin-bottom:10px;"></p>
           <div class="table-scroll" style="margin-bottom:14px;"><table class="hud-table">
             <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="kills">Bajas</th><th data-translation-key="pendingCredits">Pendiente</th></tr></thead>
@@ -225,9 +225,22 @@
               <tbody id="spanshStationsTableBody"></tbody>
             </table></div>
           </div>
-          <div id="webSystemNoteCard" class="hud-card" style="margin-top:14px;" hidden>
-            <h3 data-flight-key="systemNoteTitle">Cuaderno de bitácora (Nota del sistema)</h3>
-            <p id="webSystemNoteText" style="color:var(--hud-text);white-space:pre-wrap;"></p>
+          <div id="webSystemNoteCard" class="hud-card" style="margin-top:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+              <h3 style="margin:0;" data-flight-key="systemNoteTitle">Cuaderno de bitácora (Nota del sistema)</h3>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button class="deck-button" style="min-height:34px;padding:0 10px;" onclick="fetchWebEdsmIntel()" data-flight-key="edsmIntelBtn">🛰 Tráfico EDSM</button>
+                <button class="deck-button" style="min-height:34px;padding:0 10px;" onclick="saveWebSystemNote()" data-flight-key="saveNote">💾 Guardar nota</button>
+              </div>
+            </div>
+            <p id="webEdsmTrafficText" style="color:var(--hud-secondary);font-weight:700;margin-bottom:6px;" hidden></p>
+            <textarea id="webSystemNoteInput" rows="2" style="width:100%;box-sizing:border-box;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);padding:8px;resize:vertical;"></textarea>
+          </div>
+          <div id="webEdsmDiscoveryCard" class="hud-card" style="margin-top:14px;" hidden>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <p id="webEdsmDiscoveryBadge" style="color:var(--hud-ok);font-weight:700;margin:0;"></p>
+              <a id="webInaraSystemLink" href="#" target="_blank" rel="noopener" class="deck-button" style="min-height:34px;padding:4px 10px;text-decoration:none;display:inline-flex;align-items:center;" hidden>🌐 Inara</a>
+            </div>
           </div>
           <div id="webBgsCard" class="hud-card" style="margin-top:14px;">
             <h3 data-flight-key="bgsTitle">Facciones del sistema (BGS) y Powerplay</h3>
@@ -236,6 +249,17 @@
             <div class="table-scroll"><table class="hud-table">
               <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="influence">Influencia</th><th data-translation-key="status">Estado</th><th data-translation-key="government">Gobierno</th><th data-translation-key="reputation">Reputación</th></tr></thead>
               <tbody id="webSystemFactionsTableBody"></tbody>
+            </table></div>
+          </div>
+          <div id="webEliteBgsWatchlistCard" class="hud-card" style="margin-top:14px;" hidden>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+              <h3 style="margin:0;" data-flight-key="eliteBgsWatchlistTitle">Seguimiento de Facciones (EliteBGS)</h3>
+              <button class="deck-button" style="min-height:34px;padding:0 10px;" onclick="refreshWebEliteBgs()">🔄 BGS</button>
+            </div>
+            <p id="webEliteBgsStatus" style="color:var(--hud-muted);font-size:0.8rem;margin-bottom:6px;"></p>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="system">Sistema</th><th data-translation-key="influence">Influencia</th><th data-translation-key="status">Estado</th><th data-flight-key="bgsActiveStates">Activos</th><th data-flight-key="bgsPendingStates">Pendientes</th></tr></thead>
+              <tbody id="webEliteBgsTableBody"></tbody>
             </table></div>
           </div>
         </div>
@@ -248,6 +272,28 @@
             </thead>
             <tbody id="routeTableBody"></tbody>
           </table></div>
+          <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--hud-border);">
+            <h4 style="color:var(--hud-accent);margin-bottom:8px;" data-flight-key="spanshRouteTitle">Asistente de rutas Spansh</h4>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <select id="webSpanshRouteMode">
+                <option value="neutron">⚡ Neutron</option>
+                <option value="riches">💎 Road to Riches</option>
+                <option value="exomastery">🌿 Exomastery</option>
+                <option value="carrier">🚢 Fleet Carrier</option>
+                <option value="ammonia">🧪 Ammonia Worlds</option>
+                <option value="tourist">📸 Tourist</option>
+                <option value="galaxy">🌌 Galaxy Plotter</option>
+              </select>
+              <input id="webSpanshRouteDest" type="text" data-flight-placeholder="spanshRouteDestPlaceholder" placeholder="Sistema de destino..." style="min-width:160px;" />
+              <input id="webSpanshRouteRange" type="number" value="50" style="width:70px;" />
+              <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="plotWebSpanshRoute()" data-flight-key="spanshPlotRoute">🧭 Calcular ruta</button>
+            </div>
+            <p id="webSpanshRouteStatus" style="color:var(--hud-secondary);margin-bottom:6px;"></p>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th>#</th><th data-translation-key="system">Sistema</th><th data-translation-key="distance">Distancia</th><th data-translation-key="details">Detalles</th></tr></thead>
+              <tbody id="webSpanshRouteTableBody"></tbody>
+            </table></div>
+          </div>
         </div>
         <div class="hud-card full-width-card module-section" data-section-title="Exploración" data-section-key="exploration">
           <h3><span data-operations-key="explorationTitle">Cuerpos de interés exploratorio</span></h3>
@@ -271,8 +317,20 @@
           <div class="material-filters">
             <input id="webTargetLat" type="number" step="0.0001" placeholder="LAT" />
             <input id="webTargetLon" type="number" step="0.0001" placeholder="LON" />
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="targetWebLastExoSample()" data-flight-key="targetLastExo">🎯 Última muestra Exo</button>
           </div>
+          <p id="webSurfaceCompassTape" style="color:var(--hud-accent);font-family:Consolas,monospace;font-weight:700;margin-bottom:4px;" hidden></p>
           <p id="webSurfaceGuidance" style="color:var(--hud-secondary);font-weight:700;margin-bottom:12px;"></p>
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <input id="webBookmarkLabel" type="text" data-flight-placeholder="bookmarkLabelPlaceholder" placeholder="Etiqueta del marcador..." style="min-width:170px;" />
+              <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="saveWebSurfaceBookmark()" data-flight-key="saveBookmark">📍 Guardar posición actual</button>
+            </div>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="body">Cuerpo</th><th data-translation-key="label">Etiqueta</th><th data-translation-key="coordinates">Coordenadas</th><th></th></tr></thead>
+              <tbody id="webSurfaceBookmarksTableBody"></tbody>
+            </table></div>
+          </div>
           <div class="table-scroll"><table class="hud-table">
             <thead><tr><th data-translation-key="time">Hora</th><th data-translation-key="event">Evento</th><th data-translation-key="body">Cuerpo</th><th data-translation-key="details">Detalles</th><th data-translation-key="coordinates">Coordenadas</th></tr></thead>
             <tbody id="surfaceEventsTableBody"></tbody>
@@ -303,6 +361,17 @@
               <tbody id="webCarrierCargoTableBody"></tbody>
             </table></div>
           </div>
+          <div id="webCarrierMarketOrdersSection" style="margin-top:14px;" hidden>
+            <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-flight-key="carrierMarketOrdersTitle">Órdenes de mercado del portanaves (Frontier cAPI)</span></h4>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="type">Tipo</th><th data-translation-key="commodity">Mercancía</th><th data-translation-key="quantity">Cantidad</th><th data-translation-key="price">Precio</th></tr></thead>
+              <tbody id="webCarrierMarketOrdersTableBody"></tbody>
+            </table></div>
+          </div>
+          <div id="webCarrierServicesSection" style="margin-top:14px;" hidden>
+            <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-flight-key="carrierServicesTitle">Servicios activos del portanaves (Frontier cAPI)</span></h4>
+            <p id="webCarrierServicesText" style="color:var(--hud-text);font-size:0.86rem;"></p>
+          </div>
           <div style="margin-top:14px;">
             <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-flight-key="fcMaterialsTitle">Mercado de Bartender (FCMaterials.json)</span></h4>
             <p id="webCarrierMaterialsStatus" style="color:var(--hud-muted);margin-bottom:8px;"></p>
@@ -320,11 +389,38 @@
             <button class="deck-button" style="min-height:42px;padding:0 12px;" onclick="searchWebSpanshService('interstellar_factors')">⚖ Interstellar Factors</button>
             <button class="deck-button" style="min-height:42px;padding:0 12px;" onclick="searchWebSpanshService('tritium')">⛽ Tritium</button>
           </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+            <select id="webSpanshItemType"><option value="module" data-flight-key="spanshTypeModule">Módulo</option><option value="ship" data-flight-key="spanshTypeShip">Nave</option></select>
+            <input id="webSpanshItemQuery" type="search" data-flight-placeholder="spanshItemPlaceholder" placeholder="5A Frame Shift Drive / Anaconda..." style="min-width:190px;" />
+            <label style="color:var(--hud-text);font-size:0.84rem;display:inline-flex;align-items:center;gap:4px;"><input id="webSpanshItemLyr" type="checkbox" /> Li Yong-Rui (-15%)</label>
+            <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="searchWebSpanshItem()" data-flight-key="spanshSearchItem">🔍 Buscar</button>
+          </div>
           <p id="webSpanshServiceStatus" style="color:var(--hud-muted);margin-bottom:8px;"></p>
           <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="distance">Distancia</th><th data-translation-key="pad">Pad</th></tr></thead>
+            <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="distance">Distancia</th><th data-translation-key="landingPad">Pad</th></tr></thead>
             <tbody id="webSpanshServiceTableBody"></tbody>
           </table></div>
+          <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--hud-border);">
+            <h4 style="color:var(--hud-accent);margin-bottom:8px;" data-flight-key="spanshDeepSearchTitle">Exploración profunda: Cuerpos, Portanaves (Spansh) y DSSA (EDAstro)</h4>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <input id="webSpanshBodyQuery" type="search" data-flight-placeholder="spanshBodyPlaceholder" placeholder="Selenium, Polonium..." style="min-width:160px;" />
+              <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="searchWebSpanshBodies()" data-flight-key="spanshSearchBodiesBtn">🪐 Buscar Cuerpos</button>
+              <select id="webSpanshCarrierService">
+                <option value="Vista Genomics">Vista Genomics</option>
+                <option value="Universal Cartographics">Universal Cartographics</option>
+                <option value="Repair">Repair</option>
+                <option value="Refuel">Refuel</option>
+                <option value="Shipyard">Shipyard</option>
+              </select>
+              <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="searchWebSpanshCarriers()" data-flight-key="spanshSearchCarriersBtn">🚢 Buscar Carriers</button>
+              <button id="btnWebNearestDssa" class="deck-button" style="min-height:38px;padding:0 12px;" onclick="fetchWebNearestDssa()" data-flight-key="edastroDssaBtn">🛰 DSSA Cercanos (EDAstro)</button>
+            </div>
+            <p id="webDeepSearchStatus" style="color:var(--hud-muted);margin-bottom:8px;"></p>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-flight-key="nameCallsignHeader">Nombre / Callsign</th><th data-translation-key="system">Sistema</th><th data-translation-key="distance">Distancia</th><th data-translation-key="details">Detalles</th></tr></thead>
+              <tbody id="webDeepSearchTableBody"></tbody>
+            </table></div>
+          </div>
         </div>
       </div>
     </section>
@@ -358,20 +454,59 @@
         <div class="hud-card operations-section module-section" data-section-title="Minería" data-section-key="mining">
           <h3><span data-operations-key="miningTitle">Minería en tiempo real (Prospector y sesión)</span></h3>
           <p id="webProspectorSummary" style="color:var(--hud-accent);font-weight:700;margin-bottom:6px;"></p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+            <span data-operations-key="miningTargetsLabel" style="color:var(--hud-muted);font-size:0.84rem;">Minerales objetivo:</span>
+            <input id="webMiningTargets" type="text" style="min-width:210px;flex:1;" />
+            <span data-operations-key="miningMinPctLabel" style="color:var(--hud-muted);font-size:0.84rem;">Mín. %:</span>
+            <input id="webMiningMinPercent" type="number" min="1" max="90" value="25" style="width:68px;" />
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="saveWebMiningFilter()" data-operations-key="miningApplyFilter">Aplicar</button>
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="resetWebMiningSession()" data-operations-key="miningResetSession">🔄 Reiniciar sesión</button>
+          </div>
           <p id="webMiningSessionStats" style="color:var(--hud-secondary);margin-bottom:10px;"></p>
           <div class="table-scroll"><table class="hud-table">
             <thead><tr><th data-translation-key="mineral">Mineral</th><th data-translation-key="tons">Toneladas</th></tr></thead>
             <tbody id="miningRefinedTableBody"></tbody>
           </table></div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--hud-border);">
+            <h4 style="color:var(--hud-accent);margin-bottom:8px;" data-operations-key="spanshMiningTitle">Anillos Mineros Prístinos (Spansh)</h4>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <select id="webSpanshMiningMineral">
+                <option value="Platinum">Platinum</option>
+                <option value="Painite">Painite</option>
+                <option value="Monazite">Monazite</option>
+                <option value="Musgravite">Musgravite</option>
+                <option value="Alexandrite">Alexandrite</option>
+                <option value="Tritium">Tritium</option>
+                <option value="Low Temperature Diamonds">Low Temperature Diamonds</option>
+                <option value="Void Opals">Void Opals</option>
+              </select>
+              <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="searchWebSpanshMining()" data-operations-key="spanshMiningBtn">⛏ Buscar anillos</button>
+            </div>
+            <p id="webSpanshMiningStatus" style="color:var(--hud-muted);margin-bottom:6px;"></p>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="ring">Anillo</th><th data-translation-key="type">Tipo</th><th data-translation-key="distance">Distancia</th><th data-translation-key="hotspots">Hotspots</th></tr></thead>
+              <tbody id="webSpanshMiningTableBody"></tbody>
+            </table></div>
+          </div>
         </div>
         <div class="hud-card module-section" data-section-title="Colonización" data-section-key="colonisation">
           <h3><span data-operations-key="colonisationTitle">Colonización</span></h3>
           <p id="colonisationStatus" style="color:var(--hud-muted);margin-bottom:6px;">No hay datos de construcción disponibles.</p>
-          <p id="colonisationProgress" style="color:var(--hud-muted);margin-bottom:10px;">Progreso: ---</p>
+          <p id="colonisationProgress" style="color:var(--hud-muted);margin-bottom:8px;">Progreso: ---</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            <button class="deck-button" style="min-height:36px;padding:0 12px;" onclick="searchWebColonisationSupplier()" data-operations-key="colonisationFindSupplier">🛒 Buscar proveedor cercano (Spansh)</button>
+          </div>
           <div class="table-scroll"><table class="hud-table">
             <thead><tr><th data-translation-key="resource">Recurso</th><th data-translation-key="required">Requerido</th><th data-translation-key="provided">Aportado</th><th data-translation-key="payment">Pago</th></tr></thead>
             <tbody id="colonisationTableBody"></tbody>
           </table></div>
+          <div style="margin-top:12px;">
+            <p id="webColonisationSupplierStatus" style="color:var(--hud-secondary);margin-bottom:6px;"></p>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="distance">Distancia</th><th data-translation-key="landingPad">Pad</th></tr></thead>
+              <tbody id="webColonisationSupplierTableBody"></tbody>
+            </table></div>
+          </div>
         </div>
     </section>
 
@@ -407,15 +542,21 @@
         </div>
         <p id="materialsFilterStatus" style="color:var(--hud-muted);font-size:0.78rem;margin-bottom:8px;"></p>
         <div class="table-scroll"><table class="hud-table">
-          <thead><tr><th data-translation-key="material">Material</th><th data-translation-key="category">Categoría</th><th data-translation-key="rarity">Rareza</th><th data-translation-key="current">Actual</th></tr></thead>
+          <thead><tr><th data-translation-key="material">Material</th><th data-translation-key="category">Categoría</th><th data-translation-key="rarity">Rareza</th><th data-translation-key="current">Actual</th><th data-translation-key="wishlist">Seguimiento</th></tr></thead>
           <tbody id="materialsTableBody"></tbody>
         </table></div>
       </div>
         <div class="hud-card operations-section module-section" data-section-title="Ingenieros" data-section-key="engineers">
           <h3><span data-operations-key="engineersTitle">Progreso de ingenieros</span></h3>
           <p id="engineersStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando evento EngineerProgress del Journal.</p>
-          <div id="webWishlistSection" style="margin-bottom:14px;" hidden>
-            <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="wishlistPlannerTitle">Lista de la compra de ingeniería (Wishlist)</span></h4>
+          <div id="webWishlistSection" style="margin-bottom:14px;padding:10px;border:1px solid var(--hud-border);background:var(--hud-panel-alt);">
+            <h4 style="color:var(--hud-accent);margin-bottom:8px;"><span data-operations-key="wishlistPlannerTitle">Lista de la compra de ingeniería (Wishlist)</span></h4>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <select id="webEngineeringBlueprint" style="min-width:220px;flex:1;"></select>
+              <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="updateWebWishlist('add')" data-operations-key="wishlistAddBtn">➕ Añadir plano</button>
+              <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="updateWebWishlist('clear')" data-operations-key="wishlistClearBtn">🗑 Limpiar</button>
+              <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="findWebWishlistTrader()" data-operations-key="wishlistFindTraderBtn">🔍 Material Trader (Spansh)</button>
+            </div>
             <div class="table-scroll"><table class="hud-table">
               <thead><tr><th data-translation-key="material">Material</th><th data-translation-key="category">Categoría</th><th data-translation-key="required">Necesario</th><th data-translation-key="current">Actual</th><th data-translation-key="status">Estado</th></tr></thead>
               <tbody id="webWishlistTableBody"></tbody>
@@ -435,7 +576,10 @@
           </table></div>
           <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--hud-border);">
           <h3><span data-operations-key="shipLockerTitle">Taquilla de la nave (ShipLocker.json)</span></h3>
-          <p id="shipLockerStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando datos de ShipLocker.json.</p>
+          <p id="shipLockerStatus" style="color:var(--hud-muted);margin-bottom:8px;">Esperando datos de ShipLocker.json.</p>
+          <div style="margin-bottom:8px;">
+            <input id="webShipLockerSearch" type="search" data-operations-placeholder="shipLockerSearchPlaceholder" placeholder="Buscar en taquilla..." style="min-width:210px;" oninput="renderWebShipLockerFilter()" />
+          </div>
           <div class="table-scroll"><table class="hud-table">
             <thead><tr><th data-translation-key="item">Objeto</th><th data-translation-key="type">Tipo</th><th data-translation-key="quantity">Cantidad</th></tr></thead>
             <tbody id="shipLockerTableBody"></tbody>
@@ -449,11 +593,36 @@
             <input id="marketSearch" type="search" />
             <select id="marketCategoryFilter"></select>
           </div>
-          <p id="marketFilterStatus" style="color:var(--hud-muted);font-size:0.78rem;margin-bottom:8px;"></p>
+          <p id="marketFilterStatus" style="color:var(--hud-muted);font-size:0.78rem;margin-bottom:6px;"></p>
+          <p id="webMarketColonisationSummary" style="color:var(--hud-secondary);font-weight:700;font-size:0.84rem;margin-bottom:8px;" hidden></p>
           <div class="table-scroll"><table class="hud-table">
             <thead><tr><th data-translation-key="commodity">Mercancía</th><th data-translation-key="category">Categoría</th><th data-translation-key="buy">Compra</th><th data-translation-key="sell">Venta</th><th data-translation-key="meanPrice">Precio medio</th><th data-translation-key="stock">Stock</th><th data-translation-key="stockLevel">Nivel de stock</th><th data-translation-key="demand">Demanda</th><th data-translation-key="demandLevel">Nivel de demanda</th><th data-translation-key="colonisation">Colonización</th><th data-translation-key="type">Tipo</th></tr></thead>
             <tbody id="marketTableBody"></tbody>
           </table></div>
+          <div id="webArdentMarketSection" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--hud-border);">
+            <h4 style="color:var(--hud-accent);margin-bottom:8px;" data-operations-key="ardentMarketTitle">Precios de mercado en vivo (Ardent Insight API)</h4>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <input id="webArdentCommodity" type="search" data-operations-placeholder="ardentCommodityPlaceholder" placeholder="Mercancía (Platinum, Tritium)..." style="min-width:160px;" />
+              <select id="webArdentMode"><option value="sell" data-operations-key="ardentModeSell">💰 Mejor Venta</option><option value="buy" data-operations-key="ardentModeBuy">🛒 Mejor Compra</option></select>
+              <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="searchWebArdentMarket()" data-operations-key="ardentSearchBtn">🔍 Consultar Ardent</button>
+            </div>
+            <p id="webArdentStatus" style="color:var(--hud-muted);margin-bottom:6px;"></p>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="price">Precio</th><th data-translation-key="quantity">Cantidad</th><th data-translation-key="landingPad">Pad</th><th data-translation-key="distance">Distancia</th></tr></thead>
+              <tbody id="webArdentTableBody"></tbody>
+            </table></div>
+          </div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--hud-border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+              <h4 style="color:var(--hud-accent);margin:0;" data-operations-key="spanshTradeTitle">Planificador de Rutas Comerciales (Spansh)</h4>
+              <button class="deck-button" style="min-height:36px;padding:0 12px;" onclick="plotWebSpanshTrade()" data-operations-key="spanshTradeBtn">💰 Buscar ruta comercial</button>
+            </div>
+            <p id="webSpanshTradeStatus" style="color:var(--hud-muted);margin-bottom:6px;"></p>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th>#</th><th data-translation-key="tradeRoute">Ruta</th><th data-translation-key="commodity">Mercancía</th><th data-translation-key="profit">Beneficio</th><th data-translation-key="distance">Distancia</th></tr></thead>
+              <tbody id="webSpanshTradeTableBody"></tbody>
+            </table></div>
+          </div>
         </div>
         <div class="hud-card operations-section module-section" data-section-title="Equipamiento" data-section-key="outfitting">
           <h3><span data-operations-key="outfittingTitle">Equipamiento</span></h3>
@@ -462,6 +631,13 @@
             <thead><tr><th>ID</th><th data-translation-key="equipment">Equipamiento</th><th data-translation-key="price">Precio</th></tr></thead>
             <tbody id="outfittingTableBody"></tbody>
           </table></div>
+          <div id="webStoredModulesSection" style="margin-top:14px;" hidden>
+            <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="storedModulesTitle">Módulos almacenados (Frontier cAPI)</span></h4>
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="equipment">Equipamiento</th><th data-translation-key="engineering">Ingeniería</th><th data-translation-key="system">Sistema</th><th data-translation-key="station">Estación</th><th data-translation-key="price">Precio</th></tr></thead>
+              <tbody id="webStoredModulesTableBody"></tbody>
+            </table></div>
+          </div>
         </div>
         <div class="hud-card operations-section module-section" data-section-title="Astillero" data-section-key="shipyard">
           <h3><span data-operations-key="shipyardTitle">Astillero</span></h3>
@@ -484,16 +660,23 @@
         <div class="hud-card module-section" data-section-title="Copiloto IA" data-section-key="ai-copilot">
           <h3><span data-operations-key="aiCopilotTitle">Copiloto IA Conversacional (COVAS)</span></h3>
           <div id="webAiChatLog" style="min-height:180px;max-height:360px;overflow-y:auto;background:#080A0E;border:1px solid var(--hud-border);padding:10px;margin-bottom:10px;white-space:pre-wrap;font-size:0.88rem;line-height:1.45;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="runWebAiQuick('status')" data-operations-key="aiQuickStatusBtn">📊 Estado</button>
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="runWebAiQuick('galnet')" data-operations-key="aiSummarizeGalnet">📰 GalNet</button>
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="runWebAiQuick('session')" data-operations-key="aiSummarizeSession">📖 Sesión</button>
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="runWebAiQuick('preflight')" data-operations-key="aiPreFlightBtn">✈ Chequeo pre-vuelo</button>
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="runWebAiQuick('clear')" data-operations-key="aiClearChat">🧹 Limpiar</button>
+            <button class="deck-button" style="min-height:36px;padding:0 10px;" onclick="exportWebAiChat()" data-operations-key="aiExportChatBtn">📝 Exportar chat</button>
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <input id="webAiPrompt" type="text" style="flex:1;min-width:180px;padding:10px;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);" onkeydown="if(event.key==='Enter')sendWebAiPrompt();" />
-            <button class="deck-button" style="min-height:42px;padding:0 12px;" onclick="sendWebAiPreFlight()" data-operations-key="aiPreFlightBtn">✈ Chequeo pre-vuelo</button>
-            <button class="deck-button" style="min-height:42px;padding:0 12px;" onclick="exportWebAiChat()" data-operations-key="aiExportChatBtn">📝 Exportar chat</button>
+            <input id="webAiPrompt" type="text" data-operations-placeholder="aiPromptPlaceholder" placeholder="Pregunta a COVAS o da una orden..." style="flex:1;min-width:180px;padding:10px;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);" onkeydown="if(event.key==='Enter')sendWebAiPrompt();" />
+            <button id="btnWebAiVision" class="deck-button" style="min-height:42px;padding:0 12px;" onclick="sendWebAiVision()" data-operations-key="aiVisionBtn">👁</button>
             <button id="btnWebAiMic" class="deck-button" style="min-height:42px;padding:0 14px;" onclick="toggleWebAiVoice()">🎤</button>
             <button id="btnWebAiSend" class="deck-button" style="min-height:42px;padding:0 16px;" onclick="sendWebAiPrompt()" data-operations-key="aiSend">➤ Enviar</button>
           </div>
         </div>
         <div class="hud-card module-section" data-section-title="GalNet" data-section-key="galnet">
-          <h3><span data-operations-key="galnetTitle">GalNet News</span><button class="split-mfd-btn" type="button" onclick="refreshWebGalnet()">🔄</button></h3>
+          <h3><span data-operations-key="galnetTitle">GalNet News</span><span style="display:inline-flex;gap:6px;"><button class="split-mfd-btn" type="button" onclick="speakWebGalnet(false)">🔊</button><button class="split-mfd-btn" type="button" onclick="speakWebGalnet(true)">⏹</button><button class="split-mfd-btn" type="button" onclick="refreshWebGalnet()">🔄</button></span></h3>
           <div class="table-scroll" style="max-height:220px;margin-bottom:10px;"><table class="hud-table">
             <thead><tr><th data-translation-key="date">Fecha</th><th data-translation-key="headline">Titular</th></tr></thead>
             <tbody id="webGalnetTableBody"></tbody>
@@ -501,7 +684,8 @@
           <div id="webGalnetBody" style="background:#080A0E;border:1px solid var(--hud-border);padding:10px;white-space:pre-wrap;font-size:0.88rem;line-height:1.45;color:var(--hud-text);"></div>
         </div>
       <div class="hud-card module-section active" data-section-title="Hitos de exploración" data-section-key="exploration-milestones">
-        <h3><span data-operations-key="milestonesTitle">Hitos de exploración</span></h3>
+        <h3><span data-operations-key="milestonesTitle">Hitos de exploración</span><button class="split-mfd-btn" type="button" onclick="analyzeWebExpedition()" data-operations-key="analyzeExpeditionBtn">📈 Analizar expedición</button></h3>
+        <p id="webExpeditionSummary" style="color:var(--hud-secondary);font-weight:700;margin-bottom:10px;" hidden></p>
         <div class="table-scroll"><table class="hud-table">
           <thead><tr><th data-translation-key="time">Hora</th><th data-translation-key="milestone">Hito</th><th data-translation-key="journalDetail">Detalle del Journal</th></tr></thead>
           <tbody id="explorationTableBody"></tbody>
@@ -517,6 +701,10 @@
         <div class="hud-card module-section" data-section-title="Perfil del comandante" data-section-key="commander-profile">
           <h3><span data-operations-key="profileTitle">Perfil del comandante</span></h3>
           <p id="profileStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando eventos de perfil del Journal.</p>
+          <div id="webInaraProfileCard" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;margin-bottom:10px;border:1px solid var(--hud-border);background:rgba(8,10,14,0.6);" hidden>
+            <span id="webInaraProfileText" style="color:var(--hud-secondary);font-weight:600;font-size:0.86rem;"></span>
+            <a id="webInaraProfileLink" href="#" target="_blank" rel="noopener" class="deck-button" style="min-height:32px;padding:4px 10px;text-decoration:none;display:inline-flex;align-items:center;">🌐 Inara</a>
+          </div>
           <div class="material-filters">
             <input id="profileSearch" type="search" />
             <select id="profileCategoryFilter"></select>

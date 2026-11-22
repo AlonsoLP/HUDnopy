@@ -8,6 +8,7 @@
 // -----------------------------------------------------------------------------
 
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -18,6 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using HUDnopy.Models;
+using static HUDnopy.Services.JsonElementExtensions;
 
 namespace HUDnopy.Services;
 
@@ -34,10 +36,10 @@ public sealed class CommunitySyncService : IDisposable
     private const string EdsmTrafficEndpoint = "https://www.edsm.net/api-system-v1/traffic";
     private const string EdsmDeathsEndpoint = "https://www.edsm.net/api-system-v1/deaths";
     private const string InaraEndpoint = "https://inara.cz/inapi/v1/";
-    private const string SoftwareName = "HUDnopy";
-    private const string SoftwareVersion = "0.1.0-alpha";
+    private const string SoftwareName = HttpClientHeaderDefaults.ProductName;
+    private static readonly string SoftwareVersion = HttpClientHeaderDefaults.ProductVersion;
 
-    private static readonly Dictionary<string, string> EddnJournalSchemas = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenDictionary<string, string> EddnJournalSchemas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["FSDJump"] = "https://eddn.edcd.io/schemas/journal/1",
         ["Docked"] = "https://eddn.edcd.io/schemas/journal/1",
@@ -53,31 +55,42 @@ public sealed class CommunitySyncService : IDisposable
         ["ScanBaryCentre"] = "https://eddn.edcd.io/schemas/scanbarycentre/1",
         ["NavBeaconScan"] = "https://eddn.edcd.io/schemas/navbeaconscan/1",
         ["DockingGranted"] = "https://eddn.edcd.io/schemas/dockinggranted/1"
-    };
+    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly HashSet<string> EddnForbiddenKeys = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenSet<string> EddnForbiddenKeys = new[]
     {
         "ActiveFine", "CockpitBreach", "BoostUsed", "FuelLevel", "FuelUsed", "JumpDist",
         "Latitude", "Longitude", "Wanted", "MyReputation", "SquadronFaction",
-        "HappiestSystem", "HomeSystem", "VoucherAmount", "IsNewEntry", "NewTraitsDiscovered"
-    };
+        "HappiestSystem", "HomeSystem", "VoucherAmount", "IsNewEntry", "NewTraitsDiscovered",
+        "Taxi", "Multicrew", "InSRV", "OnFoot"
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly HashSet<string> DefaultEdsmDiscardEvents = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenSet<string> EddnSchemasAllowingStarPos = new[]
+    {
+        "https://eddn.edcd.io/schemas/journal/1",
+        "https://eddn.edcd.io/schemas/approachsettlement/1",
+        "https://eddn.edcd.io/schemas/codexentry/1",
+        "https://eddn.edcd.io/schemas/scanbarycentre/1"
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly FrozenSet<string> DefaultEdsmDiscardEvents = new[]
     {
         "Fileheader", "Music", "ReceiveText", "SendText", "FuelScoop", "HeatWarning",
         "HeatDamage", "ShieldState", "HullDamage", "UnderAttack", "Scanned", "ShipTargeted",
         "SupercruiseEntry", "SupercruiseExit", "ApproachBody", "LeaveBody", "Touchdown",
         "Liftoff", "Shutdown", "StartJump", "ReservoirReplenished"
-    };
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly ConfigService _configService;
     private readonly EliteFileWatcherService _fileWatcher;
-    private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
-    private readonly object _statusLock = new();
-    private readonly object _queueLock = new();
+    private readonly GameEventHub _gameEvents;
+    private readonly HttpClient _httpClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(15));
+    private readonly Lock _statusLock = new();
+    private readonly Lock _queueLock = new();
     private readonly List<Dictionary<string, object?>> _edsmQueue = new();
     private readonly List<Dictionary<string, object>> _inaraQueue = new();
-    private readonly System.Timers.Timer _flushTimer;
+    private readonly PeriodicTimer _flushTimer;
+    private readonly CancellationTokenSource _flushLoopCts = new();
     private readonly SemaphoreSlim _flushGate = new(1, 1);
 
     private HashSet<string> _edsmDiscardEvents = new(DefaultEdsmDiscardEvents, StringComparer.OrdinalIgnoreCase);
@@ -85,9 +98,15 @@ public sealed class CommunitySyncService : IDisposable
     private DateTimeOffset _lastInaraFlushUtc = DateTimeOffset.MinValue;
     private string _lastInaraMaterialsFingerprint = "";
     private string _lastInaraLoadoutFingerprint = "";
+    private string _lastAutoEdsmSystem = "";
+    private bool _inaraStartupLoaded;
+    private readonly Dictionary<string, string> _lastEddnSnapshotFingerprints = new(StringComparer.OrdinalIgnoreCase);
 
     public int SyncedEventsCount { get; private set; }
+    public int EddnUploadedCount { get; private set; }
+    public int InaraUploadedCount { get; private set; }
     public string LastSyncStatus { get; private set; } = "";
+    public string LastEddnStatus { get; private set; } = "";
     public event Action? SyncStatusChanged;
     public event Action<EdsmSystemIntel>? EdsmSystemIntelUpdated;
 
@@ -98,14 +117,26 @@ public sealed class CommunitySyncService : IDisposable
     {
         _configService = configService;
         _fileWatcher = fileWatcher;
-        gameEvents.JournalEventReceived += OnJournalEventReceived;
-        fileWatcher.SnapshotFileUpdated += OnSnapshotFileUpdated;
+        _gameEvents = gameEvents;
+        _gameEvents.JournalEventReceived += OnJournalEventReceived;
+        _fileWatcher.SnapshotFileUpdated += OnSnapshotFileUpdated;
 
-        // Batched queue every 35 s (complies with official Inara rate limit: max 2 requests/min)
-        _flushTimer = new System.Timers.Timer(35_000);
-        _flushTimer.AutoReset = true;
-        _flushTimer.Elapsed += (_, _) => _ = FlushQueuesAsync(forceInara: false);
-        _flushTimer.Start();
+        // Batched queue every 35 s using PeriodicTimer (non-overlapping ticks, complies with Inara rate limit)
+        _flushTimer = new PeriodicTimer(TimeSpan.FromSeconds(35));
+        _ = RunFlushLoopAsync();
+    }
+
+    private async Task RunFlushLoopAsync()
+    {
+        try
+        {
+            while (await _flushTimer.WaitForNextTickAsync(_flushLoopCts.Token))
+                await FlushQueuesAsync(forceInara: false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Clean shutdown
+        }
     }
 
     private void OnJournalEventReceived(GameJournalEvent gameEvent)
@@ -125,17 +156,42 @@ public sealed class CommunitySyncService : IDisposable
                 _ = SendEddnJournalEventAsync(gameEvent, schemaRef, state);
         }
 
-        if (cfg.EnableEdsmSync && !string.IsNullOrWhiteSpace(cfg.EdsmApiKey))
+        if (cfg.EnableEdsmSync)
         {
-            EnqueueEdsmEvent(gameEvent, state);
+            if (!string.IsNullOrWhiteSpace(cfg.EdsmApiKey))
+                EnqueueEdsmEvent(gameEvent, state);
+
+            // Auto-fetch EDSM discovery badge, factions, and traffic/PvP intel on arrival
+            if (gameEvent.EventType is "FSDJump" or "Location")
+            {
+                string arrivedSys = GetString(gameEvent.Data, "StarSystem") ?? state.CurrentSystem;
+                if (!string.IsNullOrWhiteSpace(arrivedSys) && arrivedSys != "---" &&
+                    !string.Equals(_lastAutoEdsmSystem, arrivedSys, StringComparison.OrdinalIgnoreCase))
+                {
+                    _lastAutoEdsmSystem = arrivedSys;
+                    _ = FetchEdsmDiscoveryAndFactionsAsync(arrivedSys);
+                    _ = FetchEdsmSystemIntelAsync(arrivedSys);
+                }
+            }
         }
 
-        if (cfg.EnableInaraSync && !string.IsNullOrWhiteSpace(cfg.InaraApiKey))
+        if (cfg.EnableInaraSync)
         {
-            if (state.IsLegacyGalaxy)
-                UpdateStatus("Inara omitido (galaxia Legacy)", increment: false);
-            else
-                EnqueueInaraEvents(gameEvent, state);
+            if (!_inaraStartupLoaded && gameEvent.EventType is "LoadGame" or "Location")
+            {
+                _inaraStartupLoaded = true;
+                _ = FetchInaraCommanderProfileAsync();
+                if (state.CommunityGoals.Count == 0)
+                    _ = FetchInaraCommunityGoalsAsync();
+            }
+
+            if (!string.IsNullOrWhiteSpace(cfg.InaraApiKey))
+            {
+                if (state.IsLegacyGalaxy)
+                    UpdateStatus("Inara omitido (galaxia Legacy)", increment: false);
+                else
+                    EnqueueInaraEvents(gameEvent, state);
+            }
         }
     }
 
@@ -155,11 +211,9 @@ public sealed class CommunitySyncService : IDisposable
 
     private static string BuildAnonymousUploaderId(string? commanderName)
     {
-        string clean = (commanderName ?? "HUDnopy")
-            .Replace("CMDR ", "", StringComparison.OrdinalIgnoreCase)
-            .Trim();
+        string clean = HttpClientHeaderDefaults.CleanCommanderName(commanderName);
         if (string.IsNullOrWhiteSpace(clean))
-            clean = "HUDnopy";
+            clean = SoftwareName;
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(clean));
         return Convert.ToHexString(hash).ToLowerInvariant()[..24];
     }
@@ -183,21 +237,27 @@ public sealed class CommunitySyncService : IDisposable
     {
         try
         {
-            var message = SanitizeElementToDictionary(gameEvent.Data);
+            bool preserveLatLon = string.Equals(gameEvent.EventType, "ApproachSettlement", StringComparison.OrdinalIgnoreCase);
+            var message = SanitizeElementToDictionary(gameEvent.Data, preserveLatLon);
             message["horizons"] = state.IsHorizons;
             message["odyssey"] = state.IsOdyssey;
 
-            if (!message.ContainsKey("StarSystem") && !string.IsNullOrWhiteSpace(state.CurrentSystem))
-                message["StarSystem"] = state.CurrentSystem;
+            bool allowsSystemAndPos = EddnSchemasAllowingStarPos.Contains(schemaRef);
+            if (allowsSystemAndPos)
+            {
+                if (!message.ContainsKey("StarSystem") && !string.IsNullOrWhiteSpace(state.CurrentSystem))
+                    message["StarSystem"] = state.CurrentSystem;
+                if (!message.ContainsKey("StarPos") && state.StarPos is { Length: 3 })
+                    message["StarPos"] = state.StarPos;
+            }
             if (!message.ContainsKey("SystemAddress") && long.TryParse(state.SystemAddress, out long sysAddr))
                 message["SystemAddress"] = sysAddr;
-            if (!message.ContainsKey("StarPos") && state.StarPos is { Length: 3 })
-                message["StarPos"] = state.StarPos;
 
             await PostEddnAsync(schemaRef, BuildEddnHeader(state), message, gameEvent.EventType);
         }
         catch (Exception ex)
         {
+            LastEddnStatus = $"Error: {ex.Message}";
             UpdateStatus($"EDDN: {ex.Message}", increment: false);
         }
     }
@@ -238,7 +298,18 @@ public sealed class CommunitySyncService : IDisposable
             }
 
             if (schemaRef is not null && message is not null)
+            {
+                // Deduplicate identical snapshots so repeated file-watcher reads never spam EDDN
+                string payloadJson = JsonSerializer.Serialize(message);
+                string fp = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+                lock (_queueLock)
+                {
+                    if (_lastEddnSnapshotFingerprints.TryGetValue(snapshotName, out string? prev) && prev == fp)
+                        return;
+                    _lastEddnSnapshotFingerprints[snapshotName] = fp;
+                }
                 await PostEddnAsync(schemaRef, BuildEddnHeader(state), message, snapshotName);
+            }
         }
         catch (Exception ex)
         {
@@ -383,9 +454,16 @@ public sealed class CommunitySyncService : IDisposable
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync(EddnEndpoint, content);
         if (response.IsSuccessStatusCode)
-            UpdateStatus($"EDDN OK ({label} · {DateTime.Now:HH:mm:ss})", increment: true);
+        {
+            EddnUploadedCount++;
+            LastEddnStatus = $"OK ({label} · {DateTime.Now:HH:mm:ss})";
+            UpdateStatus($"EDDN {LastEddnStatus}", increment: true);
+        }
         else
-            UpdateStatus($"EDDN HTTP {(int)response.StatusCode} ({label})", increment: false);
+        {
+            LastEddnStatus = $"HTTP {(int)response.StatusCode} ({label})";
+            UpdateStatus($"EDDN {LastEddnStatus}", increment: false);
+        }
     }
 
     // =========================================================================
@@ -554,7 +632,7 @@ public sealed class CommunitySyncService : IDisposable
 
     public async Task<EdsmSystemIntel?> FetchEdsmSystemIntelAsync(string systemName)
     {
-        if (string.IsNullOrWhiteSpace(systemName))
+        if (!_configService.Current.EnableEdsmSync || string.IsNullOrWhiteSpace(systemName))
             return null;
 
         int trafficDay = 0, trafficWeek = 0, deathsDay = 0, deathsWeek = 0;
@@ -614,6 +692,332 @@ public sealed class CommunitySyncService : IDisposable
         catch
         {
             return null;
+        }
+    }
+
+    public event Action<EdsmSystemDiscoveryIntel>? EdsmDiscoveryUpdated;
+
+    /// <summary>
+    /// Queries EDSM system existence, known bodies, estimated scan value, and minor factions for a star system.
+    /// Gated by AppConfig.EnableEdsmSync.
+    /// </summary>
+    public async Task<EdsmSystemDiscoveryIntel?> FetchEdsmDiscoveryAndFactionsAsync(string systemName, CancellationToken ct = default)
+    {
+        if (!_configService.Current.EnableEdsmSync || string.IsNullOrWhiteSpace(systemName) || systemName == "---")
+            return null;
+
+        try
+        {
+            string encSys = Uri.EscapeDataString(systemName);
+            var sysTask = _httpClient.GetAsync($"https://www.edsm.net/api-v1/system?systemName={encSys}&showInformation=1", ct);
+            var bodiesTask = _httpClient.GetAsync($"https://www.edsm.net/api-system-v1/bodies?systemName={encSys}", ct);
+            var factionsTask = _httpClient.GetAsync($"https://www.edsm.net/api-system-v1/factions?systemName={encSys}", ct);
+
+            await Task.WhenAll(sysTask, bodiesTask, factionsTask);
+
+            bool isKnown = false;
+            string controllingFaction = "";
+            using (var sResp = await sysTask)
+            {
+                if (sResp.IsSuccessStatusCode)
+                {
+                    string body = await sResp.Content.ReadAsStringAsync(ct);
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                        doc.RootElement.TryGetProperty("name", out var np) &&
+                        np.ValueKind == JsonValueKind.String &&
+                        !string.IsNullOrWhiteSpace(np.GetString()))
+                    {
+                        isKnown = true;
+                        if (doc.RootElement.TryGetProperty("information", out var info) && info.ValueKind == JsonValueKind.Object)
+                            controllingFaction = GetString(info, "faction") ?? "";
+                    }
+                }
+            }
+
+            int knownBodies = 0;
+            long estValue = 0;
+            using (var bResp = await bodiesTask)
+            {
+                if (bResp.IsSuccessStatusCode)
+                {
+                    string body = await bResp.Content.ReadAsStringAsync(ct);
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                        doc.RootElement.TryGetProperty("bodies", out var bArr) &&
+                        bArr.ValueKind == JsonValueKind.Array)
+                    {
+                        knownBodies = bArr.GetArrayLength();
+                        foreach (var b in bArr.EnumerateArray())
+                        {
+                            string subType = GetString(b, "subType") ?? "";
+                            string terra = GetString(b, "terraformingState") ?? "";
+                            bool isTerraformable = terra.Contains("Terraformable", StringComparison.OrdinalIgnoreCase);
+                            estValue += EstimateEdsmBodyValue(subType, isTerraformable);
+                        }
+                    }
+                }
+            }
+
+            var factions = new List<SystemFactionItem>();
+            using (var fResp = await factionsTask)
+            {
+                if (fResp.IsSuccessStatusCode)
+                {
+                    string body = await fResp.Content.ReadAsStringAsync(ct);
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        if (string.IsNullOrWhiteSpace(controllingFaction) &&
+                            doc.RootElement.TryGetProperty("controllingFaction", out var cf) &&
+                            cf.ValueKind == JsonValueKind.Object)
+                        {
+                            controllingFaction = GetString(cf, "name") ?? "";
+                        }
+
+                        if (doc.RootElement.TryGetProperty("factions", out var fArr) && fArr.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var f in fArr.EnumerateArray())
+                            {
+                                string fName = GetString(f, "name") ?? "";
+                                if (string.IsNullOrWhiteSpace(fName)) continue;
+                                double inf = Math.Round((GetDouble(f, "influence") ?? 0) * 100.0, 1);
+                                factions.Add(new SystemFactionItem
+                                {
+                                    Name = fName,
+                                    InfluencePercent = inf,
+                                    FactionState = GetString(f, "state") ?? "None",
+                                    Government = GetString(f, "government") ?? "",
+                                    Allegiance = GetString(f, "allegiance") ?? ""
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            var intel = new EdsmSystemDiscoveryIntel
+            {
+                SystemName = systemName,
+                IsKnownInEdsm = isKnown,
+                KnownBodiesCount = knownBodies,
+                EstimatedScanValue = estValue,
+                ControllingFaction = controllingFaction,
+                Factions = factions.OrderByDescending(static f => f.InfluencePercent).ToList(),
+                FetchedAtUtc = DateTimeOffset.UtcNow
+            };
+
+            _fileWatcher.ApplyCapiEnrichment(state =>
+            {
+                if (string.Equals(state.CurrentSystem, systemName, StringComparison.OrdinalIgnoreCase))
+                {
+                    state.EdsmDiscoveryIntel = intel;
+                    if (state.SystemFactions.Count == 0 && intel.Factions.Count > 0)
+                        state.SystemFactions = intel.Factions.Select(static f => f.Snapshot()).ToList();
+                }
+            });
+
+            EdsmDiscoveryUpdated?.Invoke(intel);
+            return intel;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static long EstimateEdsmBodyValue(string subType, bool terraformable)
+    {
+        if (subType.Contains("Earth-like", StringComparison.OrdinalIgnoreCase)) return 1_126_000;
+        if (subType.Contains("Ammonia world", StringComparison.OrdinalIgnoreCase)) return 597_000;
+        if (subType.Contains("Water world", StringComparison.OrdinalIgnoreCase)) return terraformable ? 1_119_000 : 415_000;
+        if (subType.Contains("High metal content", StringComparison.OrdinalIgnoreCase)) return terraformable ? 683_000 : 14_000;
+        if (subType.Contains("Rocky body", StringComparison.OrdinalIgnoreCase) && terraformable) return 540_000;
+        if (subType.Contains("Class II gas giant", StringComparison.OrdinalIgnoreCase)) return 28_000;
+        return 1_500;
+    }
+
+    /// <summary>
+    /// Builds a direct Inara web deep-link URL for a system, station, commodity, or commander.
+    /// </summary>
+    public static string BuildInaraDeepLink(string kind, string target)
+    {
+        string clean = Uri.EscapeDataString((target ?? "").Trim());
+        return kind.ToLowerInvariant() switch
+        {
+            "system" => $"https://inara.cz/elite/starsystem/?search={clean}",
+            "station" => $"https://inara.cz/elite/station/?search={clean}",
+            "commodity" => $"https://inara.cz/elite/commodity/?search={clean}",
+            "commander" => $"https://inara.cz/elite/cmdr/?search={clean}",
+            _ => $"https://inara.cz/elite/search/?search={clean}"
+        };
+    }
+
+    /// <summary>
+    /// Queries Inara Read API (getCommanderProfile) for the active or specified commander.
+    /// Gated by AppConfig.EnableInaraSync.
+    /// </summary>
+    public async Task<(bool Success, InaraCommanderProfile? Profile, string Message)> FetchInaraCommanderProfileAsync(
+        string? commanderName = null,
+        CancellationToken ct = default)
+    {
+        var cfg = _configService.Current;
+        if (!cfg.EnableInaraSync)
+            return (false, null, "Inara integration is disabled.");
+
+        string targetCmdr = CleanCommanderName(commanderName ?? cfg.InaraCommanderName, _fileWatcher.State.CommanderName);
+        if (string.IsNullOrWhiteSpace(targetCmdr))
+            return (false, null, "Commander name is required.");
+
+        string apiKey = string.IsNullOrWhiteSpace(cfg.InaraApiKey) ? "anonymous" : cfg.InaraApiKey.Trim();
+        var payload = new
+        {
+            header = new
+            {
+                appName = SoftwareName,
+                appVersion = SoftwareVersion,
+                isBeingDeveloped = false,
+                APIkey = apiKey,
+                commanderName = targetCmdr
+            },
+            events = new[]
+            {
+                new
+                {
+                    eventName = "getCommanderProfile",
+                    eventTimestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    eventData = new { searchName = targetCmdr }
+                }
+            }
+        };
+
+        try
+        {
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var resp = await _httpClient.PostAsync(InaraEndpoint, content, ct);
+            if (!resp.IsSuccessStatusCode)
+                return (false, null, $"Inara HTTP {(int)resp.StatusCode}");
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            if (!doc.RootElement.TryGetProperty("events", out var evArr) || evArr.ValueKind != JsonValueKind.Array || evArr.GetArrayLength() == 0)
+                return (false, null, "Inara returned no profile data.");
+
+            var ev0 = evArr[0];
+            if (!ev0.TryGetProperty("eventData", out var ed) || ed.ValueKind != JsonValueKind.Object)
+                return (false, null, "Commander not found on Inara.");
+
+            string sqName = "";
+            string sqRank = "";
+            if (ed.TryGetProperty("commanderSquadron", out var sq) && sq.ValueKind == JsonValueKind.Object)
+            {
+                sqName = GetString(sq, "squadronName") ?? "";
+                sqRank = GetString(sq, "squadronMemberRank") ?? "";
+            }
+
+            var profile = new InaraCommanderProfile
+            {
+                CommanderName = GetString(ed, "commanderName") ?? targetCmdr,
+                SquadronName = sqName,
+                SquadronRank = sqRank,
+                PreferredAllegiance = GetString(ed, "preferredAllegianceName") ?? "",
+                InaraUrl = GetString(ed, "inaraURL") ?? BuildInaraDeepLink("commander", targetCmdr),
+                FetchedAtUtc = DateTimeOffset.UtcNow
+            };
+
+            _fileWatcher.ApplyCapiEnrichment(state => state.InaraProfile = profile);
+            return (true, profile, $"Inara profile loaded: {profile.CommanderName}");
+        }
+        catch (Exception ex)
+        {
+            return (false, null, $"Inara error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Queries Inara Read API (getCommunityGoalsRecent) as an automatic fallback when Frontier cAPI is unavailable.
+    /// Gated by AppConfig.EnableInaraSync.
+    /// </summary>
+    public async Task<(bool Success, List<CommunityGoalItem> Goals, string Message)> FetchInaraCommunityGoalsAsync(CancellationToken ct = default)
+    {
+        var cfg = _configService.Current;
+        if (!cfg.EnableInaraSync)
+            return (false, new List<CommunityGoalItem>(), "Inara integration is disabled.");
+
+        string cmdr = CleanCommanderName(cfg.InaraCommanderName, _fileWatcher.State.CommanderName);
+        string apiKey = string.IsNullOrWhiteSpace(cfg.InaraApiKey) ? "anonymous" : cfg.InaraApiKey.Trim();
+
+        var payload = new
+        {
+            header = new
+            {
+                appName = SoftwareName,
+                appVersion = SoftwareVersion,
+                isBeingDeveloped = false,
+                APIkey = apiKey,
+                commanderName = string.IsNullOrWhiteSpace(cmdr) ? "Commander" : cmdr
+            },
+            events = new[]
+            {
+                new
+                {
+                    eventName = "getCommunityGoalsRecent",
+                    eventTimestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    eventData = new { }
+                }
+            }
+        };
+
+        try
+        {
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var resp = await _httpClient.PostAsync(InaraEndpoint, content, ct);
+            if (!resp.IsSuccessStatusCode)
+                return (false, new List<CommunityGoalItem>(), $"Inara CG HTTP {(int)resp.StatusCode}");
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            var goals = new List<CommunityGoalItem>();
+            if (doc.RootElement.TryGetProperty("events", out var evArr) && evArr.ValueKind == JsonValueKind.Array && evArr.GetArrayLength() > 0 &&
+                evArr[0].TryGetProperty("eventData", out var cgArr) && cgArr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var g in cgArr.EnumerateArray())
+                {
+                    if (g.ValueKind != JsonValueKind.Object) continue;
+                    bool isCompleted = g.TryGetProperty("isCompleted", out var ic) && ic.ValueKind == JsonValueKind.True;
+                    if (isCompleted) continue;
+                    string title = GetString(g, "communitygoalName") ?? "";
+                    if (string.IsNullOrWhiteSpace(title)) continue;
+                    string expRaw = GetString(g, "goalExpiry") ?? "";
+                    string expDisp = DateTimeOffset.TryParse(expRaw, out var dt)
+                        ? dt.ToLocalTime().ToString("dd/MM HH:mm", System.Globalization.CultureInfo.CurrentCulture)
+                        : expRaw;
+
+                    goals.Add(new CommunityGoalItem
+                    {
+                        Id = GetLong(g, "communitygoalGameID") ?? 0,
+                        Title = title,
+                        StarSystem = GetString(g, "starsystemName") ?? "",
+                        StationName = GetString(g, "stationName") ?? "",
+                        ExpiryDisplay = expDisp,
+                        CurrentTotal = GetLong(g, "contributionsTotal") ?? 0,
+                        PlayerContribution = 0
+                    });
+                }
+            }
+
+            if (goals.Count > 0)
+            {
+                _fileWatcher.ApplyCapiEnrichment(state =>
+                {
+                    if (state.CommunityGoals.Count == 0)
+                        state.CommunityGoals = goals;
+                });
+            }
+
+            return (true, goals, $"Inara CGs: {goals.Count}");
+        }
+        catch (Exception ex)
+        {
+            return (false, new List<CommunityGoalItem>(), $"Inara CG error: {ex.Message}");
         }
     }
 
@@ -966,6 +1370,7 @@ public sealed class CommunitySyncService : IDisposable
 
             if (headerStatus is 200 or 202 or 204)
             {
+                InaraUploadedCount += batch.Count;
                 UpdateStatus($"Inara OK ({batch.Count} ev · {DateTime.Now:HH:mm:ss})", increment: true);
                 return $"Inara OK ({batch.Count} ev)";
             }
@@ -1066,31 +1471,31 @@ public sealed class CommunitySyncService : IDisposable
     // Utilidades JSON
     // =========================================================================
 
-    private static string CleanCommanderName(string configured, string fallback)
-    {
-        string raw = !string.IsNullOrWhiteSpace(configured) ? configured : fallback;
-        return (raw ?? "").Replace("CMDR ", "", StringComparison.OrdinalIgnoreCase).Trim();
-    }
+    private static string CleanCommanderName(string configured, string fallback) =>
+        HttpClientHeaderDefaults.CleanCommanderName(!string.IsNullOrWhiteSpace(configured) ? configured : fallback);
 
-    private static Dictionary<string, object?> SanitizeElementToDictionary(JsonElement obj)
+    internal static Dictionary<string, object?> SanitizeElementToDictionary(JsonElement obj, bool preserveLatLon = false)
     {
         var dict = new Dictionary<string, object?>();
         if (obj.ValueKind != JsonValueKind.Object)
             return dict;
         foreach (var prop in obj.EnumerateObject())
         {
-            if (prop.Name.EndsWith("_Localised", StringComparison.OrdinalIgnoreCase) ||
-                EddnForbiddenKeys.Contains(prop.Name))
+            if (prop.Name.EndsWith("_Localised", StringComparison.OrdinalIgnoreCase))
                 continue;
-            dict[prop.Name] = SanitizeJsonValue(prop.Value);
+            if (EddnForbiddenKeys.Contains(prop.Name) &&
+                !(preserveLatLon && (prop.Name.Equals("Latitude", StringComparison.OrdinalIgnoreCase) ||
+                                     prop.Name.Equals("Longitude", StringComparison.OrdinalIgnoreCase))))
+                continue;
+            dict[prop.Name] = SanitizeJsonValue(prop.Value, preserveLatLon);
         }
         return dict;
     }
 
-    private static object? SanitizeJsonValue(JsonElement el) => el.ValueKind switch
+    private static object? SanitizeJsonValue(JsonElement el, bool preserveLatLon = false) => el.ValueKind switch
     {
-        JsonValueKind.Object => SanitizeElementToDictionary(el),
-        JsonValueKind.Array => el.EnumerateArray().Select(SanitizeJsonValue).ToList(),
+        JsonValueKind.Object => SanitizeElementToDictionary(el, preserveLatLon),
+        JsonValueKind.Array => el.EnumerateArray().Select(item => SanitizeJsonValue(item, preserveLatLon)).ToList(),
         JsonValueKind.String => el.GetString(),
         JsonValueKind.Number => el.TryGetInt64(out long l) ? l : el.GetDouble(),
         JsonValueKind.True => true,
@@ -1119,17 +1524,7 @@ public sealed class CommunitySyncService : IDisposable
         _ => null
     };
 
-    private static string? GetString(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-
-    private static long? GetLong(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out long n) ? n : null;
-
-    private static int? GetInt(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : null;
-
-    private static double? GetDouble(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double n) ? n : null;
+    private static string? GetString(JsonElement el, string prop) => GetStr(el, prop);
 
     private void UpdateStatus(string status, bool increment)
     {
@@ -1144,15 +1539,18 @@ public sealed class CommunitySyncService : IDisposable
 
     public void Dispose()
     {
-        _flushTimer.Stop();
+        _gameEvents.JournalEventReceived -= OnJournalEventReceived;
+        _fileWatcher.SnapshotFileUpdated -= OnSnapshotFileUpdated;
+        try { _flushLoopCts.Cancel(); } catch (ObjectDisposedException) { }
         _flushTimer.Dispose();
+        _flushLoopCts.Dispose();
         try
         {
-            FlushQueuesAsync(forceInara: true).Wait(TimeSpan.FromSeconds(3));
+            Task.Run(() => FlushQueuesAsync(forceInara: true)).Wait(TimeSpan.FromSeconds(2));
         }
         catch
         {
-            // Ignorar timeout al cerrar
+            // Ignore timeout on shutdown
         }
         _httpClient.Dispose();
         _flushGate.Dispose();

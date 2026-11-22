@@ -23,6 +23,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using HUDnopy.Models;
+using static HUDnopy.Services.JsonElementExtensions;
 
 namespace HUDnopy.Services;
 
@@ -41,9 +42,11 @@ public sealed class FrontierCapiService : IDisposable
 
     private readonly ConfigService _configService;
     private readonly EliteFileWatcherService _fileWatcher;
+    private readonly GameEventHub _gameEvents;
     private readonly HttpClient _httpClient;
     private readonly string _tokenFilePath;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
+    private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
 
     private CapiTokenStore? _tokens;
     private DateTimeOffset _lastAutoSyncUtc = DateTimeOffset.MinValue;
@@ -67,16 +70,12 @@ public sealed class FrontierCapiService : IDisposable
     {
         _configService = configService;
         _fileWatcher = fileWatcher;
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("HUDnopy", "0.1"));
-
-        string dataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HUDnopy");
-        _tokenFilePath = Path.Combine(dataDir, "frontier_capi.dat");
+        _gameEvents = gameEvents;
+        _httpClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(20));
+        _tokenFilePath = HttpClientHeaderDefaults.GetLocalDataPath("frontier_capi.dat");
 
         LoadTokensFromDisk();
-        gameEvents.JournalEventReceived += OnJournalEventReceived;
+        _gameEvents.JournalEventReceived += OnJournalEventReceived;
     }
 
     public string GetRedirectUri() => PublicRedirectUri;
@@ -245,12 +244,22 @@ public sealed class FrontierCapiService : IDisposable
             return _tokens.AccessToken;
         }
 
-        string clientId = GetEffectiveClientId();
-        if (string.IsNullOrWhiteSpace(_tokens.RefreshToken))
-            return null;
-
+        await _tokenRefreshLock.WaitAsync(ct);
         try
         {
+            // Re-check after acquiring lock in case another caller just refreshed the rotating token
+            if (_tokens is null)
+                return null;
+            if (!string.IsNullOrWhiteSpace(_tokens.AccessToken) &&
+                DateTimeOffset.UtcNow < _tokens.ExpiresAtUtc.AddMinutes(-2))
+            {
+                return _tokens.AccessToken;
+            }
+
+            string clientId = GetEffectiveClientId();
+            if (string.IsNullOrWhiteSpace(_tokens.RefreshToken))
+                return null;
+
             using var form = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("grant_type", "refresh_token"),
@@ -266,6 +275,10 @@ public sealed class FrontierCapiService : IDisposable
         catch
         {
             return null;
+        }
+        finally
+        {
+            _tokenRefreshLock.Release();
         }
     }
 
@@ -455,10 +468,62 @@ public sealed class FrontierCapiService : IDisposable
             }
         }
 
+        var storedModules = new List<StoredModuleItem>();
+        if (root.TryGetProperty("modules", out var modsProp))
+        {
+            IEnumerable<JsonElement> modEntries = modsProp.ValueKind switch
+            {
+                JsonValueKind.Array => modsProp.EnumerateArray(),
+                JsonValueKind.Object => modsProp.EnumerateObject().Select(static p => p.Value),
+                _ => Enumerable.Empty<JsonElement>()
+            };
+
+            foreach (var m in modEntries)
+            {
+                if (m.ValueKind != JsonValueKind.Object) continue;
+                string rawName = GetStr(m, "name") ?? "";
+                if (string.IsNullOrWhiteSpace(rawName)) continue;
+                string locName = GetStr(m, "locName") ?? ModuleDisplayCatalog.Format(rawName, _configService.Current.InterfaceLanguage);
+                string sys = m.TryGetProperty("starsystem", out var sy) ? (GetStr(sy, "name") ?? "") : "";
+                string sta = m.TryGetProperty("station", out var st) ? (GetStr(st, "name") ?? "") : "";
+                long price = GetLong(m, "value") ?? GetLong(m, "cost") ?? 0;
+                string eng = "";
+                if (m.TryGetProperty("recipeName", out var rn) && rn.ValueKind == JsonValueKind.String)
+                {
+                    eng = rn.GetString() ?? "";
+                    if (GetLong(m, "recipeLevel") is long lvl && lvl > 0)
+                        eng = $"{eng} G{lvl}";
+                }
+
+                storedModules.Add(new StoredModuleItem
+                {
+                    Name = rawName,
+                    DisplayName = string.IsNullOrWhiteSpace(locName) ? rawName : locName,
+                    StarSystem = string.IsNullOrWhiteSpace(sys) ? "—" : sys,
+                    StationName = string.IsNullOrWhiteSpace(sta) ? "—" : sta,
+                    BuyPrice = price,
+                    Engineering = eng
+                });
+            }
+        }
+
+        string? capiSuit = null;
+        string? capiLoadout = null;
+        if (root.TryGetProperty("suit", out var suitObj) && suitObj.ValueKind == JsonValueKind.Object)
+            capiSuit = GetStr(suitObj, "locName") ?? GetStr(suitObj, "name");
+        if (root.TryGetProperty("loadout", out var loadoutObj) && loadoutObj.ValueKind == JsonValueKind.Object)
+            capiLoadout = GetStr(loadoutObj, "name");
+
         _fileWatcher.ApplyCapiEnrichment(state =>
         {
             if (ships.Count > 0)
                 state.StoredShips = ships.OrderBy(static s => s.StarSystem, StringComparer.CurrentCultureIgnoreCase).ThenBy(static s => s.ShipType).ToList();
+            if (storedModules.Count > 0)
+                state.StoredModules = storedModules.OrderBy(static m => m.StarSystem, StringComparer.CurrentCultureIgnoreCase).ThenBy(static m => m.DisplayName).ToList();
+            if (!string.IsNullOrWhiteSpace(capiSuit) && string.IsNullOrWhiteSpace(state.ActiveSuit))
+                state.ActiveSuit = capiSuit;
+            if (!string.IsNullOrWhiteSpace(capiLoadout) && string.IsNullOrWhiteSpace(state.ActiveSuitLoadout))
+                state.ActiveSuitLoadout = capiLoadout;
 
             // If the game is closed, populate basic commander data from /profile
             if (!state.IsGameDetected)
@@ -494,6 +559,9 @@ public sealed class FrontierCapiService : IDisposable
         long? balance = GetLong(root, "balance");
         long? reserve = root.TryGetProperty("finance", out var fin) ? GetLong(fin, "bankReservedBalance") : null;
         long? available = root.TryGetProperty("finance", out var fin2) ? GetLong(fin2, "bankBalance") : balance;
+        long? weeklyUpkeep = root.TryGetProperty("finance", out var fin3)
+            ? (GetLong(fin3, "maintenance") ?? GetLong(fin3, "maintenanceToDate"))
+            : null;
         string dockingAccess = GetStr(root, "dockingAccess") ?? "";
         bool? allowNotorious = root.TryGetProperty("notoriousAccess", out var na) && na.ValueKind is JsonValueKind.True or JsonValueKind.False
             ? na.GetBoolean() : null;
@@ -531,6 +599,69 @@ public sealed class FrontierCapiService : IDisposable
             }
         }
 
+        var marketOrders = new List<CarrierMarketOrderItem>();
+        if (root.TryGetProperty("market", out var mktObj) && mktObj.ValueKind == JsonValueKind.Object &&
+            mktObj.TryGetProperty("commodities", out var mktArr) && mktArr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var c in mktArr.EnumerateArray())
+            {
+                if (c.ValueKind != JsonValueKind.Object) continue;
+                string comm = GetStr(c, "locName") ?? GetStr(c, "name") ?? "";
+                if (string.IsNullOrWhiteSpace(comm)) continue;
+                int stock = (int)(GetLong(c, "stock") ?? 0);
+                int demand = (int)(GetLong(c, "demand") ?? 0);
+                long buyPrice = GetLong(c, "buyPrice") ?? 0;
+                long sellPrice = GetLong(c, "sellPrice") ?? 0;
+                if (stock > 0 && buyPrice > 0)
+                    marketOrders.Add(new CarrierMarketOrderItem { Commodity = comm, OrderType = "Sell", Quantity = stock, Price = buyPrice });
+                if (demand > 0 && sellPrice > 0)
+                    marketOrders.Add(new CarrierMarketOrderItem { Commodity = comm, OrderType = "Buy", Quantity = demand, Price = sellPrice });
+            }
+        }
+
+        var carrierServices = new List<string>();
+        if (root.TryGetProperty("servicesCrew", out var crewObj) && crewObj.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var svc in crewObj.EnumerateObject())
+            {
+                if (svc.Value.ValueKind == JsonValueKind.Object &&
+                    GetStr(svc.Value, "status")?.Equals("active", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    carrierServices.Add(svc.Name);
+                }
+            }
+        }
+
+        var bartenderOrders = new List<CarrierMaterialItem>();
+        if (root.TryGetProperty("orders", out var ordersObj) && ordersObj.ValueKind == JsonValueKind.Object &&
+            ordersObj.TryGetProperty("onfootmicroresources", out var microObj) && microObj.ValueKind == JsonValueKind.Object)
+        {
+            if (microObj.TryGetProperty("sales", out var salesObj) && salesObj.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in salesObj.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind != JsonValueKind.Object) continue;
+                    string itemName = GetStr(prop.Value, "locName") ?? GetStr(prop.Value, "name") ?? prop.Name;
+                    int stock = (int)(GetLong(prop.Value, "stock") ?? 0);
+                    long price = GetLong(prop.Value, "price") ?? 0;
+                    if (!string.IsNullOrWhiteSpace(itemName) && stock > 0)
+                        bartenderOrders.Add(new CarrierMaterialItem { Name = prop.Name, DisplayName = itemName, Stock = stock, Demand = 0, Price = price });
+                }
+            }
+            if (microObj.TryGetProperty("purchases", out var purchObj) && purchObj.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in purchObj.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind != JsonValueKind.Object) continue;
+                    string itemName = GetStr(prop.Value, "locName") ?? GetStr(prop.Value, "name") ?? prop.Name;
+                    int demand = (int)(GetLong(prop.Value, "outstanding") ?? GetLong(prop.Value, "total") ?? 0);
+                    long price = GetLong(prop.Value, "price") ?? 0;
+                    if (!string.IsNullOrWhiteSpace(itemName) && demand > 0)
+                        bartenderOrders.Add(new CarrierMaterialItem { Name = prop.Name, DisplayName = itemName, Stock = 0, Demand = demand, Price = price });
+                }
+            }
+        }
+
         _fileWatcher.ApplyCapiEnrichment(state =>
         {
             var carrier = state.Carrier?.Id == id ? state.Carrier.Snapshot() : new CarrierState { Id = id };
@@ -541,6 +672,7 @@ public sealed class FrontierCapiService : IDisposable
             if (balance.HasValue) carrier.Balance = balance;
             if (reserve.HasValue) carrier.Reserve = reserve;
             if (available.HasValue) carrier.Available = available;
+            if (weeklyUpkeep.HasValue && weeklyUpkeep.Value > 0) carrier.WeeklyUpkeep = weeklyUpkeep;
             if (!string.IsNullOrWhiteSpace(dockingAccess)) carrier.DockingAccess = dockingAccess;
             if (allowNotorious.HasValue) carrier.AllowNotorious = allowNotorious;
             if (totalCap.HasValue) carrier.Capacity = totalCap;
@@ -560,7 +692,104 @@ public sealed class FrontierCapiService : IDisposable
                 })
                 .OrderByDescending(static i => i.Quantity)
                 .ToList();
+            state.CarrierMarketOrders = marketOrders
+                .OrderBy(static o => o.OrderType, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(static o => o.Quantity)
+                .ToList();
+            if (carrierServices.Count > 0)
+                state.CarrierServices = carrierServices;
+            if (bartenderOrders.Count > 0 && state.CarrierMaterials.Count == 0)
+            {
+                state.CarrierMaterials = bartenderOrders;
+                state.CarrierMaterialsStation = !string.IsNullOrWhiteSpace(decodedName) ? decodedName : callsign;
+            }
         });
+    }
+
+    /// <summary>
+    /// Fetches official Frontier cAPI /journal history for a given UTC date (default: today).
+    /// Requires EnableFrontierCapi to be enabled and connected.
+    /// </summary>
+    public async Task<(bool Success, int LineCount, string Message)> FetchJournalHistoryAsync(DateTime? dateUtc = null, CancellationToken ct = default)
+    {
+        if (!_configService.Current.EnableFrontierCapi || !IsConnected)
+            return (false, 0, "Frontier cAPI is disabled or not connected.");
+
+        string? token = await EnsureValidAccessTokenAsync(ct);
+        if (string.IsNullOrWhiteSpace(token))
+            return (false, 0, "Frontier cAPI token expired.");
+
+        DateTime target = (dateUtc ?? DateTime.UtcNow).Date;
+        string endpoint = $"/journal/{target:yyyy/MM/dd}";
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, CapiBaseUrl + endpoint);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var resp = await _httpClient.SendAsync(req, ct);
+            if ((int)resp.StatusCode == 204)
+                return (true, 0, $"Frontier /journal ({target:yyyy-MM-dd}): no entries.");
+            if (!resp.IsSuccessStatusCode)
+                return (false, 0, $"Frontier /journal HTTP {(int)resp.StatusCode}");
+
+            string raw = await resp.Content.ReadAsStringAsync(ct);
+            var (lines, summary) = SummarizeJournalLines(raw, target);
+            UpdateStatus(summary);
+            return (true, lines, summary);
+        }
+        catch (Exception ex)
+        {
+            return (false, 0, $"Frontier /journal error: {ex.Message}");
+        }
+    }
+
+    internal static (int LineCount, string Summary) SummarizeJournalLines(string rawJsonl, DateTime dateUtc)
+    {
+        string[] rawLines = rawJsonl.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        int jumps = 0, scans = 0, organics = 0, missions = 0;
+        long earnedCredits = 0;
+        var systems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (string line in rawLines)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                string evt = GetStr(root, "event") ?? "";
+                switch (evt)
+                {
+                    case "FSDJump":
+                        jumps++;
+                        string? sys = GetStr(root, "StarSystem");
+                        if (!string.IsNullOrWhiteSpace(sys)) systems.Add(sys);
+                        break;
+                    case "Scan":
+                        scans++;
+                        break;
+                    case "ScanOrganic":
+                        if (string.Equals(GetStr(root, "ScanType"), "Analyse", StringComparison.OrdinalIgnoreCase))
+                            organics++;
+                        break;
+                    case "MissionCompleted":
+                        missions++;
+                        earnedCredits += GetLong(root, "Reward") ?? 0;
+                        break;
+                    case "RedeemVoucher":
+                        earnedCredits += GetLong(root, "Amount") ?? 0;
+                        break;
+                    case "MultiSellExplorationData" or "SellExplorationData" or "SellOrganicData":
+                        earnedCredits += GetLong(root, "TotalEarnings") ?? 0;
+                        break;
+                }
+            }
+            catch
+            {
+                // Skip malformed line
+            }
+        }
+
+        string summary = $"Frontier /journal ({dateUtc:yyyy-MM-dd}): {rawLines.Length} events · {jumps} jumps ({systems.Count} systems) · {scans} scans · {organics} exo · {missions} missions · {earnedCredits:N0} CR earned";
+        return (rawLines.Length, summary);
     }
 
     private void ApplyCommunityGoalsJson(JsonElement root)
@@ -796,15 +1025,6 @@ public sealed class FrontierCapiService : IDisposable
         }
     }
 
-    private static string? GetStr(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-
-    private static string? GetStr(JsonElement el, string parent, string prop) =>
-        el.TryGetProperty(parent, out var p) && p.ValueKind == JsonValueKind.Object ? GetStr(p, prop) : null;
-
-    private static long? GetLong(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out long n) ? n : null;
-
     private void UpdateStatus(string status)
     {
         LastStatus = status;
@@ -813,7 +1033,9 @@ public sealed class FrontierCapiService : IDisposable
 
     public void Dispose()
     {
+        _gameEvents.JournalEventReceived -= OnJournalEventReceived;
         _httpClient.Dispose();
         _syncLock.Dispose();
+        _tokenRefreshLock.Dispose();
     }
 }

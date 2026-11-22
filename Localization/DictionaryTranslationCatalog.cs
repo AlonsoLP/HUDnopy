@@ -7,7 +7,7 @@
 // Description: Base loader and parity validator for JSON-backed translation dictionaries.
 // -----------------------------------------------------------------------------
 
-using System.Collections.ObjectModel;
+using System.Collections.Frozen;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -56,8 +56,8 @@ internal static partial class DictionaryTranslationCatalog
                     throw new InvalidDataException($"Los parámetros de {section} no coinciden: {language}/{key}.");
                 _ = string.Format(CultureInfo.InvariantCulture, value, DummyFormatArgs);
             }
-            catalog.Add(language, new ReadOnlyDictionary<string, string>(text));
+            catalog.Add(language, text.ToFrozenDictionary(StringComparer.Ordinal));
         }
-        return catalog;
+        return catalog.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
     }
 }

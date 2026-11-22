@@ -30,7 +30,8 @@ public sealed partial class AiCopilotService
         AppConfig cfg,
         byte[] wavBytes,
         string? requiredWakeWord = null,
-        SentenceStreamSpeaker? streamSpeaker = null)
+        SentenceStreamSpeaker? streamSpeaker = null,
+        List<(string Role, string Content)>? history = null)
     {
         if (string.IsNullOrWhiteSpace(cfg.AiGeminiApiKey) || string.IsNullOrWhiteSpace(cfg.AiGeminiModel))
             return (false, "Configura tu Gemini API Key y modelo en AJUSTES.");
@@ -46,27 +47,36 @@ public sealed partial class AiCopilotService
             ? "Escucha el mensaje de voz del comandante y responde directamente. Si solo pide silencio o parar de hablar, responde únicamente [[SILENCE]]."
             : $"Escucha el audio adjunto. Si el hablante NO pronuncia la palabra de activación '{requiredWakeWord}', responde ÚNICAMENTE [[IGNORE]]. Si pide silencio o parar de hablar, responde ÚNICAMENTE [[SILENCE]]. En caso contrario, responde directamente.";
 
-        var contents = new object[]
+        var contentsList = new List<object>();
+        if (history is { Count: > 0 })
         {
-            new
+            foreach (var (role, content) in history)
             {
-                role = "user",
-                parts = new object[]
+                contentsList.Add(new
                 {
-                    new { text = audioInstruction },
-                    new
+                    role = role == "assistant" ? "model" : "user",
+                    parts = new object[] { new { text = content } }
+                });
+            }
+        }
+        contentsList.Add(new
+        {
+            role = "user",
+            parts = new object[]
+            {
+                new { text = audioInstruction },
+                new
+                {
+                    inline_data = new
                     {
-                        inline_data = new
-                        {
-                            mime_type = "audio/wav",
-                            data = Convert.ToBase64String(wavBytes)
-                        }
+                        mime_type = "audio/wav",
+                        data = Convert.ToBase64String(wavBytes)
                     }
                 }
             }
-        };
+        });
 
-        return await StreamGeminiInternalAsync(cfg, model, systemPrompt, contents, thinkingBudget, streamSpeaker, isAudio: true);
+        return await StreamGeminiInternalAsync(cfg, model, systemPrompt, contentsList.ToArray(), thinkingBudget, streamSpeaker, isAudio: true);
     }
 
     private async Task<(bool Success, string Transcript)> TranscribeWithWhisperAsync(AppConfig cfg, byte[] wavBytes)
@@ -81,11 +91,32 @@ public sealed partial class AiCopilotService
 
         try
         {
+            string isoLang = (cfg.InterfaceLanguage ?? "en-GB").Split('-')[0].Trim().ToLowerInvariant();
+            string wake = string.IsNullOrWhiteSpace(cfg.AiWakeWord) ? "COVAS" : cfg.AiWakeWord.Trim();
+            var vocabTerms = new List<string>
+            {
+                wake, "Elite Dangerous", "FSD", "Supercruise", "Hyperspace", "Spansh", "GalNet",
+                "EDSM", "Inara", "Tritium", "Limpets", "SRV", "AFMU", "Thargoid", "Guardian", "DSSA",
+                "Platinum", "Painite", "Monazite", "Sol", "Colonia", "Sagittarius A*", "Shinrarta Dezhra", "Jameson Memorial"
+            };
+            if (cfg.AiVoiceMacros is { Count: > 0 })
+            {
+                foreach (var macro in cfg.AiVoiceMacros.Take(8))
+                {
+                    string firstAlias = (macro.TriggerPhrase ?? "").Split(',')[0].Trim();
+                    if (!string.IsNullOrWhiteSpace(firstAlias))
+                        vocabTerms.Add(firstAlias);
+                }
+            }
+
             using var form = new MultipartFormDataContent();
             var audioContent = new ByteArrayContent(wavBytes);
             audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
             form.Add(audioContent, "file", "voice.wav");
             form.Add(new StringContent(whisperModel), "model");
+            if (isoLang.Length == 2)
+                form.Add(new StringContent(isoLang), "language");
+            form.Add(new StringContent(string.Join(", ", vocabTerms.Distinct(StringComparer.OrdinalIgnoreCase))), "prompt");
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.AiOpenAiApiKey.Trim());
@@ -105,7 +136,7 @@ public sealed partial class AiCopilotService
         }
     }
 
-    private static (bool Success, string Transcript) TranscribeWithWindowsSpeech(byte[] wavBytes, string language)
+    private static (bool Success, string Transcript) TranscribeWithWindowsSpeech(byte[] wavBytes, string language, AppConfig? cfg = null)
     {
         try
         {
@@ -118,6 +149,40 @@ public sealed partial class AiCopilotService
                 return (false, "No hay reconocedor de voz de Windows instalado para dictado local. Usa Gemini/Groq o escribe tu consulta.");
 
             using var engine = new SpeechRecognitionEngine(recognizerInfo);
+
+            // Load a high-priority phrase grammar with wake word, silence/repeat commands, and user voice macros
+            var phrases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "silencio", "stop", "silence", "repite", "repeat"
+            };
+            string wake = (cfg?.AiWakeWord ?? "COVAS").Trim();
+            if (!string.IsNullOrWhiteSpace(wake))
+                phrases.Add(wake);
+            if (cfg?.AiVoiceMacros is { Count: > 0 })
+            {
+                foreach (var macro in cfg.AiVoiceMacros)
+                {
+                    foreach (string alias in (macro.TriggerPhrase ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (!string.IsNullOrWhiteSpace(alias))
+                        {
+                            phrases.Add(alias);
+                            if (!string.IsNullOrWhiteSpace(wake))
+                                phrases.Add($"{wake} {alias}");
+                        }
+                    }
+                }
+            }
+            if (phrases.Count > 0)
+            {
+                var choices = new Choices(phrases.ToArray());
+                var macroGrammar = new Grammar(new GrammarBuilder(choices) { Culture = recognizerInfo.Culture })
+                {
+                    Weight = 1.0f
+                };
+                engine.LoadGrammar(macroGrammar);
+            }
+
             engine.LoadGrammar(new DictationGrammar());
             using var ms = new MemoryStream(wavBytes);
             engine.SetInputToWaveStream(ms);
@@ -179,24 +244,38 @@ public sealed partial class AiCopilotService
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Post, url)
+            string payloadJson = JsonSerializer.Serialize(payload);
+            HttpResponseMessage? resp = null;
+            for (int attempt = 0; attempt < 2; attempt++)
             {
-                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-            };
-            if (!string.IsNullOrWhiteSpace(apiKey))
-                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+                using var req = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
+                };
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
 
-            using var resp = await _httpClient.SendAsync(req, useStream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead);
-            if (!resp.IsSuccessStatusCode)
+                resp = await _httpClient.SendAsync(req, useStream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead);
+                if (resp.IsSuccessStatusCode || (attempt == 0 && (int)resp.StatusCode is not (429 or 503)))
+                    break;
+                if (attempt == 0 && (int)resp.StatusCode is 429 or 503)
+                {
+                    resp.Dispose();
+                    resp = null;
+                    await Task.Delay(600);
+                }
+            }
+            using var finalResp = resp!;
+            if (!finalResp.IsSuccessStatusCode)
             {
-                string errBody = await resp.Content.ReadAsStringAsync();
-                return (false, $"Error HTTP {(int)resp.StatusCode}: {Truncate(errBody, 180)}");
+                string errBody = await finalResp.Content.ReadAsStringAsync();
+                return (false, $"Error HTTP {(int)finalResp.StatusCode}: {Truncate(errBody, 180)}");
             }
 
             if (useStream)
             {
                 var full = new StringBuilder();
-                using var stream = await resp.Content.ReadAsStreamAsync();
+                using var stream = await finalResp.Content.ReadAsStreamAsync();
                 using var reader = new StreamReader(stream, Encoding.UTF8);
                 string? line;
                 while ((line = await reader.ReadLineAsync()) is not null)
@@ -232,7 +311,7 @@ public sealed partial class AiCopilotService
                 return !string.IsNullOrEmpty(streamed) ? (true, streamed) : (false, "Respuesta vacía del proveedor IA.");
             }
 
-            string body = await resp.Content.ReadAsStringAsync();
+            string body = await finalResp.Content.ReadAsStringAsync();
             using var nonStreamDoc = JsonDocument.Parse(body);
             if (nonStreamDoc.RootElement.TryGetProperty("choices", out var choices) &&
                 choices.ValueKind == JsonValueKind.Array &&
@@ -342,6 +421,11 @@ public sealed partial class AiCopilotService
         try
         {
             var (ok, statusCode, textOrErr) = await ExecuteOnceAsync(includeThinking: true);
+            if (!ok && statusCode is 429 or 503)
+            {
+                await Task.Delay(600);
+                (ok, statusCode, textOrErr) = await ExecuteOnceAsync(includeThinking: true);
+            }
             if (!ok && statusCode == 400 &&
                 textOrErr.Contains("INVALID_ARGUMENT", StringComparison.OrdinalIgnoreCase) &&
                 SupportsGeminiThinking(model))
@@ -359,6 +443,161 @@ public sealed partial class AiCopilotService
         catch (Exception ex)
         {
             return (false, $"Error de conexión {prefix}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Captures the primary display as a compact JPEG (scaled to at most <paramref name="maxWidth"/> px)
+    /// for multimodal cockpit screen vision analysis.
+    /// </summary>
+    public static byte[]? CapturePrimaryScreenJpeg(int maxWidth = 1280, long jpegQuality = 78)
+    {
+        try
+        {
+            var bounds = System.Windows.Forms.Screen.PrimaryScreen?.Bounds ?? new System.Drawing.Rectangle(0, 0, 1920, 1080);
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+                return null;
+
+            using var fullBmp = new System.Drawing.Bitmap(bounds.Width, bounds.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            using (var g = System.Drawing.Graphics.FromImage(fullBmp))
+            {
+                g.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bounds.Size, System.Drawing.CopyPixelOperation.SourceCopy);
+            }
+
+            System.Drawing.Bitmap targetBmp = fullBmp;
+            System.Drawing.Bitmap? resized = null;
+            if (bounds.Width > maxWidth)
+            {
+                int newW = maxWidth;
+                int newH = Math.Max(1, (int)Math.Round(bounds.Height * ((double)maxWidth / bounds.Width)));
+                resized = new System.Drawing.Bitmap(newW, newH, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                using (var g2 = System.Drawing.Graphics.FromImage(resized))
+                {
+                    g2.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g2.DrawImage(fullBmp, 0, 0, newW, newH);
+                }
+                targetBmp = resized;
+            }
+
+            try
+            {
+                using var ms = new MemoryStream();
+                var jpegCodec = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders()
+                    .FirstOrDefault(static c => c.FormatID == System.Drawing.Imaging.ImageFormat.Jpeg.Guid);
+                if (jpegCodec is not null)
+                {
+                    using var ep = new System.Drawing.Imaging.EncoderParameters(1);
+                    ep.Param[0] = new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality, jpegQuality);
+                    targetBmp.Save(ms, jpegCodec, ep);
+                }
+                else
+                {
+                    targetBmp.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
+                }
+                return ms.ToArray();
+            }
+            finally
+            {
+                resized?.Dispose();
+            }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<(bool Success, string Reply)> SendVisionProviderRequestAsync(
+        AppConfig cfg,
+        string systemPrompt,
+        string userPrompt,
+        byte[] jpegBytes,
+        SentenceStreamSpeaker? streamSpeaker)
+    {
+        string base64 = Convert.ToBase64String(jpegBytes);
+
+        if (string.Equals(cfg.AiActiveProvider, "gemini", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(cfg.AiGeminiApiKey) || string.IsNullOrWhiteSpace(cfg.AiGeminiModel))
+                return (false, "Configura tu Gemini API Key y modelo en AJUSTES.");
+
+            var contents = new object[]
+            {
+                new
+                {
+                    role = "user",
+                    parts = new object[]
+                    {
+                        new { text = userPrompt },
+                        new { inline_data = new { mime_type = "image/jpeg", data = base64 } }
+                    }
+                }
+            };
+            return await StreamGeminiInternalAsync(cfg, cfg.AiGeminiModel.Trim(), systemPrompt, contents, thinkingBudget: 0, streamSpeaker, isAudio: false);
+        }
+
+        // OpenAI / OpenRouter / Ollama vision-capable models (OpenAI multimodal schema)
+        bool isOllama = !string.Equals(cfg.AiActiveProvider, "openai", StringComparison.OrdinalIgnoreCase);
+        string baseUrl = isOllama ? cfg.AiOllamaEndpoint : cfg.AiOpenAiEndpoint;
+        string apiKey = isOllama ? "" : cfg.AiOpenAiApiKey;
+        string model = isOllama ? cfg.AiOllamaModel : cfg.AiOpenAiModel;
+        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(model))
+            return (false, "Configura el endpoint y el modelo del proveedor IA en AJUSTES.");
+
+        string url = baseUrl.TrimEnd('/') + "/chat/completions";
+        var payload = new Dictionary<string, object>
+        {
+            ["model"] = model.Trim(),
+            ["messages"] = new object[]
+            {
+                new { role = "system", content = systemPrompt },
+                new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "text", text = userPrompt },
+                        new { type = "image_url", image_url = new { url = $"data:image/jpeg;base64,{base64}" } }
+                    }
+                }
+            },
+            ["temperature"] = 0.5,
+            ["max_tokens"] = GetVerbosityMaxTokens(cfg),
+            ["stream"] = false
+        };
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+            if (!string.IsNullOrWhiteSpace(apiKey))
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+
+            using var resp = await _httpClient.SendAsync(req);
+            string body = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+                return (false, $"Vision HTTP {(int)resp.StatusCode}: {Truncate(body, 180)}");
+
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("choices", out var choices) &&
+                choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0 &&
+                choices[0].TryGetProperty("message", out var msgObj) &&
+                msgObj.TryGetProperty("content", out var cp))
+            {
+                string reply = cp.GetString()?.Trim() ?? "";
+                if (!string.IsNullOrWhiteSpace(reply))
+                {
+                    streamSpeaker?.Append(reply);
+                    return (true, reply);
+                }
+            }
+            return (false, "Respuesta vacía del proveedor de visión.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Error de visión IA: {ex.Message}");
         }
     }
 
@@ -408,6 +647,17 @@ public sealed partial class AiCopilotService
                 return;
             }
 
+            int queryIdx = current.IndexOf("[[QUERY", StringComparison.OrdinalIgnoreCase);
+            if (queryIdx >= 0)
+            {
+                string beforeQuery = current[..queryIdx].Trim();
+                if (!string.IsNullOrWhiteSpace(beforeQuery))
+                    EmitSentence(beforeQuery);
+                _buffer.Clear();
+                _suppressed = true;
+                return;
+            }
+
             int actionIdx = current.IndexOf("[[ACTION", StringComparison.OrdinalIgnoreCase);
             if (actionIdx >= 0)
             {
@@ -441,7 +691,7 @@ public sealed partial class AiCopilotService
 
             string rem = _buffer.ToString();
             _buffer.Clear();
-            rem = Regex.Replace(rem, @"\[\[(?:QUERY|ACTION)[:|][^\]]*\]\]", "", RegexOptions.IgnoreCase).Trim();
+            rem = DoubleBracketTagRegex().Replace(rem, "").Trim();
             if (!string.IsNullOrWhiteSpace(rem) &&
                 !rem.Contains("[[IGNORE]]", StringComparison.OrdinalIgnoreCase) &&
                 !rem.Contains("[[SILENCE]]", StringComparison.OrdinalIgnoreCase))
@@ -508,6 +758,7 @@ public sealed partial class AiCopilotService
         bool isPt = language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
 
         string creditsWord = isEs || isPt ? "créditos" : isFr ? "crédits" : isDe ? "Credits" : isRu ? "кредитов" : "credits";
+        string perHourWord = isEs || isPt ? "por hora" : isFr ? "par heure" : isDe ? "pro Stunde" : isRu ? "в час" : "per hour";
         string tonsWord = isEs || isPt ? "toneladas" : isFr ? "tonnes" : isDe ? "Tonnen" : isRu ? "тонн" : "tons";
         string lyWord = isEs ? "años luz" : isPt ? "anos-luz" : isFr ? "années-lumière" : isDe ? "Lichtjahre" : isRu ? "световых лет" : "light years";
         string lsWord = isEs ? "segundos luz" : isPt ? "segundos-luz" : isFr ? "secondes-lumière" : isDe ? "Lichtsekunden" : isRu ? "световых секунд" : "light seconds";
@@ -519,8 +770,8 @@ public sealed partial class AiCopilotService
         s = RxSpeechSymbols.Replace(s, " ");
         s = RxSpeechThousandsSep.Replace(s, "");
         s = RxSpeechFractionTons.Replace(s, $"$1 {ofWord} $2 {tonsWord}");
+        s = RxSpeechCreditsPerHour.Replace(s, $"$1 {creditsWord} {perHourWord}");
         s = RxSpeechCredits.Replace(s, $"$1 {creditsWord}");
-        s = RxSpeechCreditsPerHour.Replace(s, $"$1 {creditsWord} / h");
         s = RxSpeechTons.Replace(s, $"$1 {tonsWord}");
         s = RxSpeechLightYears.Replace(s, $"$1 {lyWord}");
         s = RxSpeechLightSeconds.Replace(s, $"$1 {lsWord}");

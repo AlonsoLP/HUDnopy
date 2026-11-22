@@ -10,15 +10,21 @@
     <RootNamespace>HUDnopy</RootNamespace>
     <AssemblyName>HUDnopy</AssemblyName>
     <Product>HUDnopy</Product>
-    <Version>0.2.0</Version>
-    <AssemblyVersion>0.2.0.0</AssemblyVersion>
-    <FileVersion>0.2.0.0</FileVersion>
-    <InformationalVersion>0.2.0</InformationalVersion>
+    <Version>0.3.0</Version>
+    <AssemblyVersion>0.3.0.0</AssemblyVersion>
+    <FileVersion>0.3.0.0</FileVersion>
+    <InformationalVersion>0.3.0</InformationalVersion>
     <Authors>AlonsoLP</Authors>
     <Copyright>Copyright (c) 2026 AlonsoLP</Copyright>
     <Description>Elite Dangerous telemetry HUD, Web MFD, Fleet Carrier manager, and AI copilot (early preview).</Description>
     <ApplicationIcon>HUDnopy.ico</ApplicationIcon>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <DefaultItemExcludes>$(DefaultItemExcludes);HUDnopy.Tests\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>

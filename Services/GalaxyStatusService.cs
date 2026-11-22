@@ -42,7 +42,8 @@ public sealed class GalaxyStatusService : IDisposable
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(10);
 
     private readonly HttpClient _httpClient;
-    private readonly System.Timers.Timer _timer;
+    private readonly PeriodicTimer _timer;
+    private readonly CancellationTokenSource _loopCts = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
 
     private GalaxyStatusSnapshot _current = GalaxyStatusSnapshot.Empty;
@@ -57,20 +58,26 @@ public sealed class GalaxyStatusService : IDisposable
 
     public GalaxyStatusService()
     {
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("HUDnopy", "0.2"));
+        _httpClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(12));
+        _timer = new PeriodicTimer(RefreshInterval);
+        _ = RunRefreshLoopAsync();
+    }
 
-        _timer = new System.Timers.Timer(RefreshInterval.TotalMilliseconds) { AutoReset = true };
-        _timer.Elapsed += async (_, _) => await RefreshAsync();
-        _timer.Start();
-
-        // Trigger initial background fetch shortly after startup.
-        _ = Task.Run(async () =>
+    private async Task RunRefreshLoopAsync()
+    {
+        try
         {
-            await Task.Delay(1500);
+            await Task.Delay(1500, _loopCts.Token);
             if (!_disposed)
-                await RefreshAsync();
-        });
+                await RefreshAsync(_loopCts.Token);
+
+            while (await _timer.WaitForNextTickAsync(_loopCts.Token))
+                await RefreshAsync(_loopCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Clean shutdown
+        }
     }
 
     /// <summary>
@@ -195,8 +202,9 @@ public sealed class GalaxyStatusService : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        _timer.Stop();
+        try { _loopCts.Cancel(); } catch (ObjectDisposedException) { }
         _timer.Dispose();
+        _loopCts.Dispose();
         _httpClient.Dispose();
         _refreshLock.Dispose();
     }

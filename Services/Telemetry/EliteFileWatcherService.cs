@@ -28,9 +28,10 @@ public partial class EliteFileWatcherService : IDisposable
 {
     private readonly ConfigService _configService;
     private readonly GameEventHub _gameEvents;
-    private readonly object _refreshLock = new();
+    private readonly Lock _refreshLock = new();
     private FileSystemWatcher? _watcher;
-    private readonly System.Timers.Timer _pollTimer;
+    private readonly PeriodicTimer _pollTimer;
+    private readonly CancellationTokenSource _pollCts = new();
     private string _currentJournalFile = "";
     private long _lastJournalPosition = 0;
     private readonly Dictionary<string, MaterialItem> _materialsInventory = new(StringComparer.OrdinalIgnoreCase);
@@ -39,7 +40,7 @@ public partial class EliteFileWatcherService : IDisposable
     private readonly Queue<string> _explorationBodyOrder = new();
     private readonly HashSet<string> _explorationHistoryResolvedSystems = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (long Length, long LastWriteUtcTicks)> _snapshotFileStamps = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _unhandledLock = new();
+    private readonly Lock _unhandledLock = new();
     private readonly Dictionary<string, UnhandledGameMessageItem> _unhandledGrouped = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<UnhandledGameMessageItem> _unhandledHistory = new();
     private readonly HashSet<string> _recordedUnhandledKeys = new(StringComparer.OrdinalIgnoreCase);
@@ -75,7 +76,8 @@ public partial class EliteFileWatcherService : IDisposable
     private int _watcherRefreshPending;
     private static int? _cachedGameProcessId;
     private static long _lastProcessScanTick;
-    private static readonly System.Net.Http.HttpClient EdsmShipyardHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly System.Net.Http.HttpClient EdsmShipyardHttp = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(10));
+    private readonly InputSimulatorService _inputSimulator;
     private string _lastEdsmShipyardLookupKey = "";
     private string _lastModuleLocalizationLang = "";
     private bool _stateDirty = true;
@@ -93,20 +95,33 @@ public partial class EliteFileWatcherService : IDisposable
         GameEventHub gameEvents)
     {
         _configService = configService;
+        _inputSimulator = inputSimulator;
         _gameEvents = gameEvents;
         _configService.ConfigChanged += OnConfigChanged;
-        inputSimulator.CommandExecuted += OnCommandExecuted;
+        _inputSimulator.CommandExecuted += OnCommandExecuted;
 
         LoadUnhandledEventsFromFile();
         if (_configService.Current.CaptureUnhandledEvents)
             ScanCurrentFolderForUnhandledMessages(notify: false);
 
-        _pollTimer = new System.Timers.Timer(1200);
-        _pollTimer.Elapsed += (_, _) => RefreshState(forcePublish: false);
+        _pollTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(1200));
 
         InitializeWatcher();
         RefreshState(forcePublish: true);
-        _pollTimer.Start();
+        _ = RunPollLoopAsync();
+    }
+
+    private async System.Threading.Tasks.Task RunPollLoopAsync()
+    {
+        try
+        {
+            while (await _pollTimer.WaitForNextTickAsync(_pollCts.Token))
+                RefreshState(forcePublish: false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Clean shutdown
+        }
     }
 
     private void OnConfigChanged(AppConfig cfg)
@@ -731,8 +746,11 @@ public partial class EliteFileWatcherService : IDisposable
 
     public void Dispose()
     {
-        _pollTimer.Stop();
+        _configService.ConfigChanged -= OnConfigChanged;
+        _inputSimulator.CommandExecuted -= OnCommandExecuted;
+        try { _pollCts.Cancel(); } catch (ObjectDisposedException) { }
         _pollTimer.Dispose();
+        _pollCts.Dispose();
         _watcher?.Dispose();
     }
 }

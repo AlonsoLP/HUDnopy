@@ -10,6 +10,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -28,6 +30,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using HUDnopy.Models;
 using HUDnopy.Localization;
+using HUDnopy.Services.Integrations;
 
 namespace HUDnopy.Services;
 
@@ -38,7 +41,7 @@ public sealed record WebNetworkInterfaceOption(string Id, string DisplayName, IP
 
 public class WebServerService : IDisposable
 {
-    private static readonly JsonSerializerOptions CamelCaseJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    private static readonly JsonSerializerOptions CamelCaseJsonOptions = HttpClientHeaderDefaults.CamelCaseJsonOptions;
     private readonly ConfigService _configService;
     private readonly EliteFileWatcherService _fileWatcher;
     private readonly BindingsService _bindingsService;
@@ -48,11 +51,64 @@ public class WebServerService : IDisposable
     private readonly AiCopilotService _aiCopilot;
     private readonly GalaxyStatusService _galaxyStatus;
     private readonly GalnetService _galnetService;
+    private readonly EliteBgsWatchlistService? _eliteBgsWatchlist;
+    private readonly ArdentMarketService? _ardentMarket;
+    private readonly EdastroCanonnService? _edastroCanonn;
+    private readonly CommunitySyncService? _communitySync;
+    private readonly AlertSpeechService? _alertSpeech;
+
+    private sealed class WebSocketClient(WebSocket socket)
+    {
+        public WebSocket Socket { get; } = socket;
+        public SemaphoreSlim SendLock { get; } = new(1, 1);
+    }
+
+    private sealed class PrecompressedAsset
+    {
+        public byte[] Raw { get; }
+        public byte[] Brotli { get; }
+        public byte[] Gzip { get; }
+        public string ContentType { get; }
+
+        public PrecompressedAsset(string text, string contentType)
+        {
+            ContentType = contentType;
+            Raw = Encoding.UTF8.GetBytes(text);
+            Brotli = Compress(Raw, static s => new BrotliStream(s, CompressionLevel.Optimal, leaveOpen: true));
+            Gzip = Compress(Raw, static s => new GZipStream(s, CompressionLevel.Optimal, leaveOpen: true));
+        }
+
+        private static byte[] Compress(byte[] input, Func<Stream, Stream> factory)
+        {
+            using var ms = new MemoryStream();
+            using (var cs = factory(ms))
+                cs.Write(input, 0, input.Length);
+            return ms.ToArray();
+        }
+
+        public Task WriteAsync(HttpContext context)
+        {
+            context.Response.ContentType = ContentType;
+            context.Response.Headers.Vary = "Accept-Encoding";
+            string accept = context.Request.Headers.AcceptEncoding.ToString();
+            if (accept.Contains("br", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.Headers.ContentEncoding = "br";
+                return context.Response.Body.WriteAsync(Brotli, context.RequestAborted).AsTask();
+            }
+            if (accept.Contains("gzip", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.Headers.ContentEncoding = "gzip";
+                return context.Response.Body.WriteAsync(Gzip, context.RequestAborted).AsTask();
+            }
+            return context.Response.Body.WriteAsync(Raw, context.RequestAborted).AsTask();
+        }
+    }
 
     private WebApplication? _app;
     private CancellationTokenSource? _cts;
-    private readonly ConcurrentDictionary<Guid, WebSocket> _sockets = new();
-    private readonly SemaphoreSlim _socketSendLock = new(1, 1);
+    private readonly ConcurrentDictionary<Guid, WebSocketClient> _sockets = new();
+    private byte[]? _lastBroadcastBytes;
     private int _broadcastRequested;
     private int _broadcastRunning;
     private (IReadOnlyList<GameBinding>? Source, string Language, DeckBindingView[] Views) _cachedDeckBindings;
@@ -83,7 +139,12 @@ public class WebServerService : IDisposable
         SpanshSystemDataService spanshSystemDataService,
         AiCopilotService aiCopilot,
         GalaxyStatusService galaxyStatus,
-        GalnetService galnetService)
+        GalnetService galnetService,
+        EliteBgsWatchlistService? eliteBgsWatchlist = null,
+        ArdentMarketService? ardentMarket = null,
+        EdastroCanonnService? edastroCanonn = null,
+        CommunitySyncService? communitySync = null,
+        AlertSpeechService? alertSpeech = null)
     {
         _configService = configService;
         _fileWatcher = fileWatcher;
@@ -94,14 +155,67 @@ public class WebServerService : IDisposable
         _aiCopilot = aiCopilot;
         _galaxyStatus = galaxyStatus;
         _galnetService = galnetService;
+        _eliteBgsWatchlist = eliteBgsWatchlist;
+        _ardentMarket = ardentMarket;
+        _edastroCanonn = edastroCanonn;
+        _communitySync = communitySync;
+        _alertSpeech = alertSpeech;
 
-        _fileWatcher.StateUpdated += state => { _ = BroadcastStateAsync(); };
-        _bindingsService.BindingsUpdated += binds => { _ = BroadcastStateAsync(); };
-        _alertService.AlertsChanged += () => { _ = BroadcastStateAsync(); };
-        _spanshSystemDataService.StateChanged += state => { _ = BroadcastStateAsync(); };
-        _configService.ConfigChanged += config => { _ = BroadcastStateAsync(); };
-        _galaxyStatus.StatusUpdated += snap => { _ = BroadcastStateAsync(); };
-        _galnetService.ArticlesUpdated += () => { _ = BroadcastStateAsync(); };
+        _fileWatcher.StateUpdated += OnShipStateUpdated;
+        _bindingsService.BindingsUpdated += OnBindingsUpdated;
+        _alertService.AlertsChanged += OnBroadcastRequested;
+        _spanshSystemDataService.StateChanged += OnSpanshStateChanged;
+        _configService.ConfigChanged += OnConfigChanged;
+        _galaxyStatus.StatusUpdated += OnGalaxyStatusUpdated;
+        _galnetService.ArticlesUpdated += OnBroadcastRequested;
+        if (_eliteBgsWatchlist is not null)
+            _eliteBgsWatchlist.WatchlistUpdated += OnBgsWatchlistUpdated;
+        if (_edastroCanonn is not null)
+            _edastroCanonn.StatusChanged += OnBroadcastRequested;
+    }
+
+    private void OnBroadcastRequested() => _ = BroadcastStateAsync();
+    private void OnShipStateUpdated(ShipState state) => OnBroadcastRequested();
+    private void OnBindingsUpdated(List<GameBinding> bindings) => OnBroadcastRequested();
+    private void OnSpanshStateChanged(SpanshSystemDataState state) => OnBroadcastRequested();
+    private void OnConfigChanged(AppConfig config) => OnBroadcastRequested();
+    private void OnGalaxyStatusUpdated(GalaxyStatusSnapshot snapshot) => OnBroadcastRequested();
+    private void OnBgsWatchlistUpdated(IReadOnlyList<EliteBgsFactionWatchItem> items) => OnBroadcastRequested();
+
+    private static Task WriteJsonAsync<T>(HttpContext context, T payload, bool camelCase = false)
+    {
+        context.Response.ContentType = "application/json; charset=utf-8";
+        string json = camelCase
+            ? JsonSerializer.Serialize(payload, CamelCaseJsonOptions)
+            : JsonSerializer.Serialize(payload);
+        return context.Response.WriteAsync(json);
+    }
+
+    private static async Task<JsonDocument?> TryReadJsonBodyAsync(HttpContext context)
+    {
+        try
+        {
+            return await JsonDocument.ParseAsync(context.Request.Body);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsValidHexColor(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+            return false;
+        string trimmed = hex.Trim();
+        if (trimmed[0] != '#' || (trimmed.Length != 7 && trimmed.Length != 9))
+            return false;
+        for (int i = 1; i < trimmed.Length; i++)
+        {
+            if (!Uri.IsHexDigit(trimmed[i]))
+                return false;
+        }
+        return true;
     }
 
     public async Task StartAsync()
@@ -114,9 +228,9 @@ public class WebServerService : IDisposable
 
         try
         {
-            string webUiHtml = WebUiDocument.Load();
-            string webUiCss = WebUiDocument.LoadAsset("styles.css");
-            string webUiJs = WebUiDocument.LoadAsset("app.js");
+            var webUiHtml = new PrecompressedAsset(WebUiDocument.Load(), "text/html; charset=utf-8");
+            var webUiCss = new PrecompressedAsset(WebUiDocument.LoadAsset("styles.css"), "text/css; charset=utf-8");
+            var webUiJs = new PrecompressedAsset(WebUiDocument.LoadAsset("app.js"), "application/javascript; charset=utf-8");
             string mode = _configService.Current.WebAccessMode;
             if (mode is not ("local" or "open" or "code" or "vpn"))
                 throw new InvalidOperationException("Modo de acceso web no válido.");
@@ -223,8 +337,12 @@ public class WebServerService : IDisposable
                 }
                 context.Response.Cookies.Append("hudnopy-session", token!, new CookieOptions
                 {
-                    HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict, IsEssential = true,
-                    Path = "/", MaxAge = TimeSpan.FromHours(12)
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict,
+                    IsEssential = true,
+                    Path = "/",
+                    MaxAge = TimeSpan.FromHours(12)
                 });
                 context.Response.Redirect("/");
             });
@@ -241,23 +359,11 @@ public class WebServerService : IDisposable
                 await context.Response.Body.WriteAsync(faviconBytes, context.RequestAborted);
             });
 
-            app.MapGet("/", async context =>
-            {
-                context.Response.ContentType = "text/html; charset=utf-8";
-                await context.Response.WriteAsync(webUiHtml);
-            });
+            app.MapGet("/", context => webUiHtml.WriteAsync(context));
 
-            app.MapGet("/styles.css", async context =>
-            {
-                context.Response.ContentType = "text/css; charset=utf-8";
-                await context.Response.WriteAsync(webUiCss);
-            });
+            app.MapGet("/styles.css", context => webUiCss.WriteAsync(context));
 
-            app.MapGet("/app.js", async context =>
-            {
-                context.Response.ContentType = "application/javascript; charset=utf-8";
-                await context.Response.WriteAsync(webUiJs);
-            });
+            app.MapGet("/app.js", context => webUiJs.WriteAsync(context));
 
             app.MapGet("/api/state", async context =>
             {
@@ -293,56 +399,407 @@ public class WebServerService : IDisposable
                 await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = ok, message = msg, results }, CamelCaseJsonOptions));
             });
 
-            app.MapPost("/api/ai/ask", async (HttpContext context) =>
+            app.MapGet("/api/spansh/bodies", async (HttpContext context) =>
             {
                 context.Response.ContentType = "application/json; charset=utf-8";
-                string prompt = "";
-                try
+                string query = context.Request.Query["query"].ToString();
+                var st = _fileWatcher.State;
+                var (ok, results, msg) = await _spanshSystemDataService.SearchBodiesAsync(query, st.CurrentSystem, st.StarPos);
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = ok, message = msg, results }, CamelCaseJsonOptions));
+            });
+
+            app.MapGet("/api/spansh/carriers", async (HttpContext context) =>
+            {
+                context.Response.ContentType = "application/json; charset=utf-8";
+                string service = context.Request.Query["service"].ToString();
+                var st = _fileWatcher.State;
+                var (ok, results, msg) = await _spanshSystemDataService.SearchFleetCarriersAsync(service, st.CurrentSystem, st.StarPos);
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = ok, message = msg, results }, CamelCaseJsonOptions));
+            });
+
+            app.MapGet("/api/ardent/market", async (HttpContext context) =>
+            {
+                context.Response.ContentType = "application/json; charset=utf-8";
+                if (_ardentMarket is null)
                 {
-                    using var doc = await JsonDocument.ParseAsync(context.Request.Body);
-                    if (doc.RootElement.TryGetProperty("prompt", out var p) && p.ValueKind == JsonValueKind.String)
-                        prompt = p.GetString() ?? "";
+                    await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = false, message = "Ardent Market service unavailable.", offers = Array.Empty<object>() }));
+                    return;
                 }
-                catch
+                string commodity = context.Request.Query["commodity"].ToString();
+                string mode = context.Request.Query["mode"].ToString();
+                var (ok, offers, msg) = await _ardentMarket.SearchCommodityAsync(commodity, string.IsNullOrWhiteSpace(mode) ? "sell" : mode);
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = ok, message = msg, offers }, CamelCaseJsonOptions));
+            });
+
+            app.MapGet("/api/dssa/nearest", async (HttpContext context) =>
+            {
+                context.Response.ContentType = "application/json; charset=utf-8";
+                if (_edastroCanonn is null)
                 {
+                    await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = false, message = "EDAstro DSSA service unavailable.", carriers = Array.Empty<object>() }));
+                    return;
+                }
+                var (ok, carriers, msg) = await _edastroCanonn.GetNearestDssaCarriersAsync();
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = ok, message = msg, carriers }, CamelCaseJsonOptions));
+            });
+
+            app.MapPost("/api/bgs/refresh", async (HttpContext context) =>
+            {
+                context.Response.ContentType = "application/json; charset=utf-8";
+                if (_eliteBgsWatchlist is null)
+                {
+                    await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = false, message = "EliteBGS Watchlist unavailable." }));
+                    return;
+                }
+                var (ok, items, msg) = await _eliteBgsWatchlist.RefreshAsync();
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new { success = ok, message = msg, count = items.Count }));
+            });
+
+            app.MapGet("/api/edsm/intel", async (HttpContext context) =>
+            {
+                if (_communitySync is null || !_configService.Current.EnableEdsmSync)
+                {
+                    await WriteJsonAsync(context, new { success = false, message = "EDSM integration is disabled." });
+                    return;
+                }
+                string sys = _fileWatcher.State.CurrentSystem;
+                var intel = await _communitySync.FetchEdsmSystemIntelAsync(sys);
+                await WriteJsonAsync(context, new { success = intel is not null, intel }, camelCase: true);
+            });
+
+            app.MapPost("/api/system-note", async (HttpContext context) =>
+            {
+                string note = "";
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                        note = JsonElementExtensions.GetStr(doc.RootElement, "note") ?? "";
                 }
 
-                var (success, reply) = await _aiCopilot.AskAsync(prompt);
-                await context.Response.WriteAsync(JsonSerializer.Serialize(new
+                string sys = _fileWatcher.State.CurrentSystem;
+                if (string.IsNullOrWhiteSpace(sys) || sys == "---")
+                {
+                    await WriteJsonAsync(context, new { success = false, message = "No active star system." });
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(note))
+                    _configService.Current.SystemNotes.Remove(sys);
+                else
+                    _configService.Current.SystemNotes[sys] = note.Trim();
+                _configService.Save();
+                _fileWatcher.SyncCurrentSystemNote();
+                if (_communitySync is not null && _configService.Current.EnableEdsmSync)
+                    _ = _communitySync.SetEdsmSystemCommentAsync(sys, note.Trim());
+                await WriteJsonAsync(context, new { success = true, system = sys });
+            });
+
+            app.MapGet("/api/spansh/route", async (HttpContext context) =>
+            {
+                string mode = context.Request.Query["mode"].ToString();
+                string toSys = context.Request.Query["to"].ToString();
+                double range = double.TryParse(context.Request.Query["range"].ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double r) ? r : 50;
+                var st = _fileWatcher.State;
+                long usedMass = st.Carrier is { Capacity: > 0, FreeSpace: >= 0 } fc ? Math.Max(0, fc.Capacity.Value - fc.FreeSpace.Value) : 0;
+                var (ok, waypoints, msg) = await _spanshSystemDataService.PlotSpanshRouteAsync(string.IsNullOrWhiteSpace(mode) ? "neutron" : mode, st.CurrentSystem, toSys, range, usedMass);
+                await WriteJsonAsync(context, new { success = ok, message = msg, waypoints }, camelCase: true);
+            });
+
+            app.MapGet("/api/spansh/item", async (HttpContext context) =>
+            {
+                string query = context.Request.Query["query"].ToString();
+                bool isShip = string.Equals(context.Request.Query["isShip"].ToString(), "true", StringComparison.OrdinalIgnoreCase);
+                bool lyr = string.Equals(context.Request.Query["lyr"].ToString(), "true", StringComparison.OrdinalIgnoreCase);
+                var st = _fileWatcher.State;
+                var (ok, results, msg) = await _spanshSystemDataService.SearchShipOrModuleAsync(query, isShip, lyr, st.CurrentSystem, st.StarPos);
+                await WriteJsonAsync(context, new { success = ok, message = msg, results }, camelCase: true);
+            });
+
+            app.MapGet("/api/spansh/trade", async (HttpContext context) =>
+            {
+                var st = _fileWatcher.State;
+                var (ok, hops, msg) = await _spanshSystemDataService.PlotTradeRouteAsync(st.CurrentSystem, st.StationName, st.CargoCapacity, st.Credits, 30, true);
+                await WriteJsonAsync(context, new { success = ok, message = msg, hops }, camelCase: true);
+            });
+
+            app.MapGet("/api/spansh/mining", async (HttpContext context) =>
+            {
+                string mineral = context.Request.Query["mineral"].ToString();
+                var st = _fileWatcher.State;
+                var (ok, results, msg) = await _spanshSystemDataService.SearchMiningRingsAsync(string.IsNullOrWhiteSpace(mineral) ? "Platinum" : mineral, st.CurrentSystem, st.StarPos);
+                await WriteJsonAsync(context, new { success = ok, message = msg, results }, camelCase: true);
+            });
+
+            app.MapGet("/api/spansh/colonisation", async (HttpContext context) =>
+            {
+                string commodity = context.Request.Query["commodity"].ToString();
+                var st = _fileWatcher.State;
+                long minSupply = 100;
+                if (string.IsNullOrWhiteSpace(commodity))
+                {
+                    var nextRes = st.Colonisation.Resources.FirstOrDefault(static x => x.RequiredAmount > x.ProvidedAmount);
+                    if (nextRes is not null)
+                    {
+                        commodity = nextRes.DisplayName;
+                        minSupply = Math.Max(1, nextRes.RequiredAmount - nextRes.ProvidedAmount);
+                    }
+                }
+                var (ok, results, msg) = await _spanshSystemDataService.SearchCommoditySupplierAsync(commodity, minSupply, true, st.CurrentSystem, st.StarPos);
+                await WriteJsonAsync(context, new { success = ok, commodity, message = msg, results }, camelCase: true);
+            });
+
+            app.MapPost("/api/surface/bookmarks", async (HttpContext context) =>
+            {
+                string action = "add";
+                string label = "";
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                    {
+                        action = JsonElementExtensions.GetStr(doc.RootElement, "action") ?? "add";
+                        label = (JsonElementExtensions.GetStr(doc.RootElement, "label") ?? "").Trim();
+                    }
+                }
+
+                var st = _fileWatcher.State;
+                _configService.Current.SurfaceBookmarks ??= new List<SurfaceBookmarkItem>();
+                if (action.Equals("delete", StringComparison.OrdinalIgnoreCase))
+                {
+                    _configService.Current.SurfaceBookmarks.RemoveAll(b => string.Equals(b.Label, label, StringComparison.OrdinalIgnoreCase));
+                    _configService.Save();
+                    await WriteJsonAsync(context, new { success = true, bookmarks = _configService.Current.SurfaceBookmarks }, camelCase: true);
+                    return;
+                }
+
+                if (!st.HasLatLong)
+                {
+                    await WriteJsonAsync(context, new { success = false, message = "No active planetary coordinates." });
+                    return;
+                }
+                _configService.Current.SurfaceBookmarks.Add(new SurfaceBookmarkItem
+                {
+                    SystemName = st.CurrentSystem,
+                    BodyName = st.BodyName,
+                    Label = string.IsNullOrWhiteSpace(label) ? $"Point {DateTime.Now:HH:mm}" : label,
+                    Latitude = Math.Round(st.Latitude, 4),
+                    Longitude = Math.Round(st.Longitude, 4)
+                });
+                _configService.Save();
+                await WriteJsonAsync(context, new { success = true, bookmarks = _configService.Current.SurfaceBookmarks }, camelCase: true);
+            });
+
+            app.MapPost("/api/ai/quick", async (HttpContext context) =>
+            {
+                string action = "";
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                        action = (JsonElementExtensions.GetStr(doc.RootElement, "action") ?? "").Trim().ToLowerInvariant();
+                }
+
+                if (action == "clear")
+                {
+                    _aiCopilot.ClearHistory();
+                    await WriteJsonAsync(context, new { success = true, reply = "" });
+                    return;
+                }
+
+                var (ok, reply) = action switch
+                {
+                    "preflight" => await _aiCopilot.RunPreFlightCheckAsync(),
+                    "galnet" => await _aiCopilot.SummarizeGalnetAsync(),
+                    "session" => await _aiCopilot.SummarizeSessionAsync(),
+                    _ => await _aiCopilot.AskAsync(OperationsTranslations.ForLanguage(_configService.Current.InterfaceLanguage)["aiQuickStatusPrompt"])
+                };
+                await WriteJsonAsync(context, new { success = ok, reply });
+            });
+
+            app.MapPost("/api/galnet/speak", async (HttpContext context) =>
+            {
+                if (_alertSpeech is null)
+                {
+                    await WriteJsonAsync(context, new { success = false, message = "Speech service unavailable." });
+                    return;
+                }
+                bool stop = false;
+                int index = 0;
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                    {
+                        if (doc.RootElement.TryGetProperty("stop", out var sp) && sp.ValueKind == JsonValueKind.True)
+                            stop = true;
+                        index = JsonElementExtensions.GetInt(doc.RootElement, "index") ?? 0;
+                    }
+                }
+
+                if (stop)
+                {
+                    _alertSpeech.StopSpeaking();
+                    await WriteJsonAsync(context, new { success = true });
+                    return;
+                }
+
+                var articles = _galnetService.Articles;
+                if (index >= 0 && index < articles.Count)
+                {
+                    var a = articles[index];
+                    _alertSpeech.SpeakCustomText($"{a.Title}. {a.Body}");
+                    await WriteJsonAsync(context, new { success = true });
+                    return;
+                }
+                await WriteJsonAsync(context, new { success = false, message = "Article not found." });
+            });
+
+            app.MapPost("/api/expedition/analyze", async (HttpContext context) =>
+            {
+                var stats = await ExpeditionAnalyticsService.AnalyzeFolderAsync(_configService.Current.JournalFolderPath, maxFiles: 100);
+                await WriteJsonAsync(context, new
+                {
+                    success = true,
+                    stats,
+                    markdown = stats.ToMarkdownReport(_fileWatcher.State.CommanderName)
+                }, camelCase: true);
+            });
+
+            app.MapPost("/api/combat/reset", async (HttpContext context) =>
+            {
+                _fileWatcher.ResetCombatSession();
+                await WriteJsonAsync(context, new { success = true });
+            });
+
+            app.MapPost("/api/mining/reset", async (HttpContext context) =>
+            {
+                _fileWatcher.ResetMiningSession();
+                await WriteJsonAsync(context, new { success = true });
+            });
+
+            app.MapPost("/api/mining/filter", async (HttpContext context) =>
+            {
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                    {
+                        string? targets = JsonElementExtensions.GetStr(doc.RootElement, "targets");
+                        if (targets is not null)
+                            _configService.Current.MiningTargetMinerals = targets.Trim();
+                        int? minPct = JsonElementExtensions.GetInt(doc.RootElement, "minPercent");
+                        if (minPct is not null)
+                            _configService.Current.MiningMinPercent = Math.Clamp(minPct.Value, 1, 90);
+                        _configService.Save();
+                    }
+                }
+                await WriteJsonAsync(context, new
+                {
+                    success = true,
+                    targets = _configService.Current.MiningTargetMinerals,
+                    minPercent = _configService.Current.MiningMinPercent
+                });
+            });
+
+            app.MapPost("/api/wishlist/update", async (HttpContext context) =>
+            {
+                string action = "";
+                string blueprintId = "";
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                    {
+                        action = (JsonElementExtensions.GetStr(doc.RootElement, "action") ?? "").Trim().ToLowerInvariant();
+                        blueprintId = (JsonElementExtensions.GetStr(doc.RootElement, "blueprintId") ?? "").Trim();
+                    }
+                }
+
+                _configService.Current.EngineeringWishlistBlueprints ??= new List<string>();
+                if (action == "clear")
+                {
+                    _configService.Current.EngineeringWishlistBlueprints.Clear();
+                    _configService.Save();
+                }
+                else if (action == "add" && !string.IsNullOrWhiteSpace(blueprintId))
+                {
+                    var match = EngineeringWishlistService.Catalog.FirstOrDefault(b =>
+                        string.Equals(b.Id, blueprintId, StringComparison.OrdinalIgnoreCase));
+                    if (match is not null)
+                    {
+                        _configService.Current.EngineeringWishlistBlueprints.Add(match.Id);
+                        _configService.Save();
+                    }
+                }
+                var rows = EngineeringWishlistService.Evaluate(_configService.Current.EngineeringWishlistBlueprints, _fileWatcher.State);
+                await WriteJsonAsync(context, new { success = true, rows }, camelCase: true);
+            });
+
+            app.MapPost("/api/ai/vision", async (HttpContext context) =>
+            {
+                string prompt = "";
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                        prompt = JsonElementExtensions.GetStr(doc.RootElement, "prompt") ?? "";
+                }
+
+                var (success, reply) = await _aiCopilot.AskWithScreenVisionAsync(prompt);
+                await WriteJsonAsync(context, new
                 {
                     success,
                     reply,
                     provider = _aiCopilot.GetActiveProviderSummary()
-                }));
+                });
+            });
+
+            app.MapPost("/api/ai/ask", async (HttpContext context) =>
+            {
+                string prompt = "";
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                        prompt = JsonElementExtensions.GetStr(doc.RootElement, "prompt") ?? "";
+                }
+
+                var (success, reply) = await _aiCopilot.AskAsync(prompt);
+                await WriteJsonAsync(context, new
+                {
+                    success,
+                    reply,
+                    provider = _aiCopilot.GetActiveProviderSummary()
+                });
             });
 
             app.MapPost("/api/galnet/refresh", async (HttpContext context) =>
             {
                 var (ok, message) = await _galnetService.RefreshAsync(_configService.Current.InterfaceLanguage);
-                context.Response.ContentType = "application/json; charset=utf-8";
-                await context.Response.WriteAsync(JsonSerializer.Serialize(new { ok, message, count = _galnetService.Articles.Count }));
+                await WriteJsonAsync(context, new { ok, message, count = _galnetService.Articles.Count });
             });
 
             app.MapPost("/api/galaxy-status/refresh", async (HttpContext context) =>
             {
                 var snap = await _galaxyStatus.RefreshAsync();
-                context.Response.ContentType = "application/json; charset=utf-8";
-                await context.Response.WriteAsync(JsonSerializer.Serialize(new { ok = true, serverMessage = snap.ServerMessage }));
+                await WriteJsonAsync(context, new { ok = true, serverMessage = snap.ServerMessage });
             });
 
             app.MapPost("/api/theme", async (HttpContext context) =>
             {
-                using var doc = await JsonDocument.ParseAsync(context.Request.Body);
-                if (doc.RootElement.TryGetProperty("accentHex", out var accProp))
+                using var doc = await TryReadJsonBodyAsync(context);
+                if (doc is null)
                 {
-                    string hex = accProp.GetString() ?? "#FF7100";
-                    _configService.Current.ThemeAccentHex = hex;
-                    _configService.Current.ThemeSecondaryHex = hex;
-                    _configService.Save();
-                    _fileWatcher.RefreshState();
+                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    await WriteJsonAsync(context, new { ok = false, message = "Invalid JSON payload." });
+                    return;
                 }
-                context.Response.ContentType = "application/json; charset=utf-8";
-                await context.Response.WriteAsync("{\"ok\":true}");
+
+                string? hex = JsonElementExtensions.GetStr(doc.RootElement, "accentHex")?.Trim();
+                if (!IsValidHexColor(hex))
+                {
+                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    await WriteJsonAsync(context, new { ok = false, message = "Invalid hex color." });
+                    return;
+                }
+
+                _configService.Current.ThemeAccentHex = hex!;
+                _configService.Current.ThemeSecondaryHex = hex!;
+                _configService.Save();
+                _fileWatcher.RefreshState();
+                await WriteJsonAsync(context, new { ok = true });
             });
 
             app.Map("/ws", async context =>
@@ -372,22 +829,27 @@ public class WebServerService : IDisposable
                 }
                 using var ws = await context.WebSockets.AcceptWebSocketAsync();
                 var id = Guid.NewGuid();
-                _sockets[id] = ws;
+                var client = new WebSocketClient(ws);
+                _sockets[id] = client;
 
                 try
                 {
-                    await SendToSocketAsync(ws, BuildFullPayload());
+                    await SendToSocketAsync(client, BuildFullPayload());
                     var buffer = new byte[1024];
                     while (ws.State == WebSocketState.Open && !socketCts.IsCancellationRequested)
                     {
                         var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), socketCts.Token);
                         if (result.MessageType == WebSocketMessageType.Close)
+                        {
+                            if (ws.State == WebSocketState.CloseReceived)
+                                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Closed", CancellationToken.None);
                             break;
+                        }
                     }
                 }
                 catch
                 {
-                    // Cliente desconectado
+                    // Client disconnected
                 }
                 finally
                 {
@@ -430,14 +892,15 @@ public class WebServerService : IDisposable
             {
                 try
                 {
-                    await kvp.Value.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Server stopping", closeTimeout.Token);
+                    await kvp.Value.Socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Server stopping", closeTimeout.Token);
                 }
                 catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException)
                 {
-                    kvp.Value.Abort();
+                    kvp.Value.Socket.Abort();
                 }
             }
             _sockets.Clear();
+            _lastBroadcastBytes = null;
             await _app.StopAsync();
             await _app.DisposeAsync();
         }
@@ -533,6 +996,27 @@ public class WebServerService : IDisposable
             operationsView = BuildOperationsView(state, language),
             spanshView = GetSpanshView(language),
             spanshEnabled = _configService.Current.EnableSpanshSystemData,
+            enabledIntegrations = new
+            {
+                frontierCapi = _configService.Current.EnableFrontierCapi,
+                eddn = _configService.Current.EnableEddnUpload,
+                edsm = _configService.Current.EnableEdsmSync,
+                inara = _configService.Current.EnableInaraSync,
+                spansh = _configService.Current.EnableSpanshSystemData,
+                eliteBgsWatchlist = _configService.Current.EnableEliteBgsWatchlist,
+                ardentMarketApi = _configService.Current.EnableArdentMarketApi,
+                edastroDssa = _configService.Current.EnableEdastroDssa,
+                canonnUpload = _configService.Current.EnableCanonnUpload,
+                discord = _configService.Current.EnableDiscord
+            },
+            inaraSystemUrl = _configService.Current.EnableInaraSync && !string.IsNullOrWhiteSpace(state.CurrentSystem) && state.CurrentSystem != "---"
+                ? CommunitySyncService.BuildInaraDeepLink("system", state.CurrentSystem)
+                : "",
+            surfaceBookmarks = _configService.Current.SurfaceBookmarks ?? new List<SurfaceBookmarkItem>(),
+            miningTargets = _configService.Current.MiningTargetMinerals ?? "",
+            miningMinPercent = _configService.Current.MiningMinPercent,
+            engineeringCatalog = EngineeringWishlistService.Catalog.Select(static b => new { b.Id, b.DisplayName }).ToArray(),
+            engineeringWishlistBlueprints = _configService.Current.EngineeringWishlistBlueprints ?? new List<string>(),
             carrierView = GetCarrierView(state.Carrier, language),
             languageSettings = LanguageSettingsTranslations.ForLanguage(language),
             presetName = _bindingsService.UsingDefaultBindings ? DeckTranslations.ForLanguage(language)["defaultProfile"] : _bindingsService.ActivePresetName,
@@ -549,13 +1033,14 @@ public class WebServerService : IDisposable
                     edsyUrl = ShipLoadoutExportService.BuildEdsyUrl(state.LastLoadoutJson),
                     coriolisUrl = ShipLoadoutExportService.BuildCoriolisUrl(state.LastLoadoutJson)
                 },
-            engineeringWishlist = EngineeringWishlistService.Evaluate(_configService.Current.EngineeringWishlistBlueprints, state),
+            engineeringWishlist = EngineeringWishlistService.Evaluate(_configService.Current.EngineeringWishlistBlueprints ?? [], state),
             galnetArticles = _galnetService.Articles.Take(15).Select(static a => new
             {
                 a.Title,
                 Date = a.DateDisplay,
                 a.Body
-            }).ToArray()
+            }).ToArray(),
+            appVersion = HttpClientHeaderDefaults.ProductVersion
         };
     }
 
@@ -652,36 +1137,22 @@ public class WebServerService : IDisposable
             {
                 if (!IsRunning || _sockets.IsEmpty) return;
 
-                await _socketSendLock.WaitAsync();
-                try
-                {
-                    if (!IsRunning || _sockets.IsEmpty) return;
+                byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(BuildFullPayload());
+                if (_lastBroadcastBytes is not null && bytes.AsSpan().SequenceEqual(_lastBroadcastBytes))
+                    continue;
+                _lastBroadcastBytes = bytes;
 
-                    byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(BuildFullPayload());
-                    foreach (var kvp in _sockets)
-                    {
-                        var ws = kvp.Value;
-                        if (ws.State == WebSocketState.Open)
-                        {
-                            try
-                            {
-                                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
-                            }
-                            catch
-                            {
-                                _sockets.TryRemove(kvp.Key, out _);
-                            }
-                        }
-                        else
-                        {
-                            _sockets.TryRemove(kvp.Key, out _);
-                        }
-                    }
-                }
-                finally
+                var snapshot = _sockets.ToArray();
+                if (snapshot.Length == 0) return;
+
+                // Broadcast in parallel with per-socket locks and individual send timeouts so a slow client never stalls others
+                var sendTasks = new Task[snapshot.Length];
+                for (int i = 0; i < snapshot.Length; i++)
                 {
-                    _socketSendLock.Release();
+                    var (id, client) = snapshot[i];
+                    sendTasks[i] = SendBytesToClientAsync(id, client, bytes);
                 }
+                await Task.WhenAll(sendTasks);
             }
         }
         finally
@@ -690,20 +1161,53 @@ public class WebServerService : IDisposable
         }
     }
 
-    private async Task SendToSocketAsync(WebSocket ws, object payload)
+    private async Task SendBytesToClientAsync(Guid id, WebSocketClient client, byte[] bytes)
     {
-        if (ws.State != WebSocketState.Open) return;
-        await _socketSendLock.WaitAsync();
+        if (client.Socket.State != WebSocketState.Open)
+        {
+            _sockets.TryRemove(id, out _);
+            return;
+        }
+
+        using var sendTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        bool locked = false;
         try
         {
-            if (ws.State != WebSocketState.Open) return;
-
-            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(payload);
-            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+            await client.SendLock.WaitAsync(sendTimeout.Token);
+            locked = true;
+            if (client.Socket.State != WebSocketState.Open)
+            {
+                _sockets.TryRemove(id, out _);
+                return;
+            }
+            await client.Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, sendTimeout.Token);
+        }
+        catch
+        {
+            _sockets.TryRemove(id, out _);
         }
         finally
         {
-            _socketSendLock.Release();
+            if (locked)
+                client.SendLock.Release();
+        }
+    }
+
+    private static async Task SendToSocketAsync(WebSocketClient client, object payload)
+    {
+        if (client.Socket.State != WebSocketState.Open) return;
+        using var sendTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await client.SendLock.WaitAsync(sendTimeout.Token);
+        try
+        {
+            if (client.Socket.State != WebSocketState.Open) return;
+
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(payload);
+            await client.Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, sendTimeout.Token);
+        }
+        finally
+        {
+            client.SendLock.Release();
         }
     }
 
@@ -765,6 +1269,17 @@ public class WebServerService : IDisposable
 
     public void Dispose()
     {
+        _fileWatcher.StateUpdated -= OnShipStateUpdated;
+        _bindingsService.BindingsUpdated -= OnBindingsUpdated;
+        _alertService.AlertsChanged -= OnBroadcastRequested;
+        _spanshSystemDataService.StateChanged -= OnSpanshStateChanged;
+        _configService.ConfigChanged -= OnConfigChanged;
+        _galaxyStatus.StatusUpdated -= OnGalaxyStatusUpdated;
+        _galnetService.ArticlesUpdated -= OnBroadcastRequested;
+        if (_eliteBgsWatchlist is not null)
+            _eliteBgsWatchlist.WatchlistUpdated -= OnBgsWatchlistUpdated;
+        if (_edastroCanonn is not null)
+            _edastroCanonn.StatusChanged -= OnBroadcastRequested;
         try
         {
             _cts?.Cancel();

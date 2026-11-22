@@ -51,7 +51,7 @@ public partial class MainWindow
     private void ApplyDashboardLabels()
     {
         var text = DashboardTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
         (TextBlock Label, string Key)[] labels =
         {
             (LblDashboardCommander, "commanderAndShip"), (LblDashboardLocation, "currentLocation"),
@@ -81,7 +81,8 @@ public partial class MainWindow
             GridSystemFactions, GridCarrierMaterials,
             GridSpanshServices, GridGalnetArticles,
             GridSpanshRoute, GridSpanshTrade, GridSpanshMiningRings, GridColonisationSuppliers,
-            GridCarrierCargo, GridStoredShips, GridCommunityGoals, GridEngineeringWishlist
+            GridCarrierCargo, GridCarrierMarketOrders, GridStoredShips, GridStoredModules, GridCommunityGoals, GridEngineeringWishlist,
+            GridEliteBgsWatchlist, GridSpanshBodiesSearch, GridSpanshCarriersSearch, GridNearestDssa, GridArdentMarket
         };
         foreach (var column in tables.SelectMany(table => table.Columns))
         {
@@ -117,7 +118,7 @@ public partial class MainWindow
     private void ApplyMaterialLabels()
     {
         var text = MaterialTranslations.ForLanguage(_uiLanguage);
-        LblMaterials.Text = text["title"].ToUpper(System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage));
+        LblMaterials.Text = text["title"].ToUpper(UiCulture);
         TxtMaterialSearch.ToolTip = text["search"];
         TxtWishlistTarget.ToolTip = text["wishlistTargetTip"];
         BtnToggleWishlist.Content = text["wishlistToggle"];
@@ -178,7 +179,7 @@ public partial class MainWindow
                 if (flightLabels && key is ("oxygen" or "health" or "temperature" or "gravity" or "weapon"))
                     value += ": ";
                 if (uppercaseTitles && key.EndsWith("Title", StringComparison.Ordinal))
-                    value = value.ToUpper(System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage));
+                    value = value.ToUpper(UiCulture);
                 if (node is TextBlock block)
                     block.Text = value;
                 else if (node is System.Windows.Controls.ContentControl control && control.Content is string)
@@ -272,7 +273,7 @@ public partial class MainWindow
         ApplyTextTree(ViewInventory, text, uppercaseTitles: true);
         ApplyTextTree(ViewActivity, text, uppercaseTitles: true);
         ApplyTextTree(OperationsCombatSection, text, uppercaseTitles: true);
-        LblExplorationBodies.Text = text["explorationTitle"].ToUpper(System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage));
+        LblExplorationBodies.Text = text["explorationTitle"].ToUpper(UiCulture);
         void SetColumn(System.Windows.Controls.DataGrid grid, int index, OperationsValue kind)
         {
             ((DataGridTextColumn)grid.Columns[index]).Binding = new WpfBinding
@@ -284,7 +285,7 @@ public partial class MainWindow
         {
             ((DataGridTextColumn)grid.Columns[index]).Binding = new WpfBinding(property)
             {
-                ConverterCulture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage),
+                ConverterCulture = UiCulture,
                 StringFormat = credits ? "{0:N0} CR" : "{0:N0}"
             };
         }
@@ -339,7 +340,7 @@ public partial class MainWindow
         TxtShipyardStatus.Text = OperationsTranslations.Snapshot(state.Shipyard.Timestamp, state.Shipyard.StationName, state.Shipyard.StarSystem, "shipyardUnavailable", _uiLanguage);
         TxtColonisationStatus.Text = OperationsTranslations.Construction(state.Colonisation, _uiLanguage);
         string progress = state.Colonisation.ConstructionProgress.HasValue
-            ? $"{(state.Colonisation.ConstructionProgress.Value * 100).ToString("0.#", System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage))}%"
+            ? $"{(state.Colonisation.ConstructionProgress.Value * 100).ToString("0.#", UiCulture)}%"
             : "---";
         TxtColonisationProgress.Text = string.Format(text["progress"], progress);
     }
@@ -364,7 +365,7 @@ public partial class MainWindow
     private void UpdateExplorationProgressAndTracker(ShipState state)
     {
         var text = ExplorationTranslations.ForLanguage(_uiLanguage);
-        var culture = System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage);
+        var culture = UiCulture;
 
         var summaryParts = new List<string>();
         if (state.SystemTotalBodies is > 0)
@@ -415,7 +416,7 @@ public partial class MainWindow
             ? text["waiting"]
             : state.MaterialsInventory.Count == 0
                 ? text["empty"]
-                : string.Format(System.Globalization.CultureInfo.GetCultureInfo(_uiLanguage), text["inventory"], state.MaterialsInventory.Count);
+                : string.Format(UiCulture, text["inventory"], state.MaterialsInventory.Count);
     }
 
     private void ApplyDeckLabels()

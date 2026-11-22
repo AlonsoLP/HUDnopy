@@ -22,7 +22,7 @@ public sealed class AlertService
 {
     private const int MaximumHistory = 20;
     private readonly ConfigService _configService;
-    private readonly object _alertsLock = new();
+    private readonly Lock _alertsLock = new();
     private readonly List<AlertNotification> _alerts = new();
     private readonly Dictionary<string, AlertNotification> _activeAlerts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _missionAlertConditions = new(StringComparer.OrdinalIgnoreCase);
@@ -129,6 +129,23 @@ public sealed class AlertService
                 (!string.IsNullOrEmpty(notificationId) && string.Equals(active.Id, notificationId, StringComparison.Ordinal)) ||
                 string.Equals(active.AlertId, alertId, StringComparison.OrdinalIgnoreCase));
         }
+    }
+
+    /// <summary>
+    /// Dismisses all currently active condition alerts (e.g. via COVAS voice command).
+    /// </summary>
+    public int DismissAllActiveAlerts()
+    {
+        int count;
+        lock (_alertsLock)
+        {
+            count = _activeAlerts.Count;
+            if (count == 0)
+                return 0;
+            _activeAlerts.Clear();
+        }
+        AlertsChanged?.Invoke();
+        return count;
     }
 
     private void OnStateUpdated(ShipState state)

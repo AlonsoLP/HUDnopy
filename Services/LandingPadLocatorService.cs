@@ -89,7 +89,8 @@ public static class LandingPadLocatorService
 {
     // Official 45-pad Coriolis/Orbis/Ocellus docking bay layout (green light on starboard/right):
     // Clock hour (1-12), depth row (1=front/mailslot .. 4=back), size (S/M/L).
-    private static readonly Dictionary<int, (int Clock, int Depth, string Size)> StarportPads = new()
+    private static readonly System.Collections.Frozen.FrozenDictionary<int, (int Clock, int Depth, string Size)> StarportPads =
+        System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new Dictionary<int, (int Clock, int Depth, string Size)>
     {
         [1] = (6, 1, "S"),  [2] = (6, 2, "L"),  [3] = (6, 3, "M"),  [4] = (6, 4, "S"),
         [5] = (7, 1, "S"),  [6] = (7, 2, "M"),  [7] = (7, 3, "S"),  [8] = (7, 4, "S"),
@@ -103,7 +104,7 @@ public static class LandingPadLocatorService
         [35] = (3, 1, "S"),  [36] = (3, 2, "M"),  [37] = (3, 3, "S"),  [38] = (3, 4, "S"),
         [39] = (4, 1, "L"),  [40] = (4, 2, "L"),  [41] = (4, 3, "M"),  [42] = (4, 4, "S"),
         [43] = (5, 1, "S"),  [44] = (5, 2, "S"),  [45] = (5, 3, "M"),
-    };
+    });
 
     /// <summary>
     /// Returns spatial guidance for the assigned landing pad and station type.
