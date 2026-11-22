@@ -346,7 +346,7 @@
         </Style>
 
         <Style TargetType="DataGrid">
-            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
             <Setter Property="ScrollViewer.CanContentScroll" Value="False" />
             <Setter Property="EnableRowVirtualization" Value="False" />
         </Style>

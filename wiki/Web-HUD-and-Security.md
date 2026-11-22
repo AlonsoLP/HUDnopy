@@ -1,6 +1,6 @@
 # Web HUD and Security
 
-HUDnopy embeds an **ASP.NET Core Kestrel** HTTPS and WebSocket server that serves a modular responsive MFD (`Web/index.html`, `Web/styles.css`, `Web/app.js`) with **7 synchronized tabs** for tablets, phones, and secondary monitors.
+HUDnopy embeds an **ASP.NET Core Kestrel** HTTPS and WebSocket server that serves a modular responsive MFD (`Web/index.html`, `Web/styles.css`, `Web/app.js`) with **7 synchronized tabs**, **100% Desktop ↔ Web feature parity**, icon-only sub-tabs with right-aligned section titles, and `rem`-based adaptive 2↔1 column layouts for tablets, phones, and secondary monitors.
 
 ## Access Modes
 
@@ -24,7 +24,7 @@ Configure the Web Server under **Settings → Web Server**:
 
 ## QR Code Pairing & Transport Optimizations
 
-- **ISO-Standard QR Pairing:** When the Web Server is running, HUDnopy renders a native vector QR code (`QrCodeGenerator.cs`, ISO/IEC 18004 4-module quiet zone) for the selected URL so you can scan and open the Web HUD on a tablet or phone without typing IP addresses or ports.
+- **Theme-Matched ISO-Standard QR Pairing:** When the Web Server is running, HUDnopy renders a native vector QR code (`QrCodeGenerator.cs`, ISO/IEC 18004 4-module quiet zone) styled in the active HUD accent color over a dark cockpit background (with automatic contrast boost for dark custom colors) so you can scan and open the Web HUD on a tablet or phone without typing IP addresses or ports.
 - **Pre-Compressed Brotli / GZip Assets:** `index.html`, `styles.css`, and `app.js` are pre-compressed once at startup into in-memory Brotli and GZip buffers (`Content-Encoding: br/gzip`, `Vary: Accept-Encoding`) for fast mobile loading with zero per-request CPU overhead.
 - **Parallel WebSocket Broadcasts & Frame Deduplication:** Broadcasts run in parallel across connected clients with per-socket locks, 5-second per-client send timeouts, UTF-8 `SequenceEqual` frame deduplication, and RFC 6455 clean close handshakes.
 - **Security Hardening & Client Error Telemetry:** All POST endpoints and `/ws` enforce same-origin `Origin` CSRF validation, strict `Content-Security-Policy` / `nosniff` / `no-store` headers, and LAN brute-force `429 Too Many Requests` lockouts. Unexpected HTTP 500 errors and browser JavaScript errors (`POST /api/client-error`, with host/LAN IP stripped) are logged cleanly to `%LocalAppData%\HUDnopy\logs\`.

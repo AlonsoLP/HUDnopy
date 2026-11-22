@@ -2619,5 +2619,87 @@
     }
   }
 
+  function sanitizeWebInput(raw, mode) {
+    if (!raw) return '';
+    if (mode === 'int') return raw.replace(/[^0-9]/g, '');
+    let out = '';
+    let hasSep = false;
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (mode === 'decimal' && ch === '-' && out.length === 0) {
+        out += ch;
+      } else if (ch >= '0' && ch <= '9') {
+        out += ch;
+      } else if ((ch === '.' || ch === ',') && !hasSep) {
+        hasSep = true;
+        out += '.';
+      }
+    }
+    return out;
+  }
+
+  function initWebInputConstraints() {
+    const inputs = document.querySelectorAll('input[data-input-mode]');
+    const navKeys = new Set(['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']);
+    inputs.forEach(input => {
+      const mode = input.dataset.inputMode;
+      const allowEmpty = input.dataset.allowEmpty === 'true';
+      const minAttr = input.dataset.min ?? input.min;
+      const maxAttr = input.dataset.max ?? input.max;
+      const min = minAttr !== undefined && minAttr !== '' ? Number(minAttr) : NaN;
+      const max = maxAttr !== undefined && maxAttr !== '' ? Number(maxAttr) : NaN;
+
+      input.addEventListener('keydown', e => {
+        if (e.ctrlKey || e.metaKey || e.altKey || navKeys.has(e.key) || e.key === 'Unidentified') return;
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? input.value.length;
+        const candidate = input.value.slice(0, start) + e.key + input.value.slice(end);
+        const sanitized = sanitizeWebInput(candidate, mode);
+        if (sanitized !== candidate.replace(',', '.')) {
+          e.preventDefault();
+        }
+      });
+
+      input.addEventListener('input', () => {
+        const sanitized = sanitizeWebInput(input.value, mode);
+        if (input.value !== sanitized) {
+          const pos = input.selectionStart ?? sanitized.length;
+          input.value = sanitized;
+          if (typeof input.setSelectionRange === 'function') {
+            const clampedPos = Math.min(pos, sanitized.length);
+            input.setSelectionRange(clampedPos, clampedPos);
+          }
+        }
+      });
+
+      input.addEventListener('blur', () => {
+        const raw = sanitizeWebInput((input.value || '').trim(), mode);
+        if (!raw || raw === '-' || raw === '.' || raw === '-.') {
+          const fallback = allowEmpty ? '' : (!Number.isNaN(min) ? String(min) : '');
+          if (input.value !== fallback) {
+            input.value = fallback;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          return;
+        }
+        let num = Number(raw);
+        if (Number.isNaN(num)) {
+          input.value = allowEmpty ? '' : (!Number.isNaN(min) ? String(min) : '');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          return;
+        }
+        if (mode === 'int') num = Math.round(num);
+        if (!Number.isNaN(min) && num < min) num = min;
+        if (!Number.isNaN(max) && num > max) num = max;
+        const formatted = String(num);
+        if (input.value !== formatted) {
+          input.value = formatted;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    });
+  }
+
+  initWebInputConstraints();
   updateSectionTabs();
   connectWs();

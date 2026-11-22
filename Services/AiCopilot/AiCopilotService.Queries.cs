@@ -1668,11 +1668,15 @@ public sealed partial class AiCopilotService
             else
             {
                 var at100 = list.Where(static m => m.MaxCapacity > 0 && m.Count >= m.MaxCapacity).ToList();
-                var bottom = list.OrderBy(static m => m.Count).Take(5).Select(static m => $"{m.DisplayName} ({m.Count}/{m.MaxCapacity})");
+                var bottom = list.OrderBy(static m => m.Count).Take(6).Select(static m => $"{m.DisplayName} ({m.Count}/{m.MaxCapacity})");
+                double avgPct = list.Where(static m => m.MaxCapacity > 0)
+                    .Select(static m => (double)m.Count / m.MaxCapacity * 100.0)
+                    .DefaultIfEmpty(0)
+                    .Average();
                 string fullNote = at100.Count > 0
                     ? $"Al 100% ({at100.Count}): {string.Join(", ", at100.Select(static m => $"{m.DisplayName} ({m.Count}/{m.MaxCapacity})"))}"
                     : $"Al 100%: ninguno";
-                return $"Filtro {filter} ({list.Count} tipos) — {fullNote} | Más escasos: {string.Join(", ", bottom)}";
+                return $"Filtro {filter} ({list.Count} tipos, llenado medio {avgPct:0}%) — {fullNote} | Más escasos: {string.Join(", ", bottom)}";
             }
         }
 
@@ -1984,22 +1988,35 @@ public sealed partial class AiCopilotService
 
         if (lower.StartsWith("ships", StringComparison.Ordinal))
         {
-            if (s.StoredShips.Count == 0)
+            string filter = (p.Contains(':') || p.Contains('|')) ? p.Split(new[] { ':', '|' }, 2)[1].Trim() : "";
+            string normFilter = string.IsNullOrWhiteSpace(filter) ? "" : NormalizeVoiceMatchText(filter, null);
+
+            var results = new List<string>();
+            if (!string.IsNullOrWhiteSpace(normFilter) &&
+                (NormalizeVoiceMatchText(s.ShipName, null).Contains(normFilter, StringComparison.OrdinalIgnoreCase) ||
+                 NormalizeVoiceMatchText(s.ShipType, null).Contains(normFilter, StringComparison.OrdinalIgnoreCase)))
+            {
+                string activeLoc = string.IsNullOrWhiteSpace(s.StationName) ? s.CurrentSystem : $"{s.CurrentSystem} ({s.StationName})";
+                results.Add($"[NAVE ACTIVA] {s.ShipType}{(string.IsNullOrWhiteSpace(s.ShipName) ? "" : $" «{s.ShipName}»")} en {activeLoc}");
+            }
+
+            if (s.StoredShips.Count == 0 && results.Count == 0)
                 return "No hay flota almacenada cargada (conecta Frontier cAPI en Ajustes -> Integraciones para sincronizar tus naves).";
 
-            string filter = (p.Contains(':') || p.Contains('|')) ? p.Split(new[] { ':', '|' }, 2)[1].Trim() : "";
-            var ships = s.StoredShips
-                .Where(sh => string.IsNullOrWhiteSpace(filter) ||
-                             sh.ShipType.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                             sh.ShipName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                             sh.StarSystem.Contains(filter, StringComparison.OrdinalIgnoreCase))
-                .Take(15)
-                .Select(static sh => $"{sh.ShipType}{(string.IsNullOrWhiteSpace(sh.ShipName) ? "" : $" «{sh.ShipName}»")} en {sh.StarSystem} ({sh.StationName}, {sh.Value:N0} CR)")
-                .ToList();
+            var stored = s.StoredShips
+                .Where(sh => string.IsNullOrWhiteSpace(normFilter) ||
+                             NormalizeVoiceMatchText(sh.ShipType, null).Contains(normFilter, StringComparison.OrdinalIgnoreCase) ||
+                             NormalizeVoiceMatchText(sh.ShipName, null).Contains(normFilter, StringComparison.OrdinalIgnoreCase) ||
+                             NormalizeVoiceMatchText(sh.StarSystem, null).Contains(normFilter, StringComparison.OrdinalIgnoreCase))
+                .Take(40)
+                .Select(static sh => $"{sh.ShipType}{(string.IsNullOrWhiteSpace(sh.ShipName) ? "" : $" «{sh.ShipName}»")} en {sh.StarSystem} ({sh.StationName}, {sh.Value:N0} CR)");
+            results.AddRange(stored);
 
-            return ships.Count == 0
+            return results.Count == 0
                 ? $"No se encontró ninguna nave almacenada que coincida con '{filter}'."
-                : $"Flota almacenada ({s.StoredShips.Count} naves en total): {string.Join(" | ", ships)}";
+                : string.IsNullOrWhiteSpace(normFilter)
+                    ? $"Flota almacenada ({s.StoredShips.Count} naves en total): {string.Join(" | ", results)}"
+                    : $"Coincidencias de flota para '{filter}': {string.Join(" | ", results)}";
         }
 
         if (lower.StartsWith("modules", StringComparison.Ordinal))

@@ -40,21 +40,23 @@ Open **Settings → Game, Files & Controls**:
 - **Bindings Folder:** Defaults to `%LocalAppData%\Frontier Developments\Elite Dangerous\Options\Bindings`.
 - **Active `.binds` Profile:** Select any detected `.binds` file; changes apply immediately. Use **Reload** if you edited bindings in-game.
 
-## Appearance, Mini-HUD & Header Modules
+## Appearance, Touch Ergonomics, Mini-HUD & Header Modules
 
 Open **Settings → Appearance & Window**:
 
 - **Interface Language:** Defaults to **English (`en-GB`)** with 100% key-verified translations in Spanish (`es-ES`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`). Base ISO-639 codes (`en`, `es`, `pt`) and regional variants (`en-US`, `es-MX`, `pt-PT`) are normalized automatically.
-- **Accent Theme:** Choose a preset or enter a custom hex accent color; the theme propagates dynamically to both the desktop UI and the Web HUD.
-- **Navigation Position & Font Scaling:** Place the navigation bar on any edge, optionally hide menu text labels, and scale desktop typography with `Ctrl + Mouse Wheel` or the slider.
+- **Accent & Secondary Theme:** Choose a preset or enter custom primary and secondary `#RRGGBB` HEX colors (applied live automatically with no manual save button); the theme propagates dynamically to both the desktop UI, the pairing QR code, and the Web HUD.
+- **Navigation Position, Adaptive Layout & Font Scaling:** Place the navigation bar on any edge, optionally hide menu text labels, and scale desktop typography (`70%`–`200%`) with `Ctrl + Mouse Wheel`, the cockpit slider, or `−`/`+` touch buttons. All 2-column views automatically collapse to 1 column when narrowing the window or increasing font scale.
+- **Touch-First Controls & Instant Auto-Save:** All Settings tabs use ≥38 px touch targets, custom cockpit sliders, `−`/`+` steppers on numeric fields, strict input validation (`InputConstraint` on Desktop and `sanitizeWebInput` on Web), and instant auto-save on change across Paths/Controls, Theme colors, AI Copilot, and Alert thresholds.
 - **Header Modules:** Choose which telemetry widgets appear in the top header bar (mirrored in the Web HUD).
 - **Contextual Mini-HUD (`📌`):** Toggle a compact, translucent, always-on-top overlay that automatically highlights the highest-priority live strip (Assigned Landing Pad, Active Combat Target, Exobiology/Surface Compass, or Next Route Jump).
 - **System Tray:** Optionally start minimized to the Windows notification area.
+- **Settings → About (`ℹ️`):** Displays dynamically resolved project version, author, license, and quick links to the HUDnopy website, GitHub repository, Wiki, Releases, Issues, and partner Elite Dangerous community tools (Inara, EDSM, Spansh, EDAstro, EDDN, Canonn, Ardent Insight, EliteBGS, EDSY, Coriolis).
 
 ## Alerts, Voice & Custom Sound Libraries
 
-- **Settings → Alerts:** Configure low/critical fuel percentages, critical hull threshold, mission expiry warning/critical hours, and the per-channel alert matrix. HUDnopy automatically suppresses false fuel/shield alerts while Elite Dangerous is on the main menu or loading screen (`Flags == 0 && Flags2 == 0`).
-- **Settings → Voice & Audio:** Configure **Piper Neural TTS** or **Windows SAPI**, speech queue mode (`tactical`, `immediate`, `sequential`), unified speech rate (`-5` to `+5`), master volume, and custom sound folders (`WAV`, `MP3`, `AIFF`, `M4A`/`AAC`/`WMA`/`FLAC`). Unlinking a folder preserves your files on disk and marks missing assignments cleanly.
+- **Settings → Alerts:** Configure low/critical fuel percentages, critical hull threshold, and mission expiry warning/critical hours (with explicit unit labels, `−`/`+` steppers, and instant auto-save) plus the 4-category zebra-striped alert matrix (*Survival & Ship*, *Combat & Threats*, *Navigation & Exploration*, *Missions & Operations*). HUDnopy automatically suppresses false fuel/shield alerts while Elite Dangerous is on the main menu or loading screen (`Flags == 0 && Flags2 == 0`).
+- **Settings → Voice & Audio:** Configure **Piper Neural TTS** or **Windows SAPI**, speech queue mode (`tactical`, `immediate`, `sequential`), unified speech rate (`-5` to `+5`), master volume (placed top-right with `−`/`+` steppers), and custom sound folders (`WAV`, `MP3`, `AIFF`, `M4A`/`AAC`/`WMA`/`FLAC`). Unlinking a folder preserves your files on disk and marks missing assignments cleanly.
 
 ## Diagnostics, Crash Logs & Reporting Bugs
 

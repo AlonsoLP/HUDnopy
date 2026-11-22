@@ -111,7 +111,8 @@
                      "spansh-services":  "Services Spansh",
                      "integrations":  "Intégrations",
                      "ai-settings":  "Copilote IA",
-                     "voice-audio":  "Voix et Audio"
+                     "voice-audio":  "Voix et Audio",
+                     "about":  "À propos"
                  },
     "carrier":  {
                     "identityTitle":  "Identification",
@@ -376,7 +377,11 @@
                           "testSound":  "Tester le son : {0}",
                           "testVoice":  "Tester la voix : {0}",
                           "speechPrefix":  "Alerte",
-                          "speechTest":  "Systèmes vocaux du vaisseau opérationnels."
+                          "speechTest":  "Systèmes vocaux du vaisseau opérationnels.",
+                          "catNavigation":  "NAVIGATION \u0026 EXPLORATION",
+                          "catCombat":  "COMBAT \u0026 MENACES",
+                          "catOperations":  "MISSIONS \u0026 OPÉRATIONS",
+                          "catSurvival":  "SURVIE \u0026 VAISSEAU"
                       },
     "speechAlerts":  {
                          "fuelLow":  "Attention : carburant bas, à {0:0} pour cent.",
@@ -901,7 +906,7 @@
                      "securityTitle":  "SÉCURITÉ DE L\u0027ACCÈS DISTANT",
                      "securityHelp":  "L\u0027interface web peut contrôler le jeu. HTTPS utilise un certificat auto-signé et le navigateur affichera un avertissement ; vérifiez le certificat avant de lui faire confiance. Le mode sans restriction autorise toute personne pouvant joindre le serveur. Le mode VPN limite seulement l\u0027interface sélectionnée.",
                      "alertsTitle":  "ALERTES PAR TYPE ET CANAL",
-                     "alertsHelp":  "Alertes visuelles, sons et voix locale. Choisissez une voix Windows installée ; seules les alertes dont ce canal est activé sont vocalisées.",
+                     "alertsHelp":  "Alertes visuelles, sons et voix par type d\u0027alerte.",
                      "voiceTitle":  "VOIX LOCALE",
                      "testVoice":  "Tester la voix",
                      "voiceTip":  "Sélectionner une voix SAPI installée sous Windows",
@@ -1086,7 +1091,24 @@
                      "discordRpcToggle":  "Discord Rich Presence : Afficher vaisseau, système et activité sur Discord",
                      "ardentMarketToggle":  "Ardent Insight API : Recherche en direct des prix d\u0027achat/vente du marché",
                      "canonnUploadToggle":  "Canonn R\u0026D : Envoyer les données scientifiques et d\u0027exobiologie (Codex / ScanOrganic)",
-                     "edsmAnnounceFirstDiscoveryToggle":  "Annoncer vocalement (COVAS/TTS) l\u0027entrée dans un système inconnu d\u0027EDSM"
+                     "edsmAnnounceFirstDiscoveryToggle":  "Annoncer vocalement (COVAS/TTS) l\u0027entrée dans un système inconnu d\u0027EDSM",
+                     "secondaryColor":  "Couleur secondaire HEX :",
+                     "aiDynamicCooldown":  "Intervalle (s) :",
+                     "thresholdCritPct":  "Crit. %",
+                     "macroStepsLabel":  "Actions :",
+                     "macroTriggerLabel":  "Phrase(s) clé(s) :",
+                     "macroConfirmLabel":  "Confirmation (opt.) :",
+                     "thresholdWarnHrs":  "Alerte h",
+                     "thresholdCritHrs":  "Crit. h",
+                     "thresholdWarnPct":  "Alerte %",
+                     "aboutProjectLinks":  "LIENS DU PROJET",
+                     "aboutLicenseLabel":  "Licence :",
+                     "aboutDesc":  "HUD de télémétrie open-source pour Elite Dangerous, MFD Web tactile, gestionnaire de Fleet Carrier et copilote IA COVAS.",
+                     "aboutCommunityTitle":  "ÉCOSYSTÈME ET SITES PARTENAIRES",
+                     "aboutTitle":  "À PROPOS DE HUDNOPY",
+                     "aboutCommunityHelp":  "Accès rapide aux outils communautaires, bases de données et API Elite Dangerous intégrés ou compatibles avec HUDnopy.",
+                     "aboutAuthorLabel":  "Auteur :",
+                     "aboutVersionLabel":  "Version :"
                  },
     "operations":  {
                        "marketSearch":  "Rechercher une marchandise par nom",

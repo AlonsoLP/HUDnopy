@@ -1,6 +1,6 @@
 # HUDnopy Wiki
 
-> **Current Version:** `v0.3.0` *(Open-source release with 8-tab Desktop ↔ Web HUD parity, streaming COVAS AI Copilot with Screen Vision, NAudio 3.3 WASAPI audio, 10 opt-in community integrations, privacy-safe Support ZIP diagnostics, and 30 automated CI test suites).*
+> **Current Version:** `v0.4.0` *(Touch-First Cockpit UI & Parity release: adaptive 2↔1 column layouts, 100% Desktop ↔ Web HUD parity, touch-friendly Settings with instant auto-save & strict input validation, theme-matched QR pairing, streaming COVAS AI Copilot with Screen Vision, NAudio 3.3 WASAPI audio, 10 opt-in community integrations, privacy-safe Support ZIP diagnostics, and 30 automated CI test suites).*
 
 Welcome to the official documentation for **HUDnopy** — an open-source Elite Dangerous telemetry HUD, Web MFD, Fleet Carrier manager, Spansh toolkit, and voice-enabled AI Copilot.
 

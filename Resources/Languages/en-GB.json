@@ -111,7 +111,8 @@
                      "spansh-services":  "Spansh Services",
                      "integrations":  "Integrations",
                      "ai-settings":  "AI Copilot",
-                     "voice-audio":  "Voice \u0026 Audio"
+                     "voice-audio":  "Voice \u0026 Audio",
+                     "about":  "About"
                  },
     "carrier":  {
                     "identityTitle":  "Identification",
@@ -376,7 +377,11 @@
                           "testSound":  "Test sound for {0}",
                           "testVoice":  "Test voice for {0}",
                           "speechPrefix":  "Alert",
-                          "speechTest":  "Ship voice systems operational."
+                          "speechTest":  "Ship voice systems operational.",
+                          "catNavigation":  "NAVIGATION \u0026 EXPLORATION",
+                          "catCombat":  "COMBAT \u0026 THREATS",
+                          "catOperations":  "MISSIONS \u0026 OPERATIONS",
+                          "catSurvival":  "SURVIVAL \u0026 SHIP"
                       },
     "speechAlerts":  {
                          "fuelLow":  "Caution: fuel low, at {0:0} percent.",
@@ -901,7 +906,7 @@
                      "securityTitle":  "REMOTE ACCESS SECURITY",
                      "securityHelp":  "The web interface can control the game. HTTPS uses a self-signed certificate and the browser will show a warning; verify the certificate before trusting it. Unrestricted mode permits anyone who can reach the server. VPN mode only limits the selected interface.",
                      "alertsTitle":  "ALERTS BY TYPE AND CHANNEL",
-                     "alertsHelp":  "Visual alerts, sounds and local speech. Choose an installed Windows voice; speech only plays for alerts with that channel enabled.",
+                     "alertsHelp":  "Visual notices, custom sounds, and voice announcements per alert type.",
                      "voiceTitle":  "LOCAL SPEECH",
                      "testVoice":  "Test voice",
                      "voiceTip":  "Select a SAPI voice installed locally in Windows",
@@ -1086,7 +1091,24 @@
                      "discordRpcToggle":  "Discord Rich Presence: Show ship, system \u0026 activity on your Discord profile",
                      "ardentMarketToggle":  "Ardent Insight API: Live commodity buy/sell market price lookup",
                      "canonnUploadToggle":  "Canonn R\u0026D: Upload scientific \u0026 exobiology telemetry (Codex / ScanOrganic)",
-                     "edsmAnnounceFirstDiscoveryToggle":  "Announce via voice (COVAS/TTS) when entering an undiscovered EDSM system"
+                     "edsmAnnounceFirstDiscoveryToggle":  "Announce via voice (COVAS/TTS) when entering an undiscovered EDSM system",
+                     "secondaryColor":  "Secondary Color HEX:",
+                     "aiDynamicCooldown":  "Interval (s):",
+                     "thresholdCritPct":  "Crit %",
+                     "macroStepsLabel":  "Actions:",
+                     "macroTriggerLabel":  "Trigger phrase(s):",
+                     "macroConfirmLabel":  "Voice reply (opt.):",
+                     "thresholdWarnHrs":  "Warn h",
+                     "thresholdCritHrs":  "Crit h",
+                     "thresholdWarnPct":  "Warn %",
+                     "aboutProjectLinks":  "PROJECT LINKS",
+                     "aboutLicenseLabel":  "License:",
+                     "aboutDesc":  "Open-source Elite Dangerous telemetry HUD, touch-friendly Web MFD, Fleet Carrier manager, and COVAS AI copilot.",
+                     "aboutCommunityTitle":  "COMMUNITY ECOSYSTEM \u0026 PARTNER SITES",
+                     "aboutTitle":  "ABOUT HUDNOPY",
+                     "aboutCommunityHelp":  "Quick links to Elite Dangerous community tools, databases, and APIs integrated or compatible with HUDnopy.",
+                     "aboutAuthorLabel":  "Author:",
+                     "aboutVersionLabel":  "Version:"
                  },
     "operations":  {
                        "marketSearch":  "Search commodities by name",

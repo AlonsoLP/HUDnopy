@@ -891,7 +891,8 @@ public partial class MainWindow
         ["ai-settings"] = "🤖",
         ["voice-audio"] = "🔊",
         ["alerts"] = "🚨",
-        ["diagnostics"] = "🩺"
+        ["diagnostics"] = "🩺",
+        ["about"] = "ℹ️"
     };
 
     private void BuildSectionNavigation(int viewIndex, bool preserveSelection = false)
@@ -908,14 +909,18 @@ public partial class MainWindow
             return;
         }
 
+        if (viewIndex == 0)
+        {
+            DashboardSummarySection.Visibility = Visibility.Visible;
+            DashboardOverviewSection.Visibility = Visibility.Visible;
+            SectionNavigationPanel.Visibility = Visibility.Collapsed;
+            TxtActiveSectionTitle.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         var text = SectionTranslations.ForLanguage(_uiLanguage);
         (string Key, FrameworkElement Element)[] sections = viewIndex switch
         {
-            0 => new[]
-            {
-                ("summary", (FrameworkElement)DashboardSummarySection),
-                ("alerts-activity", (FrameworkElement)DashboardOverviewSection)
-            },
             1 => new[]
             {
                 ("status-resources", (FrameworkElement)CockpitResourcesSection),
@@ -968,6 +973,7 @@ public partial class MainWindow
                 ("voice-audio", ConfigVoiceSection),
                 ("alerts", ConfigAlertsSection),
                 ("diagnostics", ConfigDiagnosticsSection),
+                ("about", ConfigAboutSection),
             },
             _ => Array.Empty<(string, FrameworkElement)>()
         };
@@ -1521,6 +1527,7 @@ public partial class MainWindow
             _configService.Current.ThemeAccentHex = preset.AccentHex;
             _configService.Current.ThemeSecondaryHex = preset.SecondaryHex;
             TxtCustomAccentHex.Text = preset.AccentHex;
+            TxtCustomSecondaryHex.Text = preset.SecondaryHex;
             _configService.Save();
             _fileWatcher.RefreshState();
             RenderCockpitSystemCards(_fileWatcher.State);
@@ -1564,12 +1571,85 @@ public partial class MainWindow
         ApplyCustomAccentHex(selectedHex);
     }
 
-    private void BtnApplyCustomColor_Click(object sender, RoutedEventArgs e)
+    private void BtnPickSecondaryColor_Click(object sender, RoutedEventArgs e)
     {
-        ApplyCustomAccentHex(TxtCustomAccentHex.Text);
+        using var dialog = new Forms.ColorDialog
+        {
+            AnyColor = true,
+            FullOpen = true
+        };
+        string currentHex = TxtCustomSecondaryHex.Text.Trim();
+        if (!currentHex.StartsWith('#'))
+            currentHex = "#" + currentHex;
+        try
+        {
+            var c = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(currentHex);
+            dialog.Color = System.Drawing.Color.FromArgb(c.R, c.G, c.B);
+        }
+        catch
+        {
+        }
+        if (dialog.ShowDialog() != Forms.DialogResult.OK)
+            return;
+
+        string selectedHex = $"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}";
+        TxtCustomSecondaryHex.Text = selectedHex;
+        ApplyCustomAccentHex(TxtCustomAccentHex.Text, selectedHex);
     }
 
-    private void ApplyCustomAccentHex(string rawHex)
+    private void TxtCustomThemeColor_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null || TxtCustomAccentHex is null || TxtCustomSecondaryHex is null)
+            return;
+
+        string? primary = NormalizeCompleteHex(TxtCustomAccentHex.Text);
+        if (primary is null)
+            return;
+
+        string rawSec = TxtCustomSecondaryHex.Text.Trim();
+        string? secondary = string.IsNullOrEmpty(rawSec) ? null : NormalizeCompleteHex(rawSec);
+        if (!string.IsNullOrEmpty(rawSec) && secondary is null)
+            return;
+
+        if (string.Equals(_configService.Current.ThemeAccentHex, primary, StringComparison.OrdinalIgnoreCase) &&
+            (secondary is null || string.Equals(_configService.Current.ThemeSecondaryHex, secondary, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        ApplyCustomAccentHex(primary, secondary);
+    }
+
+    private static string? NormalizeCompleteHex(string raw)
+    {
+        string trimmed = (raw ?? "").Trim();
+        if (trimmed.StartsWith('#'))
+            trimmed = trimmed[1..];
+        if (trimmed.Length != 6)
+            return null;
+        foreach (char c in trimmed)
+        {
+            if (c is not ((>= '0' and <= '9') or (>= 'A' and <= 'F') or (>= 'a' and <= 'f')))
+                return null;
+        }
+        return "#" + trimmed.ToUpperInvariant();
+    }
+
+    private void BtnOpenExternalUrl_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: string rawUrl })
+            return;
+        if (!Uri.TryCreate(rawUrl, UriKind.Absolute, out Uri? uri) || uri.Scheme != Uri.UriSchemeHttps)
+            return;
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            TxtStatusBarLeft.Text = ex.Message;
+        }
+    }
+
+    private void ApplyCustomAccentHex(string rawHex, string? rawSecondaryHex = null)
     {
         string hex = rawHex.Trim();
         if (!hex.StartsWith("#", StringComparison.Ordinal))
@@ -1578,12 +1658,38 @@ public partial class MainWindow
         {
             var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
             hex = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-            TxtCustomAccentHex.Text = hex;
             var matchedPreset = ConfigService.Presets.FirstOrDefault(p =>
                 string.Equals(p.AccentHex, hex, StringComparison.OrdinalIgnoreCase));
-            _configService.Current.ThemeName = matchedPreset?.Name ?? "Personalizado";
+
+            string secondaryHex = matchedPreset?.SecondaryHex ?? hex;
+            if (!string.IsNullOrWhiteSpace(rawSecondaryHex))
+            {
+                string sec = rawSecondaryHex.Trim();
+                if (!sec.StartsWith("#", StringComparison.Ordinal))
+                    sec = "#" + sec;
+                var secColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(sec);
+                secondaryHex = $"#{secColor.R:X2}{secColor.G:X2}{secColor.B:X2}";
+            }
+
+            bool prevSuppress = _suppressEvents;
+            _suppressEvents = true;
+            try
+            {
+                if (!string.Equals(TxtCustomAccentHex.Text, hex, StringComparison.Ordinal))
+                    TxtCustomAccentHex.Text = hex;
+                if (!string.Equals(TxtCustomSecondaryHex.Text, secondaryHex, StringComparison.Ordinal))
+                    TxtCustomSecondaryHex.Text = secondaryHex;
+            }
+            finally
+            {
+                _suppressEvents = prevSuppress;
+            }
+
+            bool exactPreset = matchedPreset is not null &&
+                string.Equals(matchedPreset.SecondaryHex, secondaryHex, StringComparison.OrdinalIgnoreCase);
+            _configService.Current.ThemeName = exactPreset ? matchedPreset!.Name : "Personalizado";
             _configService.Current.ThemeAccentHex = hex;
-            _configService.Current.ThemeSecondaryHex = matchedPreset?.SecondaryHex ?? hex;
+            _configService.Current.ThemeSecondaryHex = secondaryHex;
             UpdateThemePresetOptions();
             _configService.Save();
             _fileWatcher.RefreshState();

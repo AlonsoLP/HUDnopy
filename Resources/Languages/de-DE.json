@@ -111,7 +111,8 @@
                      "spansh-services":  "Spansh-Dienste",
                      "integrations":  "Integrationen",
                      "ai-settings":  "KI-Copilot",
-                     "voice-audio":  "Stimme \u0026 Audio"
+                     "voice-audio":  "Stimme \u0026 Audio",
+                     "about":  "Über"
                  },
     "carrier":  {
                     "identityTitle":  "Identifikation",
@@ -376,7 +377,11 @@
                           "testSound":  "Ton für {0} testen",
                           "testVoice":  "Stimme für {0} testen",
                           "speechPrefix":  "Warnung",
-                          "speechTest":  "Sprachsysteme des Schiffs betriebsbereit."
+                          "speechTest":  "Sprachsysteme des Schiffs betriebsbereit.",
+                          "catNavigation":  "NAVIGATION \u0026 ERKUNDUNG",
+                          "catCombat":  "KAMPF \u0026 BEDROHUNGEN",
+                          "catOperations":  "MISSIONEN \u0026 OPERATIONEN",
+                          "catSurvival":  "ÜBERLEBEN \u0026 SCHIFF"
                       },
     "speechAlerts":  {
                          "fuelLow":  "Achtung: Treibstoff niedrig, bei {0:0} Prozent.",
@@ -901,7 +906,7 @@
                      "securityTitle":  "SICHERHEIT DES FERNZUGRIFFS",
                      "securityHelp":  "Über die Weboberfläche kann das Spiel gesteuert werden. HTTPS nutzt ein selbstsigniertes Zertifikat; der Browser warnt davor. Prüfe das Zertifikat, bevor du ihm vertraust. Uneingeschränkter Zugriff erlaubt allen erreichenden Geräten den Zugriff. Der VPN-Modus beschränkt nur die ausgewählte Schnittstelle.",
                      "alertsTitle":  "WARNUNGEN NACH TYP UND KANAL",
-                     "alertsHelp":  "Visuelle Warnungen, Töne und lokale Sprachausgabe. Eine installierte Windows-Stimme auswählen; Sprache wird nur für Warnungen mit aktiviertem Kanal ausgegeben.",
+                     "alertsHelp":  "Visuelle Hinweise, Klänge und Sprachausgabe je Alarmtyp.",
                      "voiceTitle":  "LOKALE SPRACHAUSGABE",
                      "testVoice":  "Stimme testen",
                      "voiceTip":  "Eine lokal installierte Windows-SAPI-Stimme auswählen",
@@ -1086,7 +1091,24 @@
                      "discordRpcToggle":  "Discord Rich Presence: Schiff, System \u0026 Aktivität im Discord-Profil anzeigen",
                      "ardentMarketToggle":  "Ardent Insight API: Live-Kauf-/Verkaufspreise für Waren abfragen",
                      "canonnUploadToggle":  "Canonn R\u0026D: Wissenschafts- \u0026 Exobiologiedaten senden (Codex / ScanOrganic)",
-                     "edsmAnnounceFirstDiscoveryToggle":  "Per Sprache (COVAS/TTS) melden, wenn ein in EDSM unbekanntes System betreten wird"
+                     "edsmAnnounceFirstDiscoveryToggle":  "Per Sprache (COVAS/TTS) melden, wenn ein in EDSM unbekanntes System betreten wird",
+                     "secondaryColor":  "Sekundärfarbe HEX:",
+                     "aiDynamicCooldown":  "Intervall (s):",
+                     "thresholdCritPct":  "Krit. %",
+                     "macroStepsLabel":  "Aktionen:",
+                     "macroTriggerLabel":  "Auslösephrase(n):",
+                     "macroConfirmLabel":  "Bestätigung (opt.):",
+                     "thresholdWarnHrs":  "Warnung h",
+                     "thresholdCritHrs":  "Krit. h",
+                     "thresholdWarnPct":  "Warnung %",
+                     "aboutProjectLinks":  "PROJEKTLINKS",
+                     "aboutLicenseLabel":  "Lizenz:",
+                     "aboutDesc":  "Open-Source-Telemetrie-HUD für Elite Dangerous, Touch-Web-MFD, Fleet-Carrier-Manager und COVAS-KI-Kopilot.",
+                     "aboutCommunityTitle":  "COMMUNITY-ÖKOSYSTEM \u0026 PARTNERSEITEN",
+                     "aboutTitle":  "ÜBER HUDNOPY",
+                     "aboutCommunityHelp":  "Schnellzugriff auf Community-Tools, Datenbanken und APIs für Elite Dangerous, die in HUDnopy integriert oder kompatibel sind.",
+                     "aboutAuthorLabel":  "Autor:",
+                     "aboutVersionLabel":  "Version:"
                  },
     "operations":  {
                        "marketSearch":  "Ware nach Namen suchen",

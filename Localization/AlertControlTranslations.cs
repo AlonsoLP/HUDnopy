@@ -25,7 +25,8 @@ internal static class AlertControlTranslations
     {
         "alert", "visual", "sound", "voice", "showInfo", "hideInfo", "showInfoName",
         "hideInfoName", "visualTooltip", "soundTooltip", "voiceTooltip", "profileTooltip",
-        "soundPreview", "voicePreview", "testSound", "testVoice", "speechPrefix", "speechTest"
+        "soundPreview", "voicePreview", "testSound", "testVoice", "speechPrefix", "speechTest",
+        "catSurvival", "catCombat", "catNavigation", "catOperations"
     };
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Catalog = Load();

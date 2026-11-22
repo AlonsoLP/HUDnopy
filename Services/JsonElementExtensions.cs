@@ -63,6 +63,16 @@ internal static class HttpClientHeaderDefaults
     /// </summary>
     public static string ProductVersion { get; } = ResolveAssemblyVersion();
 
+    public static string Authors { get; } = ResolveAssemblyMetadata("Authors", "AlonsoLP");
+    public static string Copyright { get; } = ResolveAssemblyCopyright();
+    public static string License { get; } = ResolveAssemblyMetadata("License", "GNU GPL-3.0-only");
+    public static string WebsiteUrl { get; } = ResolveAssemblyMetadata("WebsiteUrl", "https://alonsolp.github.io/HUDnopy/");
+    public static string RepositoryUrl { get; } = ResolveAssemblyMetadata("RepositoryUrl", "https://github.com/AlonsoLP/HUDnopy");
+    public static string WikiUrl => $"{RepositoryUrl.TrimEnd('/')}/wiki";
+    public static string ReleasesUrl => $"{RepositoryUrl.TrimEnd('/')}/releases";
+    public static string IssuesUrl => $"{RepositoryUrl.TrimEnd('/')}/issues";
+    public static string FrontierCallbackUrl => $"{WebsiteUrl.TrimEnd('/')}/callback.html";
+
     public static ProductInfoHeaderValue UserAgent => new(ProductName, ProductVersion);
 
     /// <summary>
@@ -195,5 +205,24 @@ internal static class HttpClientHeaderDefaults
 
         Version? v = asm.GetName().Version;
         return v is not null ? $"{v.Major}.{v.Minor}.{Math.Max(0, v.Build)}" : "0.0.0";
+    }
+
+    private static string ResolveAssemblyMetadata(string key, string fallback)
+    {
+        var asm = typeof(HttpClientHeaderDefaults).Assembly;
+        foreach (var attr in asm.GetCustomAttributes<AssemblyMetadataAttribute>())
+        {
+            if (string.Equals(attr.Key, key, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(attr.Value))
+                return attr.Value.Trim();
+        }
+        return fallback;
+    }
+
+    private static string ResolveAssemblyCopyright()
+    {
+        var asm = typeof(HttpClientHeaderDefaults).Assembly;
+        string? copy = asm.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright;
+        return !string.IsNullOrWhiteSpace(copy) ? copy.Trim() : "Copyright (c) 2026 AlonsoLP";
     }
 }

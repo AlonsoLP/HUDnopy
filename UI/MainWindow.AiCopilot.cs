@@ -278,6 +278,11 @@ public partial class MainWindow
         cfg.AiOpenAiModel = (CmbAiOpenAiModel.SelectedItem as string ?? cfg.AiOpenAiModel).Trim();
         cfg.AiSpeakReplies = ChkAiSpeakReplies.IsChecked == true;
         cfg.AiAllowActions = ChkAiAllowActions.IsChecked == true;
+        if (TxtAiDynamicCooldown is not null && int.TryParse(TxtAiDynamicCooldown.Text.Trim(), out int cooldown))
+        {
+            cfg.AiDynamicEventCooldownSeconds = Math.Clamp(cooldown, 10, 300);
+            TxtAiDynamicCooldown.Text = cfg.AiDynamicEventCooldownSeconds.ToString();
+        }
         cfg.AiVerbosity = CmbAiVerbosity?.SelectedValue as string ?? "normal";
         cfg.AiThinkingMode = CmbAiThinkingMode?.SelectedValue as string ?? "auto";
         cfg.AiCustomPersonality = (TxtAiCustomPersonality?.Text ?? "").Trim();
@@ -331,12 +336,23 @@ public partial class MainWindow
         }
     }
 
-    private void BtnSaveAiConfig_Click(object sender, RoutedEventArgs e)
+    private void AiField_AutoSave(object sender, RoutedEventArgs e)
     {
+        if (_suppressEvents || _configService is null)
+            return;
         SaveAiFieldsToConfig();
-        string msg = SettingsTranslations.ForLanguage(_uiLanguage)["aiSaved"];
-        TxtAiConfigStatus.Text = msg;
-        TxtStatusBarLeft.Text = msg;
+    }
+
+    private void AiDynamicCooldown_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null || TxtAiDynamicCooldown is null)
+            return;
+        if (!int.TryParse(TxtAiDynamicCooldown.Text.Trim(), out int cooldown) ||
+            cooldown < 10 || cooldown > 300 ||
+            _configService.Current.AiDynamicEventCooldownSeconds == cooldown)
+            return;
+        _configService.Current.AiDynamicEventCooldownSeconds = cooldown;
+        _configService.Save();
     }
 
     private async void BtnTestAiConfig_Click(object sender, RoutedEventArgs e)

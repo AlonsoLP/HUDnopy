@@ -66,154 +66,229 @@ public partial class MainWindow
         AddAlertGridHeader(text["sound"], 2);
         AddAlertGridHeader(text["voice"], 3);
 
+        var allDefinitions = AlertDefinitions.ForLanguage(_uiLanguage);
+        var categories = new (string Key, HashSet<string> Ids)[]
+        {
+            ("catSurvival", new(StringComparer.OrdinalIgnoreCase) { "fuel-low", "fuel-critical", "overheating", "hull-critical", "shields-down", "cockpit-breach", "copilot-safety" }),
+            ("catCombat", new(StringComparer.OrdinalIgnoreCase) { "interdiction", "danger", "bounty-reward", "crime-committed" }),
+            ("catNavigation", new(StringComparer.OrdinalIgnoreCase) { "jump-arrival", "docking", "exploration-activity" }),
+            ("catOperations", new(StringComparer.OrdinalIgnoreCase) { "mission-activity", "mission-expiry", "cargo-activity", "carrier-activity" })
+        };
+
+        var placed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var orderedGroups = new List<(string CategoryKey, List<AlertDefinition> Items)>();
+        foreach (var (catKey, ids) in categories)
+        {
+            var items = allDefinitions.Where(d => ids.Contains(d.Id)).ToList();
+            foreach (var item in items) placed.Add(item.Id);
+            if (items.Count > 0)
+                orderedGroups.Add((catKey, items));
+        }
+        var remaining = allDefinitions.Where(d => !placed.Contains(d.Id)).ToList();
+        if (remaining.Count > 0)
+            orderedGroups.Add(("catOperations", remaining));
+
+        var rowBrushEven = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x0B, 0x0F, 0x15));
+        var rowBrushOdd = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x11, 0x17, 0x20));
+        var rowBorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF));
+        rowBrushEven.Freeze();
+        rowBrushOdd.Freeze();
+        rowBorderBrush.Freeze();
+
         int row = 1;
-        foreach (var definition in AlertDefinitions.ForLanguage(_uiLanguage))
+        bool measuredFirstProfile = false;
+        foreach (var (categoryKey, items) in orderedGroups)
         {
             AlertSettingsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var preference = _configService.Current.AlertPreferences[definition.Id];
-            var details = new StackPanel { Margin = new Thickness(0, 2, 4, 2) };
-            var title = new DockPanel();
-            var description = new TextBlock
+            var catHeader = new Border
             {
-                Text = definition.Description,
-                Language = System.Windows.Markup.XmlLanguage.GetLanguage(_uiLanguage),
-                Foreground = (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
-                FontSize = 10,
-                TextWrapping = TextWrapping.Wrap,
-                Visibility = expanded.Contains(definition.Id) ? Visibility.Visible : Visibility.Collapsed
+                Padding = new Thickness(10, 6, 10, 6),
+                Margin = new Thickness(0, row == 1 ? 4 : 10, 0, 2),
+                BorderThickness = new Thickness(3, 0, 0, 0)
             };
-            var infoButton = new System.Windows.Controls.Button
+            catHeader.SetResourceReference(Border.BackgroundProperty, "HudPanelAltBrush");
+            catHeader.SetResourceReference(Border.BorderBrushProperty, "HudAccentBrush");
+            var catLabel = new TextBlock
             {
-                Content = "ⓘ",
-                Tag = definition.Id,
-                Style = (Style)FindResource("HudIconButtonStyle"),
-                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Symbol"),
-                MinWidth = 28,
-                MinHeight = 28,
-                Padding = new Thickness(4),
-                ToolTip = text[expanded.Contains(definition.Id) ? "hideInfo" : "showInfo"]
-            };
-            System.Windows.Automation.AutomationProperties.SetName(infoButton,
-                string.Format(text[expanded.Contains(definition.Id) ? "hideInfoName" : "showInfoName"], definition.Name));
-            infoButton.Click += (_, _) =>
-            {
-                bool show = description.Visibility != Visibility.Visible;
-                description.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-                infoButton.ToolTip = text[show ? "hideInfo" : "showInfo"];
-                System.Windows.Automation.AutomationProperties.SetName(infoButton,
-                    string.Format(text[show ? "hideInfoName" : "showInfoName"], definition.Name));
-            };
-            DockPanel.SetDock(infoButton, Dock.Left);
-            title.Children.Add(infoButton);
-            title.Children.Add(new TextBlock
-            {
-                Text = definition.Name,
-                Language = System.Windows.Markup.XmlLanguage.GetLanguage(_uiLanguage),
-                Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"),
+                Text = text.TryGetValue(categoryKey, out string? catTitle) ? catTitle : categoryKey,
+                FontSize = 11,
                 FontWeight = FontWeights.Bold,
-                TextWrapping = TextWrapping.Wrap,
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            details.Children.Add(title);
-            details.Children.Add(description);
-            Grid.SetRow(details, row);
-            AlertSettingsGrid.Children.Add(details);
-
-            AddAlertChannelCheckbox(definition.Id, "VisualEnabled", preference.VisualEnabled, row, 1, text["visualTooltip"]);
-            var soundCheckbox = CreateAlertChannelCheckbox(definition.Id, "SoundEnabled", preference.SoundEnabled,
-                text["soundTooltip"]);
-            soundCheckbox.Margin = new Thickness(4, 0, 8, 0);
-            var rowProfiles = soundProfiles;
-            if (!soundProfiles.Any(option => string.Equals(option.Id, preference.SoundProfile, StringComparison.OrdinalIgnoreCase)))
-            {
-                rowProfiles = soundProfiles.ToList();
-                string missingName = preference.SoundProfile.StartsWith(AlertSoundService.FileProfilePrefix, StringComparison.OrdinalIgnoreCase)
-                    ? preference.SoundProfile[AlertSoundService.FileProfilePrefix.Length..]
-                    : preference.SoundProfile;
-                rowProfiles.Add(new AlertSoundProfileOption(preference.SoundProfile,
-                    string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundMissing"], missingName)));
-            }
-            var soundProfile = new System.Windows.Controls.ComboBox
-            {
-                ItemsSource = rowProfiles,
-                DisplayMemberPath = nameof(AlertSoundProfileOption.Name),
-                SelectedValuePath = nameof(AlertSoundProfileOption.Id),
-                SelectedValue = rowProfiles.First(option =>
-                    string.Equals(option.Id, preference.SoundProfile, StringComparison.OrdinalIgnoreCase)).Id,
-                Tag = new AlertPreferenceTag(definition.Id, "SoundProfile"),
-                ToolTip = text["profileTooltip"],
-                MinWidth = 0,
-                MaxWidth = 300,
-                Margin = new Thickness(2, 4, 2, 4),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            soundProfile.SelectionChanged += AlertSoundProfile_SelectionChanged;
-
-            var previewButton = CreateAlertPreviewButton(
-                new AlertSoundPreviewTag(definition.Id, soundProfile),
-                text["soundPreview"],
-                string.Format(text["testSound"], definition.Name),
-                PreviewAlertSound_Click);
-            var profileControls = new Grid { HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
-            profileControls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            profileControls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup = "AlertSoundProfile" });
-            profileControls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            profileControls.Children.Add(soundCheckbox);
-            Grid.SetColumn(soundProfile, 1);
-            profileControls.Children.Add(soundProfile);
-            Grid.SetColumn(previewButton, 2);
-            profileControls.Children.Add(previewButton);
-
-            if (row == 1)
-            {
-                // Measure all names with the selector's font, reserving room for its dropdown arrow.
-                foreach (var profile in soundProfiles)
-                {
-                    var measure = new StackPanel
-                    {
-                        Orientation = System.Windows.Controls.Orientation.Horizontal,
-                        Visibility = Visibility.Hidden,
-                        MaxWidth = 300,
-                        Margin = new Thickness(9, 0, 11, 0)
-                    };
-                    foreach (string sample in new[] { profile.Name, "▾" })
-                    {
-                        var textBlock = new TextBlock { Text = sample };
-                        if (sample == "▾")
-                            textBlock.Margin = new Thickness(8, 0, 0, 0);
-                        textBlock.SetBinding(TextElement.FontFamilyProperty, new WpfBinding(nameof(WpfControl.FontFamily)) { Source = soundProfile });
-                        textBlock.SetBinding(TextElement.FontSizeProperty, new WpfBinding(nameof(WpfControl.FontSize)) { Source = soundProfile });
-                        textBlock.SetBinding(TextElement.FontStyleProperty, new WpfBinding(nameof(WpfControl.FontStyle)) { Source = soundProfile });
-                        textBlock.SetBinding(TextElement.FontWeightProperty, new WpfBinding(nameof(WpfControl.FontWeight)) { Source = soundProfile });
-                        textBlock.SetBinding(TextElement.FontStretchProperty, new WpfBinding(nameof(WpfControl.FontStretch)) { Source = soundProfile });
-                        measure.Children.Add(textBlock);
-                    }
-                    Grid.SetColumn(measure, 1);
-                    profileControls.Children.Add(measure);
-                }
-            }
-            Grid.SetRow(profileControls, row);
-            Grid.SetColumn(profileControls, 2);
-            AlertSettingsGrid.Children.Add(profileControls);
-
-            var voiceCheckbox = CreateAlertChannelCheckbox(definition.Id, "VoiceEnabled", preference.VoiceEnabled,
-                text["voiceTooltip"]);
-            var voiceButton = CreateAlertPreviewButton(
-                definition,
-                text["voicePreview"],
-                string.Format(text["testVoice"], definition.Name),
-                PreviewAlertVoice_Click);
-            var voiceControls = new StackPanel
-            {
-                Orientation = System.Windows.Controls.Orientation.Horizontal,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center
-            };
-            voiceControls.Children.Add(voiceCheckbox);
-            voiceControls.Children.Add(voiceButton);
-            Grid.SetRow(voiceControls, row);
-            Grid.SetColumn(voiceControls, 3);
-            AlertSettingsGrid.Children.Add(voiceControls);
+            catLabel.SetResourceReference(TextBlock.ForegroundProperty, "HudAccentBrush");
+            catHeader.Child = catLabel;
+            Grid.SetRow(catHeader, row);
+            Grid.SetColumn(catHeader, 0);
+            Grid.SetColumnSpan(catHeader, 4);
+            AlertSettingsGrid.Children.Add(catHeader);
             row++;
+
+            int rowIndexInGroup = 0;
+            foreach (var definition in items)
+            {
+                AlertSettingsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MinHeight = 44 });
+                var rowBg = new Border
+                {
+                    Background = (rowIndexInGroup % 2 == 0) ? rowBrushEven : rowBrushOdd,
+                    BorderBrush = rowBorderBrush,
+                    BorderThickness = new Thickness(0, 0, 0, 1)
+                };
+                Grid.SetRow(rowBg, row);
+                Grid.SetColumn(rowBg, 0);
+                Grid.SetColumnSpan(rowBg, 4);
+                AlertSettingsGrid.Children.Add(rowBg);
+                rowIndexInGroup++;
+
+                var preference = _configService.Current.AlertPreferences[definition.Id];
+                var details = new StackPanel { Margin = new Thickness(6, 4, 8, 4), VerticalAlignment = VerticalAlignment.Center };
+                var title = new DockPanel();
+                var description = new TextBlock
+                {
+                    Text = definition.Description,
+                    Language = System.Windows.Markup.XmlLanguage.GetLanguage(_uiLanguage),
+                    Foreground = (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
+                    FontSize = 10,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(44, 2, 0, 2),
+                    Visibility = expanded.Contains(definition.Id) ? Visibility.Visible : Visibility.Collapsed
+                };
+                var infoButton = new System.Windows.Controls.Button
+                {
+                    Content = "ⓘ",
+                    Tag = definition.Id,
+                    Style = (Style)FindResource("HudIconButtonStyle"),
+                    FontFamily = new System.Windows.Media.FontFamily("Segoe UI Symbol"),
+                    MinWidth = 38,
+                    MinHeight = 38,
+                    Padding = new Thickness(6),
+                    Margin = new Thickness(0, 0, 6, 0),
+                    ToolTip = text[expanded.Contains(definition.Id) ? "hideInfo" : "showInfo"]
+                };
+                System.Windows.Automation.AutomationProperties.SetName(infoButton,
+                    string.Format(text[expanded.Contains(definition.Id) ? "hideInfoName" : "showInfoName"], definition.Name));
+                infoButton.Click += (_, _) =>
+                {
+                    bool show = description.Visibility != Visibility.Visible;
+                    description.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                    infoButton.ToolTip = text[show ? "hideInfo" : "showInfo"];
+                    System.Windows.Automation.AutomationProperties.SetName(infoButton,
+                        string.Format(text[show ? "hideInfoName" : "showInfoName"], definition.Name));
+                };
+                DockPanel.SetDock(infoButton, Dock.Left);
+                title.Children.Add(infoButton);
+                title.Children.Add(new TextBlock
+                {
+                    Text = definition.Name,
+                    Language = System.Windows.Markup.XmlLanguage.GetLanguage(_uiLanguage),
+                    Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"),
+                    FontWeight = FontWeights.Bold,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                details.Children.Add(title);
+                details.Children.Add(description);
+                Grid.SetRow(details, row);
+                AlertSettingsGrid.Children.Add(details);
+
+                AddAlertChannelCheckbox(definition.Id, "VisualEnabled", preference.VisualEnabled, row, 1, text["visualTooltip"]);
+                var soundCheckbox = CreateAlertChannelCheckbox(definition.Id, "SoundEnabled", preference.SoundEnabled,
+                    text["soundTooltip"]);
+                soundCheckbox.Margin = new Thickness(4, 0, 8, 0);
+                var rowProfiles = soundProfiles;
+                if (!soundProfiles.Any(option => string.Equals(option.Id, preference.SoundProfile, StringComparison.OrdinalIgnoreCase)))
+                {
+                    rowProfiles = soundProfiles.ToList();
+                    string missingName = preference.SoundProfile.StartsWith(AlertSoundService.FileProfilePrefix, StringComparison.OrdinalIgnoreCase)
+                        ? preference.SoundProfile[AlertSoundService.FileProfilePrefix.Length..]
+                        : preference.SoundProfile;
+                    rowProfiles.Add(new AlertSoundProfileOption(preference.SoundProfile,
+                        string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundMissing"], missingName)));
+                }
+                var soundProfile = new System.Windows.Controls.ComboBox
+                {
+                    ItemsSource = rowProfiles,
+                    DisplayMemberPath = nameof(AlertSoundProfileOption.Name),
+                    SelectedValuePath = nameof(AlertSoundProfileOption.Id),
+                    SelectedValue = rowProfiles.First(option =>
+                        string.Equals(option.Id, preference.SoundProfile, StringComparison.OrdinalIgnoreCase)).Id,
+                    Tag = new AlertPreferenceTag(definition.Id, "SoundProfile"),
+                    ToolTip = text["profileTooltip"],
+                    MinWidth = 0,
+                    MinHeight = 36,
+                    MaxWidth = 300,
+                    Margin = new Thickness(2, 4, 4, 4),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                soundProfile.SelectionChanged += AlertSoundProfile_SelectionChanged;
+
+                var previewButton = CreateAlertPreviewButton(
+                    new AlertSoundPreviewTag(definition.Id, soundProfile),
+                    text["soundPreview"],
+                    string.Format(text["testSound"], definition.Name),
+                    PreviewAlertSound_Click);
+                var profileControls = new Grid { HorizontalAlignment = System.Windows.HorizontalAlignment.Left, Margin = new Thickness(4, 0, 4, 0) };
+                profileControls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                profileControls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup = "AlertSoundProfile" });
+                profileControls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                profileControls.Children.Add(soundCheckbox);
+                Grid.SetColumn(soundProfile, 1);
+                profileControls.Children.Add(soundProfile);
+                Grid.SetColumn(previewButton, 2);
+                profileControls.Children.Add(previewButton);
+
+                if (!measuredFirstProfile)
+                {
+                    measuredFirstProfile = true;
+                    // Measure all names with the selector's font, reserving room for its dropdown arrow.
+                    foreach (var profile in soundProfiles)
+                    {
+                        var measure = new StackPanel
+                        {
+                            Orientation = System.Windows.Controls.Orientation.Horizontal,
+                            Visibility = Visibility.Hidden,
+                            MaxWidth = 300,
+                            Margin = new Thickness(9, 0, 11, 0)
+                        };
+                        foreach (string sample in new[] { profile.Name, "▾" })
+                        {
+                            var textBlock = new TextBlock { Text = sample };
+                            if (sample == "▾")
+                                textBlock.Margin = new Thickness(8, 0, 0, 0);
+                            textBlock.SetBinding(TextElement.FontFamilyProperty, new WpfBinding(nameof(WpfControl.FontFamily)) { Source = soundProfile });
+                            textBlock.SetBinding(TextElement.FontSizeProperty, new WpfBinding(nameof(WpfControl.FontSize)) { Source = soundProfile });
+                            textBlock.SetBinding(TextElement.FontStyleProperty, new WpfBinding(nameof(WpfControl.FontStyle)) { Source = soundProfile });
+                            textBlock.SetBinding(TextElement.FontWeightProperty, new WpfBinding(nameof(WpfControl.FontWeight)) { Source = soundProfile });
+                            textBlock.SetBinding(TextElement.FontStretchProperty, new WpfBinding(nameof(WpfControl.FontStretch)) { Source = soundProfile });
+                            measure.Children.Add(textBlock);
+                        }
+                        Grid.SetColumn(measure, 1);
+                        profileControls.Children.Add(measure);
+                    }
+                }
+                Grid.SetRow(profileControls, row);
+                Grid.SetColumn(profileControls, 2);
+                AlertSettingsGrid.Children.Add(profileControls);
+
+                var voiceCheckbox = CreateAlertChannelCheckbox(definition.Id, "VoiceEnabled", preference.VoiceEnabled,
+                    text["voiceTooltip"]);
+                var voiceButton = CreateAlertPreviewButton(
+                    definition,
+                    text["voicePreview"],
+                    string.Format(text["testVoice"], definition.Name),
+                    PreviewAlertVoice_Click);
+                var voiceControls = new StackPanel
+                {
+                    Orientation = System.Windows.Controls.Orientation.Horizontal,
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                    Margin = new Thickness(4, 0, 6, 0)
+                };
+                voiceControls.Children.Add(voiceCheckbox);
+                voiceControls.Children.Add(voiceButton);
+                Grid.SetRow(voiceControls, row);
+                Grid.SetColumn(voiceControls, 3);
+                AlertSettingsGrid.Children.Add(voiceControls);
+                row++;
+            }
         }
     }
 
@@ -224,10 +299,10 @@ public partial class MainWindow
         {
             Content = "▶",
             Style = (Style)FindResource("HudIconButtonStyle"),
-            Padding = new Thickness(4, 2, 4, 2),
-            Margin = new Thickness(2, 4, 0, 4),
-            MinWidth = 28,
-            MinHeight = 28,
+            Padding = new Thickness(6),
+            Margin = new Thickness(4, 3, 0, 3),
+            MinWidth = 38,
+            MinHeight = 38,
             HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Tag = tag,
@@ -657,7 +732,102 @@ public partial class MainWindow
     {
         if (sender is UniformGrid grid && e.NewSize.Width > 0 &&
             double.TryParse(grid.Tag?.ToString(), out double minimum) && minimum > 0)
-            grid.Columns = Math.Max(1, (int)(e.NewSize.Width / minimum));
+        {
+            double scaledMin = minimum * Math.Max(1.0, _desktopFontScale);
+            grid.Columns = Math.Max(1, (int)(e.NewSize.Width / scaledMin));
+        }
+    }
+
+    private void ResponsiveSplit_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is Grid grid)
+            UpdateResponsiveSplit(grid);
+    }
+
+    private void BtnStepSlider_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: string tag })
+            return;
+        string[] parts = tag.Split('|');
+        if (parts.Length != 2 || !double.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out double delta))
+            return;
+        if (FindName(parts[0]) is Slider slider)
+            slider.Value = Math.Clamp(slider.Value + delta, slider.Minimum, slider.Maximum);
+    }
+
+    private void BtnStepNumberBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: string tag })
+            return;
+        string[] parts = tag.Split('|');
+        if (parts.Length != 4 ||
+            !int.TryParse(parts[1], out int delta) ||
+            !int.TryParse(parts[2], out int min) ||
+            !int.TryParse(parts[3], out int max))
+            return;
+        if (FindName(parts[0]) is System.Windows.Controls.TextBox box)
+        {
+            int current = int.TryParse(box.Text.Trim(), out int parsed) ? parsed : min;
+            box.Text = Math.Clamp(current + delta, min, max).ToString();
+        }
+    }
+
+    private void UpdateResponsiveSplit(Grid grid)
+    {
+        if (grid.ColumnDefinitions.Count < 3 || grid.RowDefinitions.Count < 2 || grid.Children.Count < 2)
+            return;
+
+        double minColWidth = double.TryParse(grid.Tag?.ToString(), out double parsed) && parsed > 0 ? parsed : 460;
+        double available = grid.ActualWidth;
+        double required = (minColWidth * 2 + 12) * Math.Max(1.0, _desktopFontScale);
+        bool twoCols = available <= 0 || available >= required;
+
+        var first = grid.Children[0] as FrameworkElement;
+        var second = grid.Children[1] as FrameworkElement;
+        if (first is null || second is null)
+            return;
+
+        if (twoCols)
+        {
+            grid.ColumnDefinitions[1].Width = new GridLength(12);
+            grid.ColumnDefinitions[2].Width = new GridLength(1, GridUnitType.Star);
+            Grid.SetRow(first, 0);
+            Grid.SetColumn(first, 0);
+            Grid.SetColumnSpan(first, 1);
+            Grid.SetRow(second, 0);
+            Grid.SetColumn(second, 2);
+            Grid.SetColumnSpan(second, 1);
+            second.Margin = new Thickness(0);
+        }
+        else
+        {
+            grid.ColumnDefinitions[1].Width = new GridLength(0);
+            grid.ColumnDefinitions[2].Width = new GridLength(0);
+            Grid.SetRow(first, 0);
+            Grid.SetColumn(first, 0);
+            Grid.SetColumnSpan(first, 3);
+            Grid.SetRow(second, 1);
+            Grid.SetColumn(second, 0);
+            Grid.SetColumnSpan(second, 3);
+            second.Margin = new Thickness(0, 12, 0, 0);
+        }
+    }
+
+    private void UpdateAllResponsiveSplits(DependencyObject root)
+    {
+        foreach (FrameworkElement el in EnumerateVisualElements(root))
+        {
+            if (el is Grid { ColumnDefinitions.Count: >= 3, RowDefinitions.Count: >= 2, Children.Count: >= 2 } splitGrid &&
+                splitGrid.Tag is string tagStr && double.TryParse(tagStr, out _))
+            {
+                UpdateResponsiveSplit(splitGrid);
+            }
+            else if (el is UniformGrid uGrid && uGrid.ActualWidth > 0 &&
+                     double.TryParse(uGrid.Tag?.ToString(), out double minW) && minW > 0)
+            {
+                uGrid.Columns = Math.Max(1, (int)(uGrid.ActualWidth / (minW * Math.Max(1.0, _desktopFontScale))));
+            }
+        }
     }
 
     private void NavigationActionsGrid_SizeChanged(object sender, SizeChangedEventArgs e) =>
@@ -743,36 +913,27 @@ public partial class MainWindow
     }
 
 
-    private async void BtnSaveConfig_Click(object sender, RoutedEventArgs e)
+    private async void PathsConfig_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (!int.TryParse(TxtProcessExitGraceSeconds.Text.Trim(), out int exitGraceSeconds) ||
-            exitGraceSeconds < 1 || exitGraceSeconds > 300)
-        {
-            var text = SettingsTranslations.ForLanguage(_uiLanguage);
-            System.Windows.MessageBox.Show(
-                text["invalidWaitMessage"],
-                text["invalidWait"],
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+        if (_suppressEvents || _configService is null)
             return;
-        }
 
         string journalFolder = TxtConfigJournalPath.Text.Trim();
         string bindingsFolder = TxtConfigBindingsPath.Text.Trim();
         string selectedBindsFile = string.Equals(TxtConfigSelectedBindsFile.Text, _displayedBindsFile, StringComparison.Ordinal)
             ? _configService.Current.SelectedBindsFile
             : TxtConfigSelectedBindsFile.Text.Trim();
+        bool journalChanged = !string.Equals(_configService.Current.JournalFolderPath, journalFolder, StringComparison.OrdinalIgnoreCase);
         bool bindingsChanged =
             !string.Equals(_configService.Current.BindingsFolderPath, bindingsFolder, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(_configService.Current.SelectedBindsFile, selectedBindsFile, StringComparison.OrdinalIgnoreCase);
 
+        if (!journalChanged && !bindingsChanged)
+            return;
+
         _configService.Current.JournalFolderPath = journalFolder;
         _configService.Current.BindingsFolderPath = bindingsFolder;
         _configService.Current.SelectedBindsFile = selectedBindsFile;
-        _configService.Current.HideUnassignedBindings = ChkHideUnassignedBindings.IsChecked == true;
-        _configService.Current.FocusGameWindowOnInput = ChkFocusGameWindow.IsChecked == true;
-        _configService.Current.StartMinimizedToTray = ChkStartMinimizedToTray.IsChecked == true;
-        _configService.Current.GameProcessExitGraceSeconds = exitGraceSeconds;
         _configService.Save();
         _displayedBindsFile = null;
         if (bindingsChanged)
@@ -783,8 +944,37 @@ public partial class MainWindow
         TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaved"];
     }
 
-    private async void BtnSaveAlertThresholds_Click(object sender, RoutedEventArgs e)
+    private void ChkFocusGameWindow_Click(object sender, RoutedEventArgs e)
     {
+        if (_suppressEvents || _configService is null)
+            return;
+
+        _configService.Current.FocusGameWindowOnInput = ChkFocusGameWindow.IsChecked == true;
+        _configService.Save();
+    }
+
+    private void TxtProcessExitGraceSeconds_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null || TxtProcessExitGraceSeconds is null)
+            return;
+
+        if (!int.TryParse(TxtProcessExitGraceSeconds.Text.Trim(), out int exitGraceSeconds) ||
+            exitGraceSeconds < 1 || exitGraceSeconds > 300 ||
+            _configService.Current.GameProcessExitGraceSeconds == exitGraceSeconds)
+            return;
+
+        _configService.Current.GameProcessExitGraceSeconds = exitGraceSeconds;
+        _configService.Save();
+    }
+
+    private async void AlertThreshold_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null ||
+            TxtFuelLowThreshold is null || TxtFuelCriticalThreshold is null ||
+            TxtHullCriticalThreshold is null || TxtMissionExpiryWarningHours is null ||
+            TxtMissionExpiryCriticalHours is null)
+            return;
+
         if (!int.TryParse(TxtFuelLowThreshold.Text.Trim(), out int lowThreshold) ||
             !int.TryParse(TxtFuelCriticalThreshold.Text.Trim(), out int criticalThreshold) ||
             !int.TryParse(TxtHullCriticalThreshold.Text.Trim(), out int hullCriticalThreshold) ||
@@ -797,21 +987,21 @@ public partial class MainWindow
             missionWarningHours is < 2 or > 720 ||
             missionCriticalHours < 1 ||
             missionCriticalHours >= missionWarningHours)
-        {
-            var text = SettingsTranslations.ForLanguage(_uiLanguage);
-            System.Windows.MessageBox.Show(
-                text["invalidThresholdMessage"],
-                text["invalidThreshold"],
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
             return;
-        }
 
-        _configService.Current.FuelLowThresholdPercent = lowThreshold;
-        _configService.Current.FuelCriticalThresholdPercent = criticalThreshold;
-        _configService.Current.HullCriticalThresholdPercent = hullCriticalThreshold;
-        _configService.Current.MissionExpiryWarningHours = missionWarningHours;
-        _configService.Current.MissionExpiryCriticalHours = missionCriticalHours;
+        var cfg = _configService.Current;
+        if (cfg.FuelLowThresholdPercent == lowThreshold &&
+            cfg.FuelCriticalThresholdPercent == criticalThreshold &&
+            cfg.HullCriticalThresholdPercent == hullCriticalThreshold &&
+            cfg.MissionExpiryWarningHours == missionWarningHours &&
+            cfg.MissionExpiryCriticalHours == missionCriticalHours)
+            return;
+
+        cfg.FuelLowThresholdPercent = lowThreshold;
+        cfg.FuelCriticalThresholdPercent = criticalThreshold;
+        cfg.HullCriticalThresholdPercent = hullCriticalThreshold;
+        cfg.MissionExpiryWarningHours = missionWarningHours;
+        cfg.MissionExpiryCriticalHours = missionCriticalHours;
         _configService.Save();
         TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["thresholdSaved"],
             lowThreshold, criticalThreshold, hullCriticalThreshold, missionWarningHours, missionCriticalHours);

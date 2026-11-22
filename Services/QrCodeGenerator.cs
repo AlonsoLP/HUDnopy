@@ -31,7 +31,10 @@ internal static class QrCodeGenerator
         new(5, 37, 108, 26, new[] { 6, 30 })
     };
 
-    public static DrawingImage? CreateQrImage(string text)
+    public static DrawingImage? CreateQrImage(
+        string text,
+        System.Windows.Media.Brush? foreground = null,
+        System.Windows.Media.Brush? background = null)
     {
         if (string.IsNullOrWhiteSpace(text))
             return null;
@@ -54,9 +57,12 @@ internal static class QrCodeGenerator
         int quiet = 4; // ISO/IEC 18004 standard 4-module quiet zone for reliable scanning on dark HUD themes
         int total = size + quiet * 2;
 
+        var bgBrush = background ?? System.Windows.Media.Brushes.White;
+        var fgBrush = foreground ?? System.Windows.Media.Brushes.Black;
+
         var group = new DrawingGroup();
         group.Children.Add(new GeometryDrawing(
-            System.Windows.Media.Brushes.White,
+            bgBrush,
             null,
             new RectangleGeometry(new Rect(0, 0, total, total))));
 
@@ -70,7 +76,7 @@ internal static class QrCodeGenerator
             }
         }
         modules.Freeze();
-        group.Children.Add(new GeometryDrawing(System.Windows.Media.Brushes.Black, null, modules));
+        group.Children.Add(new GeometryDrawing(fgBrush, null, modules));
         group.Freeze();
 
         var image = new DrawingImage(group);

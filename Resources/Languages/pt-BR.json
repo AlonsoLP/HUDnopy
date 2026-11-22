@@ -111,7 +111,8 @@
                      "spansh-services":  "Serviços Spansh",
                      "integrations":  "Integrações",
                      "ai-settings":  "Copiloto IA",
-                     "voice-audio":  "Voz e Áudio"
+                     "voice-audio":  "Voz e Áudio",
+                     "about":  "Sobre"
                  },
     "carrier":  {
                     "identityTitle":  "Identificação",
@@ -376,7 +377,11 @@
                           "testSound":  "Testar som de {0}",
                           "testVoice":  "Testar voz de {0}",
                           "speechPrefix":  "Alerta",
-                          "speechTest":  "Sistemas de voz da nave operacionais."
+                          "speechTest":  "Sistemas de voz da nave operacionais.",
+                          "catNavigation":  "NAVEGAÇÃO E EXPLORAÇÃO",
+                          "catCombat":  "COMBATE E AMEAÇAS",
+                          "catOperations":  "MISSÕES E OPERAÇÕES",
+                          "catSurvival":  "SOBREVIVÊNCIA E NAVE"
                       },
     "speechAlerts":  {
                          "fuelLow":  "Atenção: combustível baixo, em {0:0} por cento.",
@@ -901,7 +906,7 @@
                      "securityTitle":  "SEGURANÇA DO ACESSO REMOTO",
                      "securityHelp":  "A interface web permite controlar o jogo. HTTPS usa um certificado autoassinado e o navegador exibirá um aviso; verifique o certificado antes de confiar nele. O modo sem restrição permite acesso a quem alcançar o servidor. O modo VPN limita somente a interface selecionada.",
                      "alertsTitle":  "ALERTAS POR TIPO E CANAL",
-                     "alertsHelp":  "Alertas visuais, sons e voz local. Escolha uma voz instalada do Windows; a fala só é reproduzida para alertas com esse canal ativado.",
+                     "alertsHelp":  "Avisos visuais, sons e voz por tipo de alerta.",
                      "voiceTitle":  "VOZ LOCAL",
                      "testVoice":  "Testar voz",
                      "voiceTip":  "Selecione uma voz SAPI instalada no Windows",
@@ -1086,7 +1091,24 @@
                      "discordRpcToggle":  "Discord Rich Presence: Mostrar nave, sistema e atividade no seu perfil do Discord",
                      "ardentMarketToggle":  "Ardent Insight API: Consulta de preços de compra/venda do mercado ao vivo",
                      "canonnUploadToggle":  "Canonn R\u0026D: Enviar telemetria científica e de exobiologia (Codex / ScanOrganic)",
-                     "edsmAnnounceFirstDiscoveryToggle":  "Anunciar por voz (COVAS/TTS) ao entrar em um sistema desconhecido no EDSM"
+                     "edsmAnnounceFirstDiscoveryToggle":  "Anunciar por voz (COVAS/TTS) ao entrar em um sistema desconhecido no EDSM",
+                     "secondaryColor":  "Cor Secundária HEX:",
+                     "aiDynamicCooldown":  "Intervalo (s):",
+                     "thresholdCritPct":  "Crít. %",
+                     "macroStepsLabel":  "Ações:",
+                     "macroTriggerLabel":  "Frase(s) de ativação:",
+                     "macroConfirmLabel":  "Confirmação (opc.):",
+                     "thresholdWarnHrs":  "Aviso h",
+                     "thresholdCritHrs":  "Crít. h",
+                     "thresholdWarnPct":  "Aviso %",
+                     "aboutProjectLinks":  "LINKS DO PROJETO",
+                     "aboutLicenseLabel":  "Licença:",
+                     "aboutDesc":  "HUD de telemetria de código aberto para Elite Dangerous, MFD Web tátil, gerenciador de Fleet Carrier e copiloto IA COVAS.",
+                     "aboutCommunityTitle":  "ECOSSISTEMA E SITES PARCEIROS",
+                     "aboutTitle":  "SOBRE O HUDNOPY",
+                     "aboutCommunityHelp":  "Acesso rápido às ferramentas comunitárias, bancos de dados e APIs de Elite Dangerous integrados ou compatíveis com o HUDnopy.",
+                     "aboutAuthorLabel":  "Autor:",
+                     "aboutVersionLabel":  "Versão:"
                  },
     "operations":  {
                        "marketSearch":  "Buscar mercadoria pelo nome",

@@ -34,9 +34,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Check Web HUD JavaScript syntax
+      - name: Check Web HUD & Docs JavaScript syntax
         shell: pwsh
-        run: node --check Web/app.js
+        run: |
+          node --check Web/app.js
+          node --check docs/i18n.js
+          node --check docs/app.js
 
       - name: Build HUDnopy (Release)
         shell: pwsh

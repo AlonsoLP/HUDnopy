@@ -48,71 +48,77 @@
   <main>
     <nav id="sectionTabs" class="section-tabs" aria-label="Secciones del módulo"></nav>
     <section id="tab-dashboard" class="tab-view active">
-      <h2 class="brand-title" data-dashboard-key="missionSummary" style="margin-bottom:14px;">RESUMEN DE MISIÓN</h2>
-      <div class="dashboard-summary module-section active" data-section-title="Resumen" data-section-key="summary">
-        <div class="hud-card"><h3 data-dashboard-key="commanderAndShip">Comandante y nave</h3><div class="val" id="dashCommander">---</div><div id="dashShip" style="color:var(--hud-muted);margin-top:5px;"></div></div>
-        <div class="hud-card"><h3 data-dashboard-key="currentLocation">Ubicación actual</h3><div class="val" id="dashSystem">---</div><div id="dashLocation" style="color:var(--hud-muted);margin-top:5px;"></div></div>
-        <div class="hud-card"><h3 data-dashboard-key="flightResources">Recursos de vuelo</h3><div class="val" id="dashResources">---</div><div id="dashCargo" style="color:var(--hud-muted);margin-top:5px;"></div></div>
-      </div>
-      <div class="dashboard-overview module-section" data-section-title="Alertas y actividad" data-section-key="alerts-activity">
-        <div class="hud-card wide-card"><h3><span data-dashboard-key="sessionStatsTitle">Resumen financiero y estadístico de la sesión</span><button class="hud-mini-btn" type="button" onclick="resetWebSessionStats()" data-dashboard-tooltip-key="sessionReset" title="Reiniciar sesión">🔄</button></h3><div id="webSessionStatsSummary" style="color:var(--hud-secondary);font-weight:600;">---</div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;"><span id="webGalaxyStatusLine" style="color:var(--hud-muted);font-size:0.8rem;"></span><button class="hud-mini-btn" type="button" onclick="refreshWebGalaxyStatus()" title="Actualizar">🔄</button></div></div>
-        <div class="hud-card wide-card" id="webCapiSummaryCard" hidden><h3>FRONTIER cAPI — FLEET &amp; COMMUNITY GOALS</h3><div id="webCapiSummary" style="color:var(--hud-text);font-size:0.88rem;"></div></div>
-        <div class="hud-card"><h3 data-dashboard-key="visualAlerts">Centro de alertas visuales</h3><div id="alertList" class="alert-list" style="color:var(--hud-muted);">Sin alertas visuales.</div></div>
-        <div class="hud-card"><h3 data-dashboard-key="nextRoute">Siguiente etapa de ruta</h3><div id="dashRoute">No hay ruta activa</div></div>
-        <div class="hud-card wide-card"><h3 data-dashboard-key="recentActivity">Actividad reciente</h3><div id="dashActivity">Esperando eventos del diario.</div></div>
+      <div class="module-section active" data-section-title="Resumen" data-section-key="summary">
+        <div class="dashboard-summary">
+          <div class="hud-card"><h3 data-dashboard-key="commanderAndShip">Comandante y nave</h3><div class="val" id="dashCommander">---</div><div id="dashShip" style="color:var(--hud-muted);margin-top:5px;"></div></div>
+          <div class="hud-card"><h3 data-dashboard-key="currentLocation">Ubicación actual</h3><div class="val" id="dashSystem">---</div><div id="dashLocation" style="color:var(--hud-muted);margin-top:5px;"></div></div>
+          <div class="hud-card"><h3 data-dashboard-key="flightResources">Recursos de vuelo</h3><div class="val" id="dashResources">---</div><div id="dashCargo" style="color:var(--hud-muted);margin-top:5px;"></div></div>
+        </div>
+        <div class="dashboard-overview">
+          <div class="hud-card wide-card"><h3><span data-dashboard-key="sessionStatsTitle">Resumen financiero y estadístico de la sesión</span><button class="hud-mini-btn" type="button" onclick="resetWebSessionStats()" data-dashboard-tooltip-key="sessionReset" title="Reiniciar sesión">🔄</button></h3><div id="webSessionStatsSummary" style="color:var(--hud-secondary);font-weight:600;">---</div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;"><span id="webGalaxyStatusLine" style="color:var(--hud-muted);font-size:0.8rem;"></span><button class="hud-mini-btn" type="button" onclick="refreshWebGalaxyStatus()" title="Actualizar">🔄</button></div></div>
+          <div class="hud-card wide-card" id="webCapiSummaryCard" hidden><h3>FRONTIER cAPI — FLEET &amp; COMMUNITY GOALS</h3><div id="webCapiSummary" style="color:var(--hud-text);font-size:0.88rem;"></div></div>
+          <div class="hud-card"><h3 data-dashboard-key="visualAlerts">Centro de alertas visuales</h3><div id="alertList" class="alert-list" style="color:var(--hud-muted);">Sin alertas visuales.</div></div>
+          <div class="hud-card"><h3 data-dashboard-key="nextRoute">Siguiente etapa de ruta</h3><div id="dashRoute">No hay ruta activa</div></div>
+          <div class="hud-card wide-card"><h3 data-dashboard-key="recentActivity">Actividad reciente</h3><div id="dashActivity">Esperando eventos del diario.</div></div>
+        </div>
       </div>
     </section>
 
     <!-- VUELO -->
     <section id="tab-flight" class="tab-view">
       <div class="grid-dashboard">
-        <div class="hud-card module-section active" data-section-title="Estado y recursos" data-section-key="status-resources">
-          <h3><span data-flight-key="resources">Integridad y Recursos</span><span id="simBadge" style="font-size:0.72rem;color:var(--hud-secondary);"></span></h3>
-          <div class="bar-group">
-            <div class="bar-header"><span data-flight-key="hull">CASCO (HULL)</span><span id="lblHull">---</span></div>
-            <div class="bar-track"><div class="bar-fill" id="barHull" style="width:0%"></div></div>
-          </div>
-          <div class="bar-group">
-            <div class="bar-header"><span data-flight-key="shield">ESTADO DEL ESCUDO</span><span id="lblShield">---</span></div>
-            <div class="bar-track" id="shieldBarTrack" style="display:none;"><div class="bar-fill" id="barShield" style="width:0%"></div></div>
-          </div>
-          <div class="bar-group">
-            <div class="bar-header"><span data-flight-key="fuel">COMBUSTIBLE PRINCIPAL</span><span id="lblFuel">---</span></div>
-            <div class="bar-track"><div class="bar-fill" id="barFuel" style="width:0%"></div></div>
-          </div>
-          <div class="bar-group">
-            <div class="bar-header"><span data-flight-key="cargo">BODEGA DE CARGA</span><span id="lblCargo">---</span></div>
-            <div class="bar-track"><div class="bar-fill" id="barCargo" style="width:0%"></div></div>
-          </div>
+        <div class="hud-card full-width-card module-section active" data-section-title="Estado y recursos" data-section-key="status-resources">
+          <div class="hud-split-2">
+            <div>
+              <h3><span data-flight-key="resources">Integridad y Recursos</span><span id="simBadge" style="font-size:0.72rem;color:var(--hud-secondary);"></span></h3>
+              <div class="bar-group">
+                <div class="bar-header"><span data-flight-key="hull">CASCO (HULL)</span><span id="lblHull">---</span></div>
+                <div class="bar-track"><div class="bar-fill" id="barHull" style="width:0%"></div></div>
+              </div>
+              <div class="bar-group">
+                <div class="bar-header"><span data-flight-key="shield">ESTADO DEL ESCUDO</span><span id="lblShield">---</span></div>
+                <div class="bar-track" id="shieldBarTrack" style="display:none;"><div class="bar-fill" id="barShield" style="width:0%"></div></div>
+              </div>
+              <div class="bar-group">
+                <div class="bar-header"><span data-flight-key="fuel">COMBUSTIBLE PRINCIPAL</span><span id="lblFuel">---</span></div>
+                <div class="bar-track"><div class="bar-fill" id="barFuel" style="width:0%"></div></div>
+              </div>
+              <div class="bar-group">
+                <div class="bar-header"><span data-flight-key="cargo">BODEGA DE CARGA</span><span id="lblCargo">---</span></div>
+                <div class="bar-track"><div class="bar-fill" id="barCargo" style="width:0%"></div></div>
+              </div>
+            </div>
+            <div>
+              <h3><span data-flight-key="power">Distribución de Energía (Pips)</span></h3>
+              <div class="pips-container">
+                <div class="pip-col" onclick="sendCmd('IncreaseSystemsPower')">
+                  <div data-flight-key="pipSystems" style="font-size:0.75rem;color:var(--hud-muted);">SIS</div>
+                  <div class="pip-val" id="pipSys">2.0</div>
+                </div>
+                <div class="pip-col" onclick="sendCmd('IncreaseEnginesPower')">
+                  <div data-flight-key="pipEngines" style="font-size:0.75rem;color:var(--hud-muted);">MOT</div>
+                  <div class="pip-val" id="pipEng">2.0</div>
+                </div>
+                <div class="pip-col" onclick="sendCmd('IncreaseWeaponsPower')">
+                  <div data-flight-key="pipWeapons" style="font-size:0.75rem;color:var(--hud-muted);">ARM</div>
+                  <div class="pip-val" id="pipWep">2.0</div>
+                </div>
+                <div class="pip-col" onclick="sendCmd('ResetPowerDistribution')">
+                  <div style="font-size:0.75rem;color:var(--hud-muted);">RST</div>
+                  <div class="pip-val">⚖</div>
+                </div>
+              </div>
 
-          <h3 style="margin-top:20px;"><span data-flight-key="power">Distribución de Energía (Pips)</span></h3>
-          <div class="pips-container">
-            <div class="pip-col" onclick="sendCmd('IncreaseSystemsPower')">
-              <div data-flight-key="pipSystems" style="font-size:0.75rem;color:var(--hud-muted);">SIS</div>
-              <div class="pip-val" id="pipSys">2.0</div>
-            </div>
-            <div class="pip-col" onclick="sendCmd('IncreaseEnginesPower')">
-              <div data-flight-key="pipEngines" style="font-size:0.75rem;color:var(--hud-muted);">MOT</div>
-              <div class="pip-val" id="pipEng">2.0</div>
-            </div>
-            <div class="pip-col" onclick="sendCmd('IncreaseWeaponsPower')">
-              <div data-flight-key="pipWeapons" style="font-size:0.75rem;color:var(--hud-muted);">ARM</div>
-              <div class="pip-val" id="pipWep">2.0</div>
-            </div>
-            <div class="pip-col" onclick="sendCmd('ResetPowerDistribution')">
-              <div style="font-size:0.75rem;color:var(--hud-muted);">RST</div>
-              <div class="pip-val">⚖</div>
-            </div>
-          </div>
+              <h3 style="margin-top:16px;"><span data-flight-key="copilotTacticalTitle">Copiloto táctico y seguridad</span></h3>
+              <p id="copilotTacticalStatus" style="color:var(--hud-text);font-size:0.86rem;line-height:1.45;"></p>
 
-          <h3 style="margin-top:20px;"><span data-flight-key="copilotTacticalTitle">Copiloto táctico y seguridad</span></h3>
-          <p id="copilotTacticalStatus" style="color:var(--hud-text);font-size:0.86rem;line-height:1.45;"></p>
-
-          <div id="webTargetCard" style="margin-top:16px;padding:12px;border:1px solid var(--hud-danger);background:var(--hud-panel-alt);" hidden>
-            <h3 style="color:var(--hud-danger);margin-bottom:6px;"><span data-flight-key="targetTitle">Objetivo fijado (ShipTargeted)</span></h3>
-            <div id="webTargetHeader" style="font-weight:700;color:var(--hud-accent);font-size:0.95rem;"></div>
-            <div id="webTargetStatus" style="margin-top:4px;font-size:0.86rem;"></div>
-            <div id="webTargetVitals" style="margin-top:4px;color:var(--hud-secondary);font-size:0.84rem;font-weight:600;"></div>
+              <div id="webTargetCard" style="margin-top:12px;padding:12px;border:1px solid var(--hud-danger);background:var(--hud-panel-alt);" hidden>
+                <h3 style="color:var(--hud-danger);margin-bottom:6px;"><span data-flight-key="targetTitle">Objetivo fijado</span></h3>
+                <div id="webTargetHeader" style="font-weight:700;color:var(--hud-accent);font-size:0.95rem;"></div>
+                <div id="webTargetStatus" style="margin-top:4px;font-size:0.86rem;"></div>
+                <div id="webTargetVitals" style="margin-top:4px;color:var(--hud-secondary);font-size:0.84rem;font-weight:600;"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -163,19 +169,23 @@
             <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="loadout">Equipamiento</div><div class="nav-telemetry-value" id="activeSuitLoadout">---</div></div>
           </div>
         </div>
-        <div class="hud-card operations-section module-section" data-section-title="Combate y Masacres" data-section-key="combat">
+        <div class="hud-card full-width-card operations-section module-section" data-section-title="Combate y Masacres" data-section-key="combat">
           <h3><span data-operations-key="combatTitle">Sesión de combate, recompensas y masacres</span><button class="hud-mini-btn" type="button" onclick="resetWebCombatSession()" data-operations-tooltip-key="miningResetSession" title="Reiniciar sesión">🔄</button></h3>
           <p id="webCombatSessionStats" style="color:var(--hud-secondary);font-weight:700;margin-bottom:10px;"></p>
-          <div class="table-scroll" style="margin-bottom:14px;"><table class="hud-table">
-            <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="kills">Bajas</th><th data-translation-key="pendingCredits">Pendiente</th></tr></thead>
-            <tbody id="combatFactionsTableBody"></tbody>
-          </table></div>
-          <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="massacreTitle">Apilamiento de misiones de masacre</span></h4>
-          <p id="webMassacreSummary" style="color:var(--hud-muted);margin-bottom:10px;"></p>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="issuingFaction">Facción emisora</th><th data-translation-key="targetFaction">Facción objetivo</th><th data-translation-key="missionsCol">Misiones</th><th data-translation-key="kills">Bajas</th><th data-translation-key="reward">Recompensa</th></tr></thead>
-            <tbody id="massacreStacksTableBody"></tbody>
-          </table></div>
+          <div class="hud-split-2">
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="kills">Bajas</th><th data-translation-key="pendingCredits">Pendiente</th></tr></thead>
+              <tbody id="combatFactionsTableBody"></tbody>
+            </table></div>
+            <div>
+              <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-operations-key="massacreTitle">Apilamiento de misiones de masacre</span></h4>
+              <p id="webMassacreSummary" style="color:var(--hud-muted);margin-bottom:8px;"></p>
+              <div class="table-scroll"><table class="hud-table">
+                <thead><tr><th data-translation-key="issuingFaction">Facción emisora</th><th data-translation-key="targetFaction">Facción objetivo</th><th data-translation-key="missionsCol">Misiones</th><th data-translation-key="kills">Bajas</th><th data-translation-key="reward">Recompensa</th></tr></thead>
+                <tbody id="massacreStacksTableBody"></tbody>
+              </table></div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -198,75 +208,81 @@
     <section id="tab-nav" class="tab-view">
       <div class="grid-dashboard">
         <div class="hud-card full-width-card module-section active" data-section-title="Sistema actual" data-section-key="current-system">
-          <h3><span data-flight-key="navigationTitle">Datos Astrográficos y Planetarios</span></h3>
-          <div class="nav-telemetry-grid">
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="starSystem">SISTEMA ESTELAR ACTUAL</div><div class="nav-telemetry-value" id="navSys">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="security">SEGURIDAD DEL SISTEMA</div><div class="nav-telemetry-value" id="navSec">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="economy">ECONOMÍA PRINCIPAL</div><div class="nav-telemetry-value" id="navEco">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="allegiance">LEALTAD / SUPERPOTENCIA</div><div class="nav-telemetry-value" id="navAll">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="bodyStation">CUERPO CELESTE / ESTACIÓN</div><div class="nav-telemetry-value" id="navBody">---</div></div>
-            <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="surface">TELEMETRÍA DE SUPERFICIE</div><div class="nav-telemetry-value" id="navCoords">Sin telemetría de superficie activa</div></div>
-          </div>
-          <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
-            <button class="deck-button" style="flex:1;min-height:60px;" onclick="sendCmd('GalaxyMapOpen')" data-flight-key="galaxyMap">🌌 Mapa Galáctico</button>
-            <button class="deck-button" style="flex:1;min-height:60px;" onclick="sendCmd('SystemMapOpen')" data-flight-key="systemMap">🪐 Mapa del Sistema</button>
-            <button class="deck-button" style="flex:1;min-height:60px;" onclick="sendCmd('ExplorationFSSEnter')" data-flight-key="fss">📡 Escáner FSS</button>
-            <button class="deck-button" style="flex:1;min-height:60px;" onclick="sendCmd('TargetNextRouteSystem')" data-flight-key="nextSystem">🧭 Siguiente Sistema</button>
-          </div>
-          <div id="spanshSection" class="hud-card" style="margin-top:14px;" hidden>
-            <h3 id="spanshTitle"></h3>
-            <p id="spanshStatus" style="color:var(--hud-muted);"></p>
-            <p id="spanshSummary" style="font-weight:700;"></p>
-            <p id="spanshUpdated" style="color:var(--hud-muted);"></p>
-            <p id="spanshSourceNote" style="color:var(--hud-muted);font-size:0.78rem;"></p>
-            <h4 id="spanshBodiesTitle"></h4>
-            <div class="table-scroll"><table class="hud-table spansh-table">
-              <thead><tr><th data-spansh-key="body"></th><th data-spansh-key="type"></th><th data-spansh-key="arrival"></th><th data-spansh-key="landable"></th></tr></thead>
-              <tbody id="spanshBodiesTableBody"></tbody>
-            </table></div>
-            <h4 id="spanshStationsTitle" style="margin-top:14px;"></h4>
-            <div class="table-scroll"><table class="hud-table spansh-table">
-              <thead><tr><th data-spansh-key="station"></th><th data-spansh-key="type"></th><th data-spansh-key="stationBody"></th><th data-spansh-key="arrival"></th><th data-spansh-key="controllingFaction"></th></tr></thead>
-              <tbody id="spanshStationsTableBody"></tbody>
-            </table></div>
-          </div>
-          <div id="webSystemNoteCard" class="hud-card" style="margin-top:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-              <h3 style="margin:0;" data-flight-key="systemNoteTitle">Cuaderno de bitácora (Nota del sistema)</h3>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <button class="deck-button icon-action-btn" onclick="openWebInaraCurrentSystem()" title="Inara">🌐</button>
-                <button class="deck-button icon-action-btn" onclick="fetchWebEdsmIntel()" data-flight-tooltip-key="edsmIntelBtn" title="Tráfico EDSM">🛰</button>
-                <button class="deck-button icon-action-btn" onclick="saveWebSystemNote()" data-flight-tooltip-key="saveNote" title="Guardar nota">💾</button>
+          <div class="hud-split-2">
+            <div>
+              <h3><span data-flight-key="navigationTitle">Datos Astrográficos y Planetarios</span></h3>
+              <div class="nav-telemetry-grid">
+                <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="starSystem">SISTEMA ESTELAR ACTUAL</div><div class="nav-telemetry-value" id="navSys">---</div></div>
+                <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="security">SEGURIDAD DEL SISTEMA</div><div class="nav-telemetry-value" id="navSec">---</div></div>
+                <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="economy">ECONOMÍA PRINCIPAL</div><div class="nav-telemetry-value" id="navEco">---</div></div>
+                <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="allegiance">LEALTAD / SUPERPOTENCIA</div><div class="nav-telemetry-value" id="navAll">---</div></div>
+                <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="bodyStation">CUERPO CELESTE / ESTACIÓN</div><div class="nav-telemetry-value" id="navBody">---</div></div>
+                <div class="nav-telemetry-item"><div class="nav-telemetry-label" data-flight-key="surface">TELEMETRÍA DE SUPERFICIE</div><div class="nav-telemetry-value" id="navCoords">Sin telemetría de superficie activa</div></div>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="deck-button" style="flex:1;min-height:52px;" onclick="sendCmd('GalaxyMapOpen')" data-flight-key="galaxyMap">🌌 Mapa Galáctico</button>
+                <button class="deck-button" style="flex:1;min-height:52px;" onclick="sendCmd('SystemMapOpen')" data-flight-key="systemMap">🪐 Mapa del Sistema</button>
+                <button class="deck-button" style="flex:1;min-height:52px;" onclick="sendCmd('ExplorationFSSEnter')" data-flight-key="fss">📡 Escáner FSS</button>
+                <button class="deck-button" style="flex:1;min-height:52px;" onclick="sendCmd('TargetNextRouteSystem')" data-flight-key="nextSystem">🧭 Siguiente Sistema</button>
+              </div>
+              <div id="webSystemNoteCard" class="hud-card" style="margin-top:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                  <h3 style="margin:0;" data-flight-key="systemNoteTitle">Cuaderno de bitácora (Nota del sistema)</h3>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="deck-button icon-action-btn" onclick="openWebInaraCurrentSystem()" title="Inara">🌐</button>
+                    <button class="deck-button icon-action-btn" onclick="fetchWebEdsmIntel()" data-flight-tooltip-key="edsmIntelBtn" title="Tráfico EDSM">🛰</button>
+                    <button class="deck-button icon-action-btn" onclick="saveWebSystemNote()" data-flight-tooltip-key="saveNote" title="Guardar nota">💾</button>
+                  </div>
+                </div>
+                <p id="webEdsmTrafficText" style="color:var(--hud-secondary);font-weight:700;margin-bottom:6px;" hidden></p>
+                <textarea id="webSystemNoteInput" rows="2" style="width:100%;box-sizing:border-box;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);padding:8px;resize:vertical;"></textarea>
+              </div>
+              <div id="webEdsmDiscoveryCard" class="hud-card" style="margin-top:12px;" hidden>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <p id="webEdsmDiscoveryBadge" style="color:var(--hud-ok);font-weight:700;margin:0;"></p>
+                  <a id="webInaraSystemLink" href="#" target="_blank" rel="noopener" class="deck-button" style="min-height:34px;padding:4px 10px;text-decoration:none;display:inline-flex;align-items:center;" hidden>🌐 Inara</a>
+                </div>
               </div>
             </div>
-            <p id="webEdsmTrafficText" style="color:var(--hud-secondary);font-weight:700;margin-bottom:6px;" hidden></p>
-            <textarea id="webSystemNoteInput" rows="2" style="width:100%;box-sizing:border-box;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);padding:8px;resize:vertical;"></textarea>
-          </div>
-          <div id="webEdsmDiscoveryCard" class="hud-card" style="margin-top:14px;" hidden>
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-              <p id="webEdsmDiscoveryBadge" style="color:var(--hud-ok);font-weight:700;margin:0;"></p>
-              <a id="webInaraSystemLink" href="#" target="_blank" rel="noopener" class="deck-button" style="min-height:34px;padding:4px 10px;text-decoration:none;display:inline-flex;align-items:center;" hidden>🌐 Inara</a>
+            <div>
+              <div id="webBgsCard" class="hud-card">
+                <h3 data-flight-key="bgsTitle">Facciones del sistema (BGS) y Powerplay</h3>
+                <p id="webPowerplaySummary" style="color:var(--hud-secondary);font-weight:700;margin-bottom:4px;"></p>
+                <p id="webBgsTickInfo" style="color:var(--hud-muted);font-size:0.8rem;margin-bottom:8px;"></p>
+                <div class="table-scroll"><table class="hud-table">
+                  <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="influence">Influencia</th><th data-translation-key="status">Estado</th><th data-translation-key="government">Gobierno</th><th data-translation-key="reputation">Reputación</th></tr></thead>
+                  <tbody id="webSystemFactionsTableBody"></tbody>
+                </table></div>
+              </div>
+              <div id="spanshSection" class="hud-card" style="margin-top:12px;" hidden>
+                <h3 id="spanshTitle"></h3>
+                <p id="spanshStatus" style="color:var(--hud-muted);"></p>
+                <p id="spanshSummary" style="font-weight:700;"></p>
+                <p id="spanshUpdated" style="color:var(--hud-muted);"></p>
+                <p id="spanshSourceNote" style="color:var(--hud-muted);font-size:0.78rem;"></p>
+                <h4 id="spanshBodiesTitle"></h4>
+                <div class="table-scroll"><table class="hud-table spansh-table">
+                  <thead><tr><th data-spansh-key="body"></th><th data-spansh-key="type"></th><th data-spansh-key="arrival"></th><th data-spansh-key="landable"></th></tr></thead>
+                  <tbody id="spanshBodiesTableBody"></tbody>
+                </table></div>
+                <h4 id="spanshStationsTitle" style="margin-top:14px;"></h4>
+                <div class="table-scroll"><table class="hud-table spansh-table">
+                  <thead><tr><th data-spansh-key="station"></th><th data-spansh-key="type"></th><th data-spansh-key="stationBody"></th><th data-spansh-key="arrival"></th><th data-spansh-key="controllingFaction"></th></tr></thead>
+                  <tbody id="spanshStationsTableBody"></tbody>
+                </table></div>
+              </div>
+              <div id="webEliteBgsWatchlistCard" class="hud-card" style="margin-top:12px;" hidden>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+                  <h3 style="margin:0;" data-flight-key="eliteBgsWatchlistTitle">Seguimiento de Facciones (EliteBGS)</h3>
+                  <button class="deck-button icon-action-btn" onclick="refreshWebEliteBgs()" title="Actualizar BGS">🔄</button>
+                </div>
+                <p id="webEliteBgsStatus" style="color:var(--hud-muted);font-size:0.8rem;margin-bottom:6px;"></p>
+                <div class="table-scroll"><table class="hud-table">
+                  <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="system">Sistema</th><th data-translation-key="influence">Influencia</th><th data-translation-key="status">Estado</th><th data-flight-key="bgsActiveStates">Activos</th><th data-flight-key="bgsPendingStates">Pendientes</th></tr></thead>
+                  <tbody id="webEliteBgsTableBody"></tbody>
+                </table></div>
+              </div>
             </div>
-          </div>
-          <div id="webBgsCard" class="hud-card" style="margin-top:14px;">
-            <h3 data-flight-key="bgsTitle">Facciones del sistema (BGS) y Powerplay</h3>
-            <p id="webPowerplaySummary" style="color:var(--hud-secondary);font-weight:700;margin-bottom:4px;"></p>
-            <p id="webBgsTickInfo" style="color:var(--hud-muted);font-size:0.8rem;margin-bottom:8px;"></p>
-            <div class="table-scroll"><table class="hud-table">
-              <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="influence">Influencia</th><th data-translation-key="status">Estado</th><th data-translation-key="government">Gobierno</th><th data-translation-key="reputation">Reputación</th></tr></thead>
-              <tbody id="webSystemFactionsTableBody"></tbody>
-            </table></div>
-          </div>
-          <div id="webEliteBgsWatchlistCard" class="hud-card" style="margin-top:14px;" hidden>
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
-              <h3 style="margin:0;" data-flight-key="eliteBgsWatchlistTitle">Seguimiento de Facciones (EliteBGS)</h3>
-              <button class="deck-button icon-action-btn" onclick="refreshWebEliteBgs()" title="Actualizar BGS">🔄</button>
-            </div>
-            <p id="webEliteBgsStatus" style="color:var(--hud-muted);font-size:0.8rem;margin-bottom:6px;"></p>
-            <div class="table-scroll"><table class="hud-table">
-              <thead><tr><th data-translation-key="faction">Facción</th><th data-translation-key="system">Sistema</th><th data-translation-key="influence">Influencia</th><th data-translation-key="status">Estado</th><th data-flight-key="bgsActiveStates">Activos</th><th data-flight-key="bgsPendingStates">Pendientes</th></tr></thead>
-              <tbody id="webEliteBgsTableBody"></tbody>
-            </table></div>
           </div>
         </div>
 
@@ -291,7 +307,7 @@
                 <option value="galaxy">🌌 Galaxy Plotter</option>
               </select>
               <input id="webSpanshRouteDest" type="text" data-flight-placeholder="spanshRouteDestPlaceholder" placeholder="Sistema de destino..." style="min-width:160px;" />
-              <input id="webSpanshRouteRange" type="number" value="50" style="width:70px;" />
+              <input id="webSpanshRouteRange" type="text" data-min="5" data-max="500" maxlength="6" value="50" inputmode="decimal" data-input-mode="udecimal" style="width:70px;" />
               <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="plotWebSpanshRoute()" data-flight-key="spanshPlotRoute">🧭 Calcular ruta</button>
               <button class="deck-button icon-action-btn" onclick="document.getElementById('webSpanshCsvInput').click()" data-flight-tooltip-key="spanshImportCsv" title="Importar CSV">📂</button>
               <input id="webSpanshCsvInput" type="file" accept=".csv,text/csv" hidden onchange="importWebSpanshCsv(this)" />
@@ -326,30 +342,34 @@
         <div class="hud-card full-width-card module-section" data-section-title="Superficie" data-section-key="surface-nav">
           <h3><span data-flight-key="surfaceNavTitle">Navegación de superficie, brújula y marcadores</span></h3>
           <p id="surfaceLiveCoords" style="color:var(--hud-muted);margin-bottom:10px;"></p>
-          <h4 style="color:var(--hud-accent);margin-bottom:6px;" data-flight-key="surfaceCompassTitle">Navegador de coordenadas (LAT / LON)</h4>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-            <input id="webTargetLat" type="number" step="0.0001" placeholder="LAT" style="width:110px;" />
-            <input id="webTargetLon" type="number" step="0.0001" placeholder="LON" style="width:110px;" />
-            <button class="deck-button icon-action-btn" onclick="targetWebLastExoSample()" data-flight-tooltip-key="targetLastExo" title="Última muestra Exo">🎯</button>
-          </div>
-          <p id="webSurfaceCompassTape" style="color:var(--hud-accent);font-family:Consolas,monospace;font-weight:700;margin-bottom:4px;" hidden></p>
-          <p id="webSurfaceGuidance" style="color:var(--hud-secondary);font-weight:700;margin-bottom:12px;"></p>
-          <div style="margin-bottom:14px;">
-            <h4 style="color:var(--hud-accent);margin-bottom:6px;" data-flight-key="surfaceBookmarksTitle">Marcadores de superficie</h4>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-              <input id="webBookmarkLabel" type="text" data-flight-placeholder="bookmarkLabelPlaceholder" placeholder="Etiqueta del marcador..." style="min-width:170px;" />
-              <button class="deck-button icon-action-btn" onclick="saveWebSurfaceBookmark()" data-flight-tooltip-key="saveBookmark" title="Guardar posición actual">📍</button>
+          <div class="hud-split-2">
+            <div>
+              <h4 style="color:var(--hud-accent);margin-bottom:6px;" data-flight-key="surfaceCompassTitle">Navegador de coordenadas (LAT / LON)</h4>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                <input id="webTargetLat" type="text" data-min="-90" data-max="90" maxlength="10" inputmode="decimal" data-input-mode="decimal" data-allow-empty="true" placeholder="LAT" style="width:110px;" />
+                <input id="webTargetLon" type="text" data-min="-180" data-max="180" maxlength="11" inputmode="decimal" data-input-mode="decimal" data-allow-empty="true" placeholder="LON" style="width:110px;" />
+                <button class="deck-button icon-action-btn" onclick="targetWebLastExoSample()" data-flight-tooltip-key="targetLastExo" title="Última muestra Exo">🎯</button>
+              </div>
+              <p id="webSurfaceCompassTape" style="color:var(--hud-accent);font-family:Consolas,monospace;font-weight:700;margin-bottom:4px;" hidden></p>
+              <p id="webSurfaceGuidance" style="color:var(--hud-secondary);font-weight:700;margin-bottom:12px;"></p>
+              <h4 style="color:var(--hud-accent);margin-bottom:6px;" data-flight-key="surfaceBookmarksTitle">Marcadores de superficie</h4>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+                <input id="webBookmarkLabel" type="text" data-flight-placeholder="bookmarkLabelPlaceholder" placeholder="Etiqueta del marcador..." style="min-width:170px;" />
+                <button class="deck-button icon-action-btn" onclick="saveWebSurfaceBookmark()" data-flight-tooltip-key="saveBookmark" title="Guardar posición actual">📍</button>
+              </div>
+              <div class="table-scroll"><table class="hud-table">
+                <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="body">Cuerpo</th><th data-translation-key="label">Etiqueta</th><th data-translation-key="coordinates">Coordenadas</th><th></th></tr></thead>
+                <tbody id="webSurfaceBookmarksTableBody"></tbody>
+              </table></div>
             </div>
-            <div class="table-scroll"><table class="hud-table">
-              <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="body">Cuerpo</th><th data-translation-key="label">Etiqueta</th><th data-translation-key="coordinates">Coordenadas</th><th></th></tr></thead>
-              <tbody id="webSurfaceBookmarksTableBody"></tbody>
-            </table></div>
+            <div>
+              <h4 style="color:var(--hud-accent);margin-bottom:6px;" data-flight-key="surfaceEventsTitle">Asentamientos, aterrizajes y despegues</h4>
+              <div class="table-scroll"><table class="hud-table">
+                <thead><tr><th data-translation-key="time">Hora</th><th data-translation-key="event">Evento</th><th data-translation-key="body">Cuerpo</th><th data-translation-key="details">Detalles</th><th data-translation-key="coordinates">Coordenadas</th></tr></thead>
+                <tbody id="surfaceEventsTableBody"></tbody>
+              </table></div>
+            </div>
           </div>
-          <h4 style="color:var(--hud-accent);margin-bottom:6px;" data-flight-key="surfaceEventsTitle">Asentamientos, aterrizajes y despegues</h4>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="time">Hora</th><th data-translation-key="event">Evento</th><th data-translation-key="body">Cuerpo</th><th data-translation-key="details">Detalles</th><th data-translation-key="coordinates">Coordenadas</th></tr></thead>
-            <tbody id="surfaceEventsTableBody"></tbody>
-          </table></div>
         </div>
         <div class="hud-card wide-card module-section" data-section-title="Portanaves" data-section-key="carrier">
           <h3 id="carrierTitle"></h3>
@@ -364,7 +384,7 @@
             <h4 style="color:var(--hud-accent);margin-bottom:6px;"><span data-flight-key="tritiumCalcTitle">Calculadora de tritio</span></h4>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
               <label for="webCarrierRouteLy" data-flight-key="tritiumDistanceLabel" style="color:var(--hud-muted);font-size:0.84rem;">Distancia total (AL):</label>
-              <input id="webCarrierRouteLy" type="number" value="2500" style="width:110px;padding:6px;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);" />
+              <input id="webCarrierRouteLy" type="text" data-min="1" data-max="100000" maxlength="6" value="2500" inputmode="numeric" data-input-mode="int" style="width:110px;padding:6px;background:#080A0E;color:var(--hud-text);border:1px solid var(--hud-border);" />
             </div>
             <div id="webCarrierTritiumResult" style="color:var(--hud-secondary);font-weight:700;"></div>
             <div id="webCarrierUpkeepRunway" style="color:var(--hud-muted);font-size:0.8rem;margin-top:6px;"></div>
@@ -468,40 +488,44 @@
         </div>
         <div class="hud-card operations-section module-section" data-section-title="Minería" data-section-key="mining">
           <h3><span data-operations-key="miningTitle">Minería en tiempo real (Prospector y sesión)</span></h3>
-          <p id="webProspectorSummary" style="color:var(--hud-accent);font-weight:700;margin-bottom:6px;"></p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-            <span data-operations-key="miningTargetsLabel" style="color:var(--hud-muted);font-size:0.84rem;">Minerales objetivo:</span>
-            <input id="webMiningTargets" type="text" style="min-width:210px;flex:1;" />
-            <span data-operations-key="miningMinPctLabel" style="color:var(--hud-muted);font-size:0.84rem;">Mín. %:</span>
-            <input id="webMiningMinPercent" type="number" min="1" max="90" value="25" style="width:68px;" />
-            <button class="deck-button icon-action-btn" onclick="saveWebMiningFilter()" data-operations-tooltip-key="miningApplyFilter" title="Aplicar">✔</button>
-            <button class="deck-button icon-action-btn" onclick="resetWebMiningSession()" data-operations-tooltip-key="miningResetSession" title="Reiniciar sesión">🔄</button>
-          </div>
-          <p id="webMiningSessionStats" style="color:var(--hud-secondary);margin-bottom:10px;"></p>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="mineral">Mineral</th><th data-translation-key="tons">Toneladas</th></tr></thead>
-            <tbody id="miningRefinedTableBody"></tbody>
-          </table></div>
-          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--hud-border);">
-            <h4 style="color:var(--hud-accent);margin-bottom:8px;" data-operations-key="spanshMiningTitle">Anillos Mineros Prístinos (Spansh)</h4>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-              <select id="webSpanshMiningMineral">
-                <option value="Platinum">Platinum</option>
-                <option value="Painite">Painite</option>
-                <option value="Monazite">Monazite</option>
-                <option value="Musgravite">Musgravite</option>
-                <option value="Alexandrite">Alexandrite</option>
-                <option value="Tritium">Tritium</option>
-                <option value="Low Temperature Diamonds">Low Temperature Diamonds</option>
-                <option value="Void Opals">Void Opals</option>
-              </select>
-              <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="searchWebSpanshMining()" data-operations-key="spanshMiningBtn">⛏ Buscar anillos</button>
+          <div class="hud-split-2">
+            <div>
+              <p id="webProspectorSummary" style="color:var(--hud-accent);font-weight:700;margin-bottom:6px;"></p>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                <span data-operations-key="miningTargetsLabel" style="color:var(--hud-muted);font-size:0.84rem;">Minerales objetivo:</span>
+                <input id="webMiningTargets" type="text" style="min-width:170px;flex:1;" />
+                <span data-operations-key="miningMinPctLabel" style="color:var(--hud-muted);font-size:0.84rem;">Mín. %:</span>
+                <input id="webMiningMinPercent" type="text" data-min="1" data-max="90" maxlength="2" value="25" inputmode="numeric" data-input-mode="int" style="width:68px;" />
+                <button class="deck-button icon-action-btn" onclick="saveWebMiningFilter()" data-operations-tooltip-key="miningApplyFilter" title="Aplicar">✔</button>
+                <button class="deck-button icon-action-btn" onclick="resetWebMiningSession()" data-operations-tooltip-key="miningResetSession" title="Reiniciar sesión">🔄</button>
+              </div>
+              <p id="webMiningSessionStats" style="color:var(--hud-secondary);margin-bottom:10px;"></p>
+              <div class="table-scroll"><table class="hud-table">
+                <thead><tr><th data-translation-key="mineral">Mineral</th><th data-translation-key="tons">Toneladas</th></tr></thead>
+                <tbody id="miningRefinedTableBody"></tbody>
+              </table></div>
             </div>
-            <p id="webSpanshMiningStatus" style="color:var(--hud-muted);margin-bottom:6px;"></p>
-            <div class="table-scroll" hidden><table class="hud-table">
-              <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="ring">Anillo</th><th data-translation-key="type">Tipo</th><th data-translation-key="distance">Distancia</th><th data-translation-key="hotspots">Hotspots</th></tr></thead>
-              <tbody id="webSpanshMiningTableBody"></tbody>
-            </table></div>
+            <div>
+              <h4 style="color:var(--hud-accent);margin-bottom:8px;" data-operations-key="spanshMiningTitle">Anillos Mineros Prístinos (Spansh)</h4>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <select id="webSpanshMiningMineral">
+                  <option value="Platinum">Platinum</option>
+                  <option value="Painite">Painite</option>
+                  <option value="Monazite">Monazite</option>
+                  <option value="Musgravite">Musgravite</option>
+                  <option value="Alexandrite">Alexandrite</option>
+                  <option value="Tritium">Tritium</option>
+                  <option value="Low Temperature Diamonds">Low Temperature Diamonds</option>
+                  <option value="Void Opals">Void Opals</option>
+                </select>
+                <button class="deck-button" style="min-height:38px;padding:0 12px;" onclick="searchWebSpanshMining()" data-operations-key="spanshMiningBtn">⛏ Buscar anillos</button>
+              </div>
+              <p id="webSpanshMiningStatus" style="color:var(--hud-muted);margin-bottom:6px;"></p>
+              <div class="table-scroll" hidden><table class="hud-table">
+                <thead><tr><th data-translation-key="system">Sistema</th><th data-translation-key="ring">Anillo</th><th data-translation-key="type">Tipo</th><th data-translation-key="distance">Distancia</th><th data-translation-key="hotspots">Hotspots</th></tr></thead>
+                <tbody id="webSpanshMiningTableBody"></tbody>
+              </table></div>
+            </div>
           </div>
         </div>
         <div class="hud-card module-section" data-section-title="Colonización" data-section-key="colonisation">
@@ -555,7 +579,7 @@
             <option value="unknown">Sin clasificar</option>
           </select>
           <div style="display:flex;gap:6px;align-items:center;">
-            <input id="webWishlistTarget" type="number" min="1" max="300" value="50" style="width:74px;" title="Objetivo de seguimiento" />
+            <input id="webWishlistTarget" type="text" data-min="1" data-max="300" maxlength="3" value="50" inputmode="numeric" data-input-mode="int" style="width:74px;" title="Objetivo de seguimiento" />
             <button id="btnWebToggleWishlist" class="deck-button icon-action-btn" onclick="toggleSelectedWebMaterialWishlist()" title="Seguir / Quitar">★</button>
           </div>
         </div>
@@ -568,42 +592,48 @@
         <div class="hud-card operations-section module-section" data-section-title="Ingenieros" data-section-key="engineers">
           <h3><span data-operations-key="engineersTitle">Progreso de ingenieros</span></h3>
           <p id="engineersStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando evento EngineerProgress del Journal.</p>
-          <div id="webWishlistSection" style="margin-bottom:14px;padding:10px;border:1px solid var(--hud-border);background:var(--hud-panel-alt);">
-            <h4 style="color:var(--hud-accent);margin-bottom:8px;"><span data-operations-key="wishlistPlannerTitle">Lista de la compra de ingeniería (Wishlist)</span></h4>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-              <select id="webEngineeringBlueprint" style="width:auto;max-width:100%;"></select>
-              <button class="deck-button icon-action-btn" onclick="updateWebWishlist('add')" data-operations-tooltip-key="wishlistAddBtn" title="Añadir plano">➕</button>
-              <button class="deck-button icon-action-btn" onclick="updateWebWishlist('clear')" data-operations-tooltip-key="wishlistClearBtn" title="Limpiar">🗑</button>
-              <button class="deck-button icon-action-btn" onclick="findWebWishlistTrader()" data-operations-tooltip-key="wishlistFindTraderBtn" title="Material Trader">🔍</button>
+          <div class="hud-split-2">
+            <div id="webWishlistSection" style="padding:10px;border:1px solid var(--hud-border);background:var(--hud-panel-alt);">
+              <h4 style="color:var(--hud-accent);margin-bottom:8px;"><span data-operations-key="wishlistPlannerTitle">Lista de la compra de ingeniería (Wishlist)</span></h4>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <select id="webEngineeringBlueprint" style="width:auto;max-width:100%;"></select>
+                <button class="deck-button icon-action-btn" onclick="updateWebWishlist('add')" data-operations-tooltip-key="wishlistAddBtn" title="Añadir plano">➕</button>
+                <button class="deck-button icon-action-btn" onclick="updateWebWishlist('clear')" data-operations-tooltip-key="wishlistClearBtn" title="Limpiar">🗑</button>
+                <button class="deck-button icon-action-btn" onclick="findWebWishlistTrader()" data-operations-tooltip-key="wishlistFindTraderBtn" title="Material Trader">🔍</button>
+              </div>
+              <div class="table-scroll"><table class="hud-table">
+                <thead><tr><th data-translation-key="material">Material</th><th data-translation-key="category">Categoría</th><th data-translation-key="required">Necesario</th><th data-translation-key="current">Actual</th><th data-translation-key="status">Estado</th></tr></thead>
+                <tbody id="webWishlistTableBody"></tbody>
+              </table></div>
             </div>
             <div class="table-scroll"><table class="hud-table">
-              <thead><tr><th data-translation-key="material">Material</th><th data-translation-key="category">Categoría</th><th data-translation-key="required">Necesario</th><th data-translation-key="current">Actual</th><th data-translation-key="status">Estado</th></tr></thead>
-              <tbody id="webWishlistTableBody"></tbody>
+              <thead><tr><th data-translation-key="engineer">Ingeniero</th><th data-translation-key="status">Estado</th><th data-translation-key="rank">Rango</th></tr></thead>
+              <tbody id="engineersTableBody"></tbody>
             </table></div>
           </div>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="engineer">Ingeniero</th><th data-translation-key="status">Estado</th><th data-translation-key="rank">Rango</th></tr></thead>
-            <tbody id="engineersTableBody"></tbody>
-          </table></div>
         </div>
         <div class="hud-card operations-section module-section" data-section-title="Mochila" data-section-key="backpack">
-          <h3><span data-operations-key="backpackTitle">Mochila</span></h3>
-          <p id="backpackStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando evento Backpack del Journal.</p>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="item">Objeto</th><th data-translation-key="type">Tipo</th><th data-translation-key="quantity">Cantidad</th></tr></thead>
-            <tbody id="backpackTableBody"></tbody>
-          </table></div>
-          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--hud-border);">
-          <h3><span data-operations-key="shipLockerTitle">Taquilla de la nave (ShipLocker.json)</span></h3>
-          <p id="shipLockerStatus" style="color:var(--hud-muted);margin-bottom:8px;">Esperando datos de ShipLocker.json.</p>
-          <div style="margin-bottom:8px;">
-            <input id="webShipLockerSearch" type="search" data-operations-placeholder="shipLockerSearchPlaceholder" placeholder="Buscar en taquilla..." style="min-width:210px;" oninput="renderWebShipLockerFilter()" />
+          <div class="hud-split-2">
+            <div>
+              <h3><span data-operations-key="backpackTitle">Mochila</span></h3>
+              <p id="backpackStatus" style="color:var(--hud-muted);margin-bottom:10px;">Esperando evento Backpack del Journal.</p>
+              <div class="table-scroll"><table class="hud-table">
+                <thead><tr><th data-translation-key="item">Objeto</th><th data-translation-key="type">Tipo</th><th data-translation-key="quantity">Cantidad</th></tr></thead>
+                <tbody id="backpackTableBody"></tbody>
+              </table></div>
+            </div>
+            <div>
+              <h3><span data-operations-key="shipLockerTitle">Taquilla de la nave</span></h3>
+              <p id="shipLockerStatus" style="color:var(--hud-muted);margin-bottom:8px;">Esperando datos de la taquilla de la nave.</p>
+              <div style="margin-bottom:8px;">
+                <input id="webShipLockerSearch" type="search" data-operations-placeholder="shipLockerSearchPlaceholder" placeholder="Buscar en taquilla..." style="min-width:210px;" oninput="renderWebShipLockerFilter()" />
+              </div>
+              <div class="table-scroll"><table class="hud-table">
+                <thead><tr><th data-translation-key="item">Objeto</th><th data-translation-key="type">Tipo</th><th data-translation-key="quantity">Cantidad</th></tr></thead>
+                <tbody id="shipLockerTableBody"></tbody>
+              </table></div>
+            </div>
           </div>
-          <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="item">Objeto</th><th data-translation-key="type">Tipo</th><th data-translation-key="quantity">Cantidad</th></tr></thead>
-            <tbody id="shipLockerTableBody"></tbody>
-          </table></div>
-        </div>
         </div>
         <div class="hud-card operations-section module-section" data-section-title="Mercado" data-section-key="market">
           <h3><span data-operations-key="marketTitle">Mercado</span></h3>
@@ -698,11 +728,13 @@
         </div>
         <div class="hud-card module-section" data-section-title="GalNet" data-section-key="galnet">
           <h3><span data-operations-key="galnetTitle">GalNet News</span><span style="display:inline-flex;gap:6px;"><button class="hud-mini-btn" type="button" onclick="refreshWebGalnet()" data-operations-tooltip-key="galnetRefresh" title="Actualizar GalNet">🔄</button><button class="hud-mini-btn" type="button" onclick="speakWebGalnet(false)" data-operations-tooltip-key="galnetSpeak" title="Leer en voz alta">🔊</button><button class="hud-mini-btn" type="button" onclick="speakWebGalnet(true)" data-operations-tooltip-key="galnetStop" title="Detener voz">⏹</button></span></h3>
-          <div class="table-scroll" style="max-height:220px;margin-bottom:10px;"><table class="hud-table">
-            <thead><tr><th data-translation-key="date">Fecha</th><th data-translation-key="headline">Titular</th></tr></thead>
-            <tbody id="webGalnetTableBody"></tbody>
-          </table></div>
-          <div id="webGalnetBody" style="background:#080A0E;border:1px solid var(--hud-border);padding:10px;white-space:pre-wrap;font-size:0.88rem;line-height:1.45;color:var(--hud-text);"></div>
+          <div class="hud-split-2">
+            <div class="table-scroll"><table class="hud-table">
+              <thead><tr><th data-translation-key="date">Fecha</th><th data-translation-key="headline">Titular</th></tr></thead>
+              <tbody id="webGalnetTableBody"></tbody>
+            </table></div>
+            <div id="webGalnetBody" style="background:#080A0E;border:1px solid var(--hud-border);padding:10px;white-space:pre-wrap;font-size:0.88rem;line-height:1.45;color:var(--hud-text);max-height:52vh;overflow-y:auto;"></div>
+          </div>
         </div>
       <div class="hud-card module-section active" data-section-title="Hitos de exploración" data-section-key="exploration-milestones">
         <h3><span data-operations-key="milestonesTitle">Hitos de exploración</span></h3>

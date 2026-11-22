@@ -1393,7 +1393,7 @@ public class WebServerService : IDisposable
             label{display:block}p{color:#ff8585}</style></head><body><main>
             <h1>{{Encode(text["accessLoginTitle"])}}</h1>{{error}}
             <form method="post" action="/login"><label for="code">{{Encode(text["accessCodeLabel"])}}</label>
-            <input id="code" name="code" type="password" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" required autocomplete="one-time-code">
+            <input id="code" name="code" type="password" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" required autocomplete="one-time-code" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
             <button type="submit">{{Encode(text["accessLoginButton"])}}</button></form></main></body></html>
             """, context.RequestAborted);
     }

@@ -111,7 +111,8 @@
                      "spansh-services":  "Сервисы Spansh",
                      "integrations":  "Интеграции",
                      "ai-settings":  "ИИ-пилот",
-                     "voice-audio":  "Голос и звук"
+                     "voice-audio":  "Голос и звук",
+                     "about":  "О программе"
                  },
     "carrier":  {
                     "identityTitle":  "Идентификация",
@@ -376,7 +377,11 @@
                           "testSound":  "Проверить звук: {0}",
                           "testVoice":  "Проверить голос: {0}",
                           "speechPrefix":  "Оповещение",
-                          "speechTest":  "Голосовые системы корабля работают."
+                          "speechTest":  "Голосовые системы корабля работают.",
+                          "catNavigation":  "НАВИГАЦИЯ И ИССЛЕДОВАНИЕ",
+                          "catCombat":  "БОЙ И УГРОЗЫ",
+                          "catOperations":  "МИССИИ И ОПЕРАЦИИ",
+                          "catSurvival":  "ВЫЖИВАНИЕ И КОРАБЛЬ"
                       },
     "speechAlerts":  {
                          "fuelLow":  "Внимание: мало топлива, {0:0} процентов.",
@@ -901,7 +906,7 @@
                      "securityTitle":  "БЕЗОПАСНОСТЬ УДАЛЁННОГО ДОСТУПА",
                      "securityHelp":  "Веб-интерфейс позволяет управлять игрой. HTTPS использует самоподписанный сертификат, поэтому браузер покажет предупреждение; проверьте сертификат перед подтверждением. Неограниченный режим доступен всем, кто может подключиться к серверу. Режим VPN ограничивает только выбранный интерфейс.",
                      "alertsTitle":  "ОПОВЕЩЕНИЯ ПО ТИПУ И КАНАЛУ",
-                     "alertsHelp":  "Визуальные оповещения, звуки и локальная речь. Выберите установленный голос Windows; речь воспроизводится только для оповещений с включённым голосовым каналом.",
+                     "alertsHelp":  "Визуальные уведомления, звуки и голос для каждого типа оповещения.",
                      "voiceTitle":  "ЛОКАЛЬНАЯ РЕЧЬ",
                      "testVoice":  "Проверить голос",
                      "voiceTip":  "Выберите локально установленный голос Windows SAPI",
@@ -1086,7 +1091,24 @@
                      "discordRpcToggle":  "Discord Rich Presence: показывать корабль, систему и активность в Discord",
                      "ardentMarketToggle":  "Ardent Insight API: поиск актуальных рыночных цен покупки/продажи",
                      "canonnUploadToggle":  "Canonn R\u0026D: отправка научных и экзобиологических данных (Codex / ScanOrganic)",
-                     "edsmAnnounceFirstDiscoveryToggle":  "Озвучивать (COVAS/TTS) вход в неизвестную в EDSM систему"
+                     "edsmAnnounceFirstDiscoveryToggle":  "Озвучивать (COVAS/TTS) вход в неизвестную в EDSM систему",
+                     "secondaryColor":  "Вторичный цвет HEX:",
+                     "aiDynamicCooldown":  "Интервал (с):",
+                     "thresholdCritPct":  "Крит. %",
+                     "macroStepsLabel":  "Действия:",
+                     "macroTriggerLabel":  "Фраза(ы) активации:",
+                     "macroConfirmLabel":  "Подтверждение (опц.):",
+                     "thresholdWarnHrs":  "Пред. ч",
+                     "thresholdCritHrs":  "Крит. ч",
+                     "thresholdWarnPct":  "Пред. %",
+                     "aboutProjectLinks":  "ССЫЛКИ ПРОЕКТА",
+                     "aboutLicenseLabel":  "Лицензия:",
+                     "aboutDesc":  "Открытый HUD телеметрии для Elite Dangerous, сенсорный Web MFD, менеджер Fleet Carrier и ИИ-пилот COVAS.",
+                     "aboutCommunityTitle":  "СООБЩЕСТВО И ПАРТНЁРСКИЕ САЙТЫ",
+                     "aboutTitle":  "О ПРОГРАММЕ HUDNOPY",
+                     "aboutCommunityHelp":  "Быстрые ссылки на инструменты сообщества, базы данных и API Elite Dangerous, интегрированные или совместимые с HUDnopy.",
+                     "aboutAuthorLabel":  "Автор:",
+                     "aboutVersionLabel":  "Версия:"
                  },
     "operations":  {
                        "marketSearch":  "Поиск товара по названию",

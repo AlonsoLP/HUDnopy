@@ -77,7 +77,7 @@ public sealed partial class AiCopilotService
         sb.AppendLine();
         sb.AppendLine("=== CONSULTAS EN VIVO (2 PASOS, SOLO SI FALTA EL DATO) ===");
         sb.AppendLine("Si falta un dato exacto abajo, responde ÚNICAMENTE con 1-3 etiquetas [[QUERY:...]] y recibirás el dato real:");
-        sb.AppendLine("- Materiales/Odyssey: [[QUERY:MATERIAL|<nombre|full|full:g5|full:raw|full:manufactured|full:encoded|full:odyssey|lowest|lowest:g5|lowest:raw|lowest:manufactured|lowest:encoded|lowest:odyssey|summary>]] (usa 'full' para llenos/100%/tope y 'lowest' para los que menos tiene)");
+        sb.AppendLine("- Materiales/Odyssey: [[QUERY:MATERIAL|<nombre|g1|g2|g3|g4|g5|full|full:g5|full:raw|full:manufactured|full:encoded|full:odyssey|lowest|lowest:g5|lowest:raw|lowest:manufactured|lowest:encoded|lowest:odyssey|summary>]] (usa 'g1'..'g5' para un grado concreto, 'full' para llenos/100%/tope y 'lowest' para los que menos tiene)");
         sb.AppendLine("- Exploración/Sistema: [[QUERY:EXPLORATION|<bodies|bio|materials:<elem>|gravity|route|factions>]]");
         sb.AppendLine("- Misiones/Masacres: [[QUERY:MISSIONS|<summary|urgent|rewards|massacre|cargo>]]");
         sb.AppendLine("- Informes: [[QUERY:REPORT|<colonisation|session|combat|mining|ship>]]");
@@ -341,14 +341,17 @@ public sealed partial class AiCopilotService
         string p = NormalizeVoiceMatchText(userPrompt, null);
         var chunks = new List<string>();
 
-        // 1. Materials ranking / scarcity / fullness
+        // 1. Materials ranking / scarcity / fullness / specific grade (G1-G5)
         if (ContainsAny(p, "material", "taquilla", "odyssey", "mochila"))
         {
-            string filter = ContainsAny(p, "bruto", "raw") ? ":raw"
+            string filter = ContainsAny(p, "g5", "grado 5", "grado cinco", "grade 5", "grade five") ? ":g5"
+                : ContainsAny(p, "g4", "grado 4", "grado cuatro", "grade 4", "grade four") ? ":g4"
+                : ContainsAny(p, "g3", "grado 3", "grado tres", "grade 3", "grade three") ? ":g3"
+                : ContainsAny(p, "g2", "grado 2", "grado dos", "grade 2", "grade two") ? ":g2"
+                : ContainsAny(p, "g1", "grado 1", "grado uno", "grade 1", "grade one") ? ":g1"
+                : ContainsAny(p, "bruto", "raw") ? ":raw"
                 : ContainsAny(p, "manufactur") ? ":manufactured"
                 : ContainsAny(p, "codific", "encoded", "datos") ? ":encoded"
-                : ContainsAny(p, "g5", "grado 5", "grade 5") ? ":g5"
-                : ContainsAny(p, "g4", "grado 4", "grade 4") ? ":g4"
                 : ContainsAny(p, "odyssey", "taquilla") ? ":odyssey"
                 : "";
 
@@ -356,7 +359,9 @@ public sealed partial class AiCopilotService
                 chunks.Add(QueryMaterialInventory("lowest" + filter));
             else if (ContainsAny(p, "lleno", "100", "completo", "tope", "mas tengo", "maximo", "sobra", "trader", "full", "highest", "most"))
                 chunks.Add(QueryMaterialInventory("full" + filter));
-            else if (ContainsAny(p, "resumen", "cuantos", "inventario", "summary"))
+            else if (!string.IsNullOrEmpty(filter))
+                chunks.Add(QueryMaterialInventory(filter.TrimStart(':')));
+            else if (ContainsAny(p, "resumen", "cuantos", "inventario", "summary", "como ando", "como voy"))
                 chunks.Add(QueryMaterialInventory("summary"));
         }
 
@@ -397,9 +402,25 @@ public sealed partial class AiCopilotService
         if (ContainsAny(p, "ingeniero", "engineer") && ContainsAny(p, "grado", "desbloque", "falta", "subir", "pendiente", "tengo"))
             chunks.Add(QueryProfileReport("engineers"));
 
-        // 6. Fleet & Carrier reports
-        if (ContainsAny(p, "flota", "almacenad", "aparcad", "donde tengo", "cuantas naves", "stored"))
+        // 6. Fleet & Carrier reports (prioritize exact ship name match before generic fleet dump)
+        var matchedStoredShip = s.StoredShips.FirstOrDefault(sh =>
+            !string.IsNullOrWhiteSpace(sh.ShipName) &&
+            sh.ShipName.Length >= 3 &&
+            p.Contains(NormalizeVoiceMatchText(sh.ShipName, null), StringComparison.OrdinalIgnoreCase));
+        if (matchedStoredShip is not null)
+        {
+            chunks.Add(QueryFleetReport($"ships:{matchedStoredShip.ShipName}"));
+        }
+        else if (!string.IsNullOrWhiteSpace(s.ShipName) &&
+                 s.ShipName.Length >= 3 &&
+                 p.Contains(NormalizeVoiceMatchText(s.ShipName, null), StringComparison.OrdinalIgnoreCase))
+        {
+            chunks.Add(QueryFleetReport($"ships:{s.ShipName}"));
+        }
+        else if (ContainsAny(p, "flota", "almacenad", "aparcad", "donde tengo", "cuantas naves", "stored"))
+        {
             chunks.Add(QueryFleetReport("ships"));
+        }
         if (ContainsAny(p, "modulos almacenados", "modulo guardado", "donde guarde", "stored modules"))
             chunks.Add(QueryFleetReport("modules"));
         if (ContainsAny(p, "ordenes de mercado", "ordenes del portanaves", "carrier orders"))

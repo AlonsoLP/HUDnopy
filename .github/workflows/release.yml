@@ -17,9 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.3.0)'
+        description: 'Release tag (e.g. v0.4.0)'
         required: true
-        default: 'v0.3.0'
+        default: 'v0.4.0'
 
 permissions:
   contents: write
@@ -52,9 +52,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Check Web HUD JavaScript syntax
+      - name: Check Web HUD & Docs JavaScript syntax
         shell: pwsh
-        run: node --check Web/app.js
+        run: |
+          node --check Web/app.js
+          node --check docs/i18n.js
+          node --check docs/app.js
 
       - name: Run HUDnopy automated tests
         shell: pwsh
@@ -117,14 +120,21 @@ jobs:
           }
 
           $notes = @'
-          ## HUDnopy __TAG__
+          ## HUDnopy __TAG__ — Touch-First Cockpit UI, Adaptive Layouts & Full Parity
 
           __BANNER__### Highlights
-          - **Expanded External Integrations (Strict Opt-In):** Added **Discord** (contextual Rich Presence via async Named Pipe IPC + Webhook embeds for ELW, 3/3 Exobiology, Carrier jumps with `<t:UNIX:R>` countdowns, BGS conflicts, ship builds, and cockpit screenshots), **EliteBGS v5** faction watchlist, **Ardent Insight** live commodity markets, **EDAstro DSSA** nearest carrier finder, **Canonn R&D** scientific telemetry, **Frontier cAPI** Fleet Carrier services/bartender/journal summary, **EDSM** live discovery/traffic/PvP intel, **Inara** profile card, and SHA-256 deduplicated **EDDN** uploads.
-          - **COVAS AI Copilot Upgrades:** Added **Multimodal Cockpit Screen Vision** (Desktop & Web HUD), instant **zero-LLM cockpit telemetry queries**, Levenshtein fuzzy voice macros, adaptive noise-floor + ZCR VAD with sustained-voice barge-in, 18 s hands-free follow-up window, 60 s query caching, new `[[QUERY]]`/`[[ACTION]]` tags (including Discord sharing), and parallel Piper Neural TTS sentence pre-synthesis.
-          - **Modern .NET 10 / C# 14 & NAudio 3.3 Audio Engine:** Upgraded to **NAudio 3.3.0** with shared-mode `WasapiPlayer` (automatic Windows default-device routing + `IAudioClient3` low latency), `EffectChain` (`GateEffect` + `CompressorEffect`) voice conditioning, and automatic microphone hot-swap reconnection. Pre-compressed Brotli/GZip Web HUD assets, per-socket parallel WebSocket broadcasts, parallel historical Journal analytics with SIMD `SearchValues`, `PeriodicTimer`, `FrozenDictionary`/`FrozenSet`, and source-generated `AppConfig` JSON.
-          - **Diagnostics, Privacy-Safe Support ZIP & 30 Automated Test Suites:** Added daily rolling diagnostic logs (`%LocalAppData%\HUDnopy\logs\`), 40-entry in-memory breadcrumbs, Web HUD JS error reporting, global Kestrel HTTP 500 logging, and 1-click **📦 Export Support ZIP** with strict allowlist sanitization (API keys, tokens, webhooks, commander names, notes, memories, and Windows usernames are automatically removed). Verified by **30 automated regression, contract, fuzzing, property-based, concurrency, and security test suites**.
-          - **6 Languages (English Default):** English (`en-GB`, default), Spanish (`es-ES`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`) with 100% key and placeholder parity.
+          - **Icon-Only Sub-Tabs & Action Toolbars:** Compact icon sub-tabs with right-aligned active section titles and localized hover tooltips across Desktop WPF and Web HUD, plus numbered (`1`, `2`, `3`, …) Control Deck category tabs.
+          - **Font-Scale-Aware Adaptive 2↔1 Column Layouts:** Automatic 2-column ↔ 1-column reflow across Dashboard, 8 telemetry sub-sections, and Settings — scaling seamlessly with `DesktopFontScalePercent` (`70%`–`200%`) on Desktop and `rem`-based CSS Grid on mobile/tablet/landscape screens in Web HUD.
+          - **100% Desktop ↔ Web Feature Parity:** Added historical Journal viewer, CSV/JSON/Markdown exports, expedition analytics, Spansh CSV import & auto-copy, Material wishlist toggles, Hands-Free AI toggle, and Auto-Context Control Deck toggle to the Web HUD; removed legacy Split MFD dead code.
+          - **Touch-First Settings Overhaul:** Custom 24px-knob cockpit sliders, `−`/`+` touch steppers on numeric fields, instant auto-save across Theme HEX colors, Game Paths/Controls, AI Copilot, and Alert Thresholds, collapsible Integration cards, and a 4-category zebra-striped Alert matrix.
+          - **Strict Input Validation (`InputConstraint` + Web sanitizer):** Blocks invalid characters on typing, paste, drag-drop, and mobile/touch keyboards across all numeric, coordinate, HEX color, URL, and API key fields.
+          - **Theme-Matched QR Pairing & About Tab:** Dark-cockpit QR code tinted with the active HUD accent color (with automatic contrast boost), a new **Settings → About (`ℹ️`)** tab with project and Elite Dangerous community links, unified project metadata in `HUDnopy.csproj`, and modularized `docs/` (`index.html`, `styles.css`, `i18n.js`, `app.js`).
+          - **6 Languages (English Default) & CI:** English (`en-GB`, default), Spanish (`es-ES`), French (`fr-FR`), German (`de-DE`), Russian (`ru-RU`), and Portuguese (`pt-BR`) with 100% key and placeholder parity, verified by **30 automated CI test suites**.
+
+          ### Bug Fixes
+          - **DataGrid Vertical Scrolling:** Fixed global `DataGrid` style (`ScrollViewer.VerticalScrollBarVisibility="Auto"`) so `GridEngineers` and all other `MaxHeight`-bounded tables scroll smoothly instead of clipping rows.
+          - **COVAS AI Material Grade Queries:** Extended material grade detection to all 5 grades (`G1`–`G5`) in both digits and words (e.g., *"grado tres"* / *"grade three"*) with average fill % and scarcity summary.
+          - **COVAS AI Ship Lookup by Name:** Prioritized exact ship-name matching (stored and active ships, accent-insensitive) before falling back to the full fleet list (cap raised from 15 to 40 ships).
 
           ### Downloads
           - **Windows Installer (`HUDnopy-__TAG__-Setup.exe`):** Per-user installer (no admin prompt required) with Start Menu and optional Desktop shortcuts.

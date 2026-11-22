@@ -218,6 +218,8 @@ public partial class MainWindow : Window
             RefreshHeaderOptions();
             RefreshHeaderModules(_fileWatcher.State);
             SyncIntegrationsUiFromConfig();
+            if (_webServer.IsRunning)
+                UpdateWebQrCode(_webServer.GetAccessUrls().ToArray());
         });
 
         RefreshBindingsUi();
@@ -484,6 +486,19 @@ public partial class MainWindow : Window
         CmbNavigationMenuPosition.SelectedValue = cfg.NavigationMenuPosition;
         TxtProcessExitGraceSeconds.Text = cfg.GameProcessExitGraceSeconds.ToString();
         TxtCustomAccentHex.Text = cfg.ThemeAccentHex;
+        TxtCustomSecondaryHex.Text = cfg.ThemeSecondaryHex;
+        if (TxtAboutVersion is not null)
+            TxtAboutVersion.Text = $"v{HttpClientHeaderDefaults.ProductVersion}";
+        if (TxtAboutAuthor is not null)
+            TxtAboutAuthor.Text = $"{HttpClientHeaderDefaults.Authors} ({HttpClientHeaderDefaults.Copyright})";
+        if (TxtAboutLicense is not null)
+            TxtAboutLicense.Text = HttpClientHeaderDefaults.License;
+        if (BtnAboutWeb is not null) BtnAboutWeb.Tag = HttpClientHeaderDefaults.WebsiteUrl;
+        if (BtnAboutGitHub is not null) BtnAboutGitHub.Tag = HttpClientHeaderDefaults.RepositoryUrl;
+        if (BtnAboutWiki is not null) BtnAboutWiki.Tag = HttpClientHeaderDefaults.WikiUrl;
+        if (BtnAboutReleases is not null) BtnAboutReleases.Tag = HttpClientHeaderDefaults.ReleasesUrl;
+        if (BtnAboutIssues is not null) BtnAboutIssues.Tag = HttpClientHeaderDefaults.IssuesUrl;
+        TxtAiDynamicCooldown.Text = cfg.AiDynamicEventCooldownSeconds.ToString();
         TxtFuelLowThreshold.Text = cfg.FuelLowThresholdPercent.ToString();
         TxtFuelCriticalThreshold.Text = cfg.FuelCriticalThresholdPercent.ToString();
         TxtHullCriticalThreshold.Text = cfg.HullCriticalThresholdPercent.ToString();
@@ -726,7 +741,8 @@ public partial class MainWindow : Window
         CmbMaterialRarity.Width = 175 * newScale;
         TxtMarketSearch.Width = TxtProfileSearch.Width = 190 * newScale;
         CmbMarketCategory.Width = CmbProfileCategory.Width = 180 * newScale;
-        TxtCustomAccentHex.Width = 105 * newScale;
+        TxtCustomAccentHex.Width = TxtCustomSecondaryHex.Width = 105 * newScale;
+        TxtAiDynamicCooldown.Width = 56 * newScale;
         TxtUnhandledSearch.Width = 220 * newScale;
         TxtShipLockerSearch.Width = 210 * newScale;
         TxtWishlistTarget.Width = 62 * newScale;
@@ -743,6 +759,7 @@ public partial class MainWindow : Window
         UpdateWebUrlListHeight(LstWebUrls.Items.Count);
 
         _desktopFontScale = newScale;
+        UpdateAllResponsiveSplits(root);
         UpdateNavigationActionsColumns();
     }
 

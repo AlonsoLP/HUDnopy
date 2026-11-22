@@ -90,7 +90,23 @@ public partial class MainWindow
             ? $"{preferred.TrimEnd('/')}/?code={Uri.EscapeDataString(code)}"
             : preferred;
 
-        ImgWebQrCode.Source = QrCodeGenerator.CreateQrImage(qrPayload);
+        var qrBg = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x08, 0x0A, 0x0E));
+        qrBg.Freeze();
+        var accentColor = (TryFindResource("HudAccentBrush") as SolidColorBrush)?.Color
+            ?? System.Windows.Media.Color.FromRgb(0xFF, 0x71, 0x00);
+        // Ensure high contrast against the dark cockpit background so phone cameras scan reliably.
+        double luminance = (0.2126 * accentColor.R + 0.7152 * accentColor.G + 0.0722 * accentColor.B) / 255.0;
+        if (luminance < 0.25)
+        {
+            accentColor = System.Windows.Media.Color.FromRgb(
+                (byte)Math.Min(255, accentColor.R + (255 - accentColor.R) * 0.45),
+                (byte)Math.Min(255, accentColor.G + (255 - accentColor.G) * 0.45),
+                (byte)Math.Min(255, accentColor.B + (255 - accentColor.B) * 0.45));
+        }
+        var qrFg = new SolidColorBrush(accentColor);
+        qrFg.Freeze();
+
+        ImgWebQrCode.Source = QrCodeGenerator.CreateQrImage(qrPayload, qrFg, qrBg);
         WebQrContainer.Visibility = ImgWebQrCode.Source is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 

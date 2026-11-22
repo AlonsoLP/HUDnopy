@@ -35,7 +35,7 @@ public sealed class FrontierCapiService : IDisposable
     public const string DefaultClientId = "77f5fc55-aefa-491d-94c0-b0b4aea27552";
     // Frontier only allows https:// redirect_uri values. This static GitHub Pages relay
     // (docs/callback.html) forwards code + state to local loopback http://127.0.0.1:{port}/callback.
-    public const string PublicRedirectUri = "https://alonsolp.github.io/HUDnopy/callback.html";
+    public static string PublicRedirectUri => HttpClientHeaderDefaults.FrontierCallbackUrl;
     private const string AuthBaseUrl = "https://auth.frontierstore.net";
     private const string CapiBaseUrl = "https://companion.orerve.net";
     private static readonly TimeSpan AutoSyncCooldown = TimeSpan.FromMinutes(5);

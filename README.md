@@ -1,14 +1,14 @@
 # HUDnopy
 
 [![CI Build & Tests](https://github.com/AlonsoLP/HUDnopy/actions/workflows/ci.yml/badge.svg)](https://github.com/AlonsoLP/HUDnopy/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/Version-0.3.0-blue.svg)](#hudnopy)
+[![Version](https://img.shields.io/badge/Version-0.4.0-blue.svg)](#hudnopy)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0--windows-512BD4)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20WPF%20%2B%20Web%20HUD-0078D6)](#)
 [![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-orange.svg)](LICENSE)
 [![Languages](https://img.shields.io/badge/Languages-EN%20%7C%20ES%20%7C%20FR%20%7C%20DE%20%7C%20RU%20%7C%20PT-brightgreen)](#localization)
 
 > [!NOTE]
-> **HUDnopy `v0.3.0`** — Active open-source release with full 8-tab Desktop ↔ Web HUD parity, streaming COVAS AI Copilot with Cockpit Screen Vision, NAudio 3.3 WASAPI audio, 10 opt-in community integrations (cAPI, EDDN, EDSM, Inara, Spansh, EliteBGS, Ardent, EDAstro DSSA, Canonn, Discord), privacy-safe 1-click Support ZIP diagnostics, and **30 automated CI test suites**. Feedback and bug reports are always welcome.
+> **HUDnopy `v0.4.0`** — Major Touch-First Cockpit UI & Parity release: font-scale-aware adaptive 2↔1 column layouts across Desktop WPF and Web HUD, icon-only sub-tabs and action toolbars with localized tooltips, 100% Desktop ↔ Web feature parity, touch-friendly Settings with custom cockpit sliders, `−`/`+` steppers, instant auto-save, categorized Alert matrix, strict input validation, theme-matched QR pairing, dedicated About tab, streaming COVAS AI Copilot with Screen Vision, 10 opt-in community integrations, and **30 automated CI test suites**. Feedback and bug reports are always welcome.
 
 **HUDnopy** is an open-source desktop telemetry HUD, responsive Web MFD, Fleet Carrier manager, Spansh route/trade assistant, and voice-enabled AI Copilot (COVAS) for **Elite Dangerous**.
 
@@ -34,7 +34,8 @@ Built with **.NET 10 / WPF** and an embedded **Kestrel HTTPS + WebSocket** serve
   - Built-in **Piper Neural TTS** running as a **persistent warm daemon** with parallel sentence pre-synthesis (~100–150 ms per sentence, 11 voices across 6 languages), powered by **NAudio 3.3** shared-mode `WasapiPlayer` (automatic device routing), `EffectChain` voice conditioning, and automatic microphone hot-swap reconnection.
 - **Frontier cAPI, 10 Opt-In Community Integrations, Secure Web HUD & Diagnostics**
   - Official **Frontier Companion API (cAPI)** via OAuth 2.0 + PKCE and **Windows DPAPI** encrypted tokens, plus strictly opt-in integrations for **EDDN** (14 schemas + SHA-256 dedup), **EDSM**, **Inara**, **Spansh**, **EliteBGS v5**, **Ardent Insight**, **EDAstro DSSA**, **Canonn R&D**, and **Discord** (async Named Pipe Rich Presence + rich Webhook embeds).
-  - Self-signed **HTTPS Web MFD** (7 synchronized tabs, Brotli/GZip pre-compressed assets, per-socket parallel WebSocket broadcasts) with ISO-standard QR-code pairing, session codes, VPN binding, and auto-context `.binds` Control Deck.
+  - Self-signed **HTTPS Web MFD** (7 synchronized tabs with 100% Desktop parity, adaptive 2↔1 column layouts, Brotli/GZip pre-compressed assets, per-socket parallel WebSocket broadcasts) with theme-matched ISO-standard QR-code pairing, session codes, VPN binding, and auto-context `.binds` Control Deck.
+  - **Touch-First Settings & Strict Input Validation:** Custom cockpit sliders, `−`/`+` steppers, instant auto-save across theme colors, paths, AI settings, and alert thresholds, 4-category zebra-striped Alert matrix, strict numeric/HEX/URL/no-whitespace input constraints across Desktop and Web, and a built-in **About** tab with quick project and community links.
   - Built-in **Diagnostics & Support ZIP** (`Settings → Diagnostics → 📦 Export Support ZIP`): daily rolling logs, 40-entry breadcrumbs, Web HUD JS error capture, and automatic removal of all personal data (API keys, tokens, webhooks, commander names, notes, and Windows usernames).
 
 ---
@@ -75,10 +76,10 @@ HUDnopy/
 │   ├── Telemetry/         # EliteFileWatcherService partials (Core, Snapshots, Journal, Exploration)
 │   └── *.cs               # Alerts, Audio (NAudio 3.3), Piper TTS, Diagnostics, cAPI, Community Sync, Spansh, Web Server
 ├── UI/
-│   ├── Controls/          # Reusable WPF controls and attached localization properties
+│   ├── Controls/          # Reusable WPF controls, attached localization properties, and strict InputConstraint behavior
 │   └── MainWindow.*.cs    # Modular partial classes for MainWindow by functional domain
 ├── Web/                   # Modular responsive HTTPS Web HUD (index.html, styles.css, app.js)
-├── docs/                  # Static GitHub Pages OAuth callback relay (callback.html)
+├── docs/                  # Modular GitHub Pages site (index.html, styles.css, i18n.js, app.js) & OAuth callback relay
 └── wiki/                  # Full technical and user documentation (GitHub Wiki source)
 ```
 

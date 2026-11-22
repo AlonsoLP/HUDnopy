@@ -111,7 +111,8 @@
                      "spansh-services":  "Servicios Spansh",
                      "integrations":  "Integraciones",
                      "ai-settings":  "Copiloto IA",
-                     "voice-audio":  "Voz y Sonido"
+                     "voice-audio":  "Voz y Sonido",
+                     "about":  "Acerca de"
                  },
     "carrier":  {
                     "identityTitle":  "Identificación",
@@ -376,7 +377,11 @@
                           "testSound":  "Probar sonido de {0}",
                           "testVoice":  "Probar voz de {0}",
                           "speechPrefix":  "Alerta",
-                          "speechTest":  "Sistemas de voz de la nave operativos."
+                          "speechTest":  "Sistemas de voz de la nave operativos.",
+                          "catNavigation":  "NAVEGACIÓN Y EXPLORACIÓN",
+                          "catCombat":  "COMBATE Y AMENAZAS",
+                          "catOperations":  "MISIONES Y OPERACIONES",
+                          "catSurvival":  "SUPERVIVENCIA Y NAVE"
                       },
     "speechAlerts":  {
                          "fuelLow":  "Atención: combustible bajo, al {0:0} por ciento.",
@@ -901,7 +906,7 @@
                      "securityTitle":  "SEGURIDAD DEL ACCESO REMOTO",
                      "securityHelp":  "La web permite controlar el juego. HTTPS usa un certificado autofirmado y el navegador mostrará un aviso; verifica el certificado antes de confiar en él. Sin restricción permite acceder a cualquiera que alcance el servidor. El modo VPN solo limita la interfaz seleccionada.",
                      "alertsTitle":  "ALERTAS POR TIPO Y CANAL",
-                     "alertsHelp":  "Avisos visuales, sonidos y voz local. Elige una voz instalada de Windows; la voz solo se reproduce para alertas con ese canal activado.",
+                     "alertsHelp":  "Avisos visuales, sonidos y voz por tipo de alerta.",
                      "voiceTitle":  "VOZ LOCAL",
                      "testVoice":  "Probar voz",
                      "voiceTip":  "Selecciona una voz SAPI instalada localmente en Windows",
@@ -1086,7 +1091,24 @@
                      "discordRpcToggle":  "Discord Rich Presence: Mostrar nave, sistema y actividad actual en tu perfil de Discord",
                      "ardentMarketToggle":  "Ardent Insight API: Consulta de precios de compra/venta de mercados en vivo",
                      "canonnUploadToggle":  "Canonn R\u0026D: Enviar descubrimientos científicos y exobiología (Codex / ScanOrganic)",
-                     "edsmAnnounceFirstDiscoveryToggle":  "Anunciar por voz (COVAS/TTS) al entrar en un sistema virgen en EDSM"
+                     "edsmAnnounceFirstDiscoveryToggle":  "Anunciar por voz (COVAS/TTS) al entrar en un sistema virgen en EDSM",
+                     "secondaryColor":  "Color Secundario HEX:",
+                     "aiDynamicCooldown":  "Intervalo (s):",
+                     "thresholdCritPct":  "Crítico %",
+                     "macroStepsLabel":  "Acciones:",
+                     "macroTriggerLabel":  "Frase(s) activación:",
+                     "macroConfirmLabel":  "Confirmación (opc.):",
+                     "thresholdWarnHrs":  "Aviso h",
+                     "thresholdCritHrs":  "Crítico h",
+                     "thresholdWarnPct":  "Aviso %",
+                     "aboutProjectLinks":  "ENLACES DEL PROYECTO",
+                     "aboutLicenseLabel":  "Licencia:",
+                     "aboutDesc":  "HUD de telemetría de código abierto para Elite Dangerous, MFD Web táctil, gestor de Fleet Carrier y copiloto IA COVAS.",
+                     "aboutCommunityTitle":  "ECOSISTEMA Y WEBS COLABORADORAS",
+                     "aboutTitle":  "ACERCA DE HUDNOPY",
+                     "aboutCommunityHelp":  "Acceso rápido a herramientas comunitarias, bases de datos y APIs de Elite Dangerous integradas o compatibles con HUDnopy.",
+                     "aboutAuthorLabel":  "Autor:",
+                     "aboutVersionLabel":  "Versión:"
                  },
     "operations":  {
                        "marketSearch":  "Buscar mercancía por nombre",
