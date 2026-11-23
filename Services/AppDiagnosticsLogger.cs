@@ -16,6 +16,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -26,6 +27,17 @@ using HUDnopy.Models;
 namespace HUDnopy.Services;
 
 /// <summary>
+/// Immutable snapshot of a recent diagnostic warning or error recorded during the session.
+/// </summary>
+public sealed record DiagnosticIssueEntry(
+    string TimestampUtc,
+    string Level,
+    string Category,
+    string Message,
+    string Details,
+    Exception? ExceptionObject);
+
+/// <summary>
 /// Thread-safe, zero-dependency daily rolling diagnostic logger with secret redaction,
 /// in-memory breadcrumbs, storm deduplication, and sanitized Support ZIP export.
 /// </summary>
@@ -34,14 +46,23 @@ public static partial class AppDiagnosticsLogger
     private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB safety cap per daily file
     private const int RetentionDays = 7;
     private const int MaxBreadcrumbs = 40;
+    private const int MaxRecentIssues = 50;
     private static readonly TimeSpan DedupWindow = TimeSpan.FromSeconds(10);
 
     private static readonly Lock WriteLock = new();
     private static readonly Queue<string> Breadcrumbs = new(MaxBreadcrumbs);
+    private static readonly List<DiagnosticIssueEntry> RecentIssues = new(MaxRecentIssues);
+    private static Exception? _lastRecordedException;
+    private static string _lastRecordedExceptionSource = "HUDnopy";
     private static DateOnly _lastPrunedDayUtc = DateOnly.MinValue;
     private static string _lastDedupKey = "";
     private static DateTimeOffset _lastDedupUtc = DateTimeOffset.MinValue;
     private static int _suppressedDuplicates;
+
+    /// <summary>
+    /// Raised whenever a new WARN or ERROR diagnostic issue is recorded.
+    /// </summary>
+    public static event Action? RecentIssuesChanged;
 
     [GeneratedRegex(@"((?:api[_-]?key|access[_-]?token|refresh[_-]?token|commander[_-]?name|password|secret|key)\s*[=:]\s*)([^\s&;""',]+)", RegexOptions.IgnoreCase)]
     private static partial Regex QueryOrKeyValueSecretRegex();
@@ -243,7 +264,18 @@ public static partial class AppDiagnosticsLogger
             cfg.AiAllowActions,
             cfg.AiDynamicEvents,
             cfg.AiRequireWakeWord,
-            cfg.AiVoiceMacrosEnabled
+            cfg.AiVoiceMacrosEnabled,
+            cfg.AiSttEngine,
+            cfg.WhisperModelId,
+            cfg.UseCustomDeckLayout,
+            CustomDeckTabCount = cfg.DeckTabs?.Count ?? 0,
+            DeckFavoritesCount = cfg.DeckTabs?.Sum(static t => t.Buttons?.Count(static b => b.IsFavorite) ?? 0) ?? 0,
+            cfg.RadioAutoDuckEnabled,
+            cfg.RadioVolumePercent,
+            cfg.OverlayClickThrough,
+            cfg.OverlayOpacity,
+            cfg.EnableAutoUpdateCheck,
+            cfg.HasCompletedFirstRunWizard
         };
         string safeCfg = JsonSerializer.Serialize(technicalConfig, HttpClientHeaderDefaults.IndentedJsonOptions);
         WriteZipTextEntry(archive, "config.sanitized.json", safeCfg);
@@ -304,8 +336,56 @@ public static partial class AppDiagnosticsLogger
     /// </summary>
     public static void Error(string category, string message, Exception? ex = null) => Write("ERROR", category, message, ex);
 
+    /// <summary>
+    /// Returns a newest-first snapshot of recent diagnostic warnings and errors recorded in the current session.
+    /// </summary>
+    public static IReadOnlyList<DiagnosticIssueEntry> GetRecentIssuesSnapshot()
+    {
+        lock (WriteLock)
+        {
+            var copy = new List<DiagnosticIssueEntry>(RecentIssues.Count);
+            for (int i = RecentIssues.Count - 1; i >= 0; i--)
+                copy.Add(RecentIssues[i]);
+            return copy;
+        }
+    }
+
+    /// <summary>
+    /// Returns the most recent recorded exception (or a synthetic summary exception from the latest diagnostic issue) for bug reporting.
+    /// </summary>
+    public static (Exception Exception, string Source) GetLastReportableException()
+    {
+        lock (WriteLock)
+        {
+            if (_lastRecordedException is not null)
+                return (_lastRecordedException, _lastRecordedExceptionSource);
+
+            if (RecentIssues.Count > 0)
+            {
+                var latest = RecentIssues[^1];
+                return (latest.ExceptionObject ?? new InvalidOperationException($"[{latest.Level}] {latest.Category}: {latest.Message}"), latest.Category);
+            }
+
+            return (new InvalidOperationException("User-initiated diagnostic report (no fatal crash occurred during session)."), "Diagnostics.ManualReport");
+        }
+    }
+
+    /// <summary>
+    /// Clears the in-memory recent diagnostic issues list.
+    /// </summary>
+    public static void ClearRecentIssues()
+    {
+        lock (WriteLock)
+        {
+            RecentIssues.Clear();
+            _lastRecordedException = null;
+        }
+        try { RecentIssuesChanged?.Invoke(); } catch { }
+    }
+
     private static void Write(string level, string category, string message, Exception? ex)
     {
+        bool notifyIssuesChanged = false;
         try
         {
             DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
@@ -352,6 +432,25 @@ public static partial class AppDiagnosticsLogger
                         sb.Append("    ").AppendLine(crumb);
                 }
 
+                if (level is "WARN" or "ERROR")
+                {
+                    if (ex is not null)
+                    {
+                        _lastRecordedException = ex;
+                        _lastRecordedExceptionSource = category;
+                    }
+                    if (RecentIssues.Count >= MaxRecentIssues)
+                        RecentIssues.RemoveAt(0);
+                    RecentIssues.Add(new DiagnosticIssueEntry(
+                        nowUtc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+                        level,
+                        category,
+                        cleanMessage,
+                        sb.ToString().Trim(),
+                        ex));
+                    notifyIssuesChanged = true;
+                }
+
                 Directory.CreateDirectory(dir);
                 if (todayUtc != _lastPrunedDayUtc)
                 {
@@ -368,6 +467,11 @@ public static partial class AppDiagnosticsLogger
         catch (Exception logEx)
         {
             Trace.TraceError($"AppDiagnosticsLogger failed: {logEx.Message}");
+        }
+
+        if (notifyIssuesChanged)
+        {
+            try { RecentIssuesChanged?.Invoke(); } catch { }
         }
     }
 

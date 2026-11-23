@@ -399,7 +399,6 @@ public partial class MainWindow
             selector.SelectedValue = previous;
             _suppressEvents = false;
             string err = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundDirError"], ex.Message);
-            TxtSoundDirectoryStatus.Text = err;
             SetStatusBarMessage($"⚠ {err}");
         }
     }
@@ -415,7 +414,6 @@ public partial class MainWindow
             messages.Add(string.Format(text["soundDirError"], _alertSoundService.MigrationError));
         messages.AddRange(_alertSoundService.DirectoryErrors.Select(error => string.Format(text["soundDirError"], error)));
         string joined = string.Join(" · ", messages);
-        TxtSoundDirectoryStatus.Text = string.Join(Environment.NewLine, messages);
         if (!string.IsNullOrWhiteSpace(joined))
             SetStatusBarMessage(joined);
     }
@@ -429,7 +427,6 @@ public partial class MainWindow
         string directory = Path.GetFullPath(dialog.SelectedPath);
         if (_configService.Current.AlertSoundDirectories.Contains(directory, StringComparer.OrdinalIgnoreCase))
         {
-            TxtSoundDirectoryStatus.Text = text["soundDirDuplicate"];
             SetStatusBarMessage($"⚠ {text["soundDirDuplicate"]}");
             return;
         }
@@ -441,7 +438,6 @@ public partial class MainWindow
         if (LstSoundDirectories.SelectedItem is not string directory)
         {
             string msg = SettingsTranslations.ForLanguage(_uiLanguage)["soundDirSelect"];
-            TxtSoundDirectoryStatus.Text = msg;
             SetStatusBarMessage($"⚠ {msg}");
             return;
         }
@@ -459,7 +455,6 @@ public partial class MainWindow
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException or NotSupportedException)
         {
             string err = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundDirError"], ex.Message);
-            TxtSoundDirectoryStatus.Text = err;
             SetStatusBarMessage($"⚠ {err}");
         }
     }
@@ -732,12 +727,6 @@ public partial class MainWindow
         _configService.Save();
     }
 
-    private void Deck_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (e.NewSize.Width > 0)
-            ItemsControlDeck.Tag = Math.Max(1, (int)(e.NewSize.Width / 222));
-    }
-
     private void ResponsiveGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (sender is UniformGrid grid && e.NewSize.Width > 0 && double.IsFinite(e.NewSize.Width) &&
@@ -923,36 +912,37 @@ public partial class MainWindow
     }
 
 
-    private async void PathsConfig_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (_suppressEvents || _configService is null)
-            return;
+    private async void PathsConfig_LostFocus(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Paths Config Save", async () =>
+        {
+            if (_suppressEvents || _configService is null)
+                return;
 
-        string journalFolder = TxtConfigJournalPath.Text.Trim();
-        string bindingsFolder = TxtConfigBindingsPath.Text.Trim();
-        string selectedBindsFile = string.Equals(TxtConfigSelectedBindsFile.Text, _displayedBindsFile, StringComparison.Ordinal)
-            ? _configService.Current.SelectedBindsFile
-            : TxtConfigSelectedBindsFile.Text.Trim();
-        bool journalChanged = !string.Equals(_configService.Current.JournalFolderPath, journalFolder, StringComparison.OrdinalIgnoreCase);
-        bool bindingsChanged =
-            !string.Equals(_configService.Current.BindingsFolderPath, bindingsFolder, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(_configService.Current.SelectedBindsFile, selectedBindsFile, StringComparison.OrdinalIgnoreCase);
+            string journalFolder = TxtConfigJournalPath.Text.Trim();
+            string bindingsFolder = TxtConfigBindingsPath.Text.Trim();
+            string selectedBindsFile = string.Equals(TxtConfigSelectedBindsFile.Text, _displayedBindsFile, StringComparison.Ordinal)
+                ? _configService.Current.SelectedBindsFile
+                : TxtConfigSelectedBindsFile.Text.Trim();
+            bool journalChanged = !string.Equals(_configService.Current.JournalFolderPath, journalFolder, StringComparison.OrdinalIgnoreCase);
+            bool bindingsChanged =
+                !string.Equals(_configService.Current.BindingsFolderPath, bindingsFolder, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(_configService.Current.SelectedBindsFile, selectedBindsFile, StringComparison.OrdinalIgnoreCase);
 
-        if (!journalChanged && !bindingsChanged)
-            return;
+            if (!journalChanged && !bindingsChanged)
+                return;
 
-        _configService.Current.JournalFolderPath = journalFolder;
-        _configService.Current.BindingsFolderPath = bindingsFolder;
-        _configService.Current.SelectedBindsFile = selectedBindsFile;
-        _configService.Save();
-        _displayedBindsFile = null;
-        if (bindingsChanged)
-            _bindingsService.ReloadBindings();
-        else
-            UpdateBindingsProfileInfo();
-        await _webServer.BroadcastStateAsync();
-        TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaved"];
-    }
+            _configService.Current.JournalFolderPath = journalFolder;
+            _configService.Current.BindingsFolderPath = bindingsFolder;
+            _configService.Current.SelectedBindsFile = selectedBindsFile;
+            _configService.Save();
+            _displayedBindsFile = null;
+            if (bindingsChanged)
+                _bindingsService.ReloadBindings();
+            else
+                UpdateBindingsProfileInfo();
+            await _webServer.BroadcastStateAsync();
+            TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaved"];
+        });
 
     private void ChkFocusGameWindow_Click(object sender, RoutedEventArgs e)
     {
@@ -977,47 +967,48 @@ public partial class MainWindow
         _configService.Save();
     }
 
-    private async void AlertThreshold_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_suppressEvents || _configService is null ||
-            TxtFuelLowThreshold is null || TxtFuelCriticalThreshold is null ||
-            TxtHullCriticalThreshold is null || TxtMissionExpiryWarningHours is null ||
-            TxtMissionExpiryCriticalHours is null)
-            return;
+    private async void AlertThreshold_TextChanged(object sender, TextChangedEventArgs e) =>
+        await RunUiAsync("Alert Threshold Save", async () =>
+        {
+            if (_suppressEvents || _configService is null ||
+                TxtFuelLowThreshold is null || TxtFuelCriticalThreshold is null ||
+                TxtHullCriticalThreshold is null || TxtMissionExpiryWarningHours is null ||
+                TxtMissionExpiryCriticalHours is null)
+                return;
 
-        if (!int.TryParse(TxtFuelLowThreshold.Text.Trim(), out int lowThreshold) ||
-            !int.TryParse(TxtFuelCriticalThreshold.Text.Trim(), out int criticalThreshold) ||
-            !int.TryParse(TxtHullCriticalThreshold.Text.Trim(), out int hullCriticalThreshold) ||
-            !int.TryParse(TxtMissionExpiryWarningHours.Text.Trim(), out int missionWarningHours) ||
-            !int.TryParse(TxtMissionExpiryCriticalHours.Text.Trim(), out int missionCriticalHours) ||
-            lowThreshold is < 2 or > 100 ||
-            criticalThreshold < 1 ||
-            criticalThreshold >= lowThreshold ||
-            hullCriticalThreshold is < 1 or > 99 ||
-            missionWarningHours is < 2 or > 720 ||
-            missionCriticalHours < 1 ||
-            missionCriticalHours >= missionWarningHours)
-            return;
+            if (!int.TryParse(TxtFuelLowThreshold.Text.Trim(), out int lowThreshold) ||
+                !int.TryParse(TxtFuelCriticalThreshold.Text.Trim(), out int criticalThreshold) ||
+                !int.TryParse(TxtHullCriticalThreshold.Text.Trim(), out int hullCriticalThreshold) ||
+                !int.TryParse(TxtMissionExpiryWarningHours.Text.Trim(), out int missionWarningHours) ||
+                !int.TryParse(TxtMissionExpiryCriticalHours.Text.Trim(), out int missionCriticalHours) ||
+                lowThreshold is < 2 or > 100 ||
+                criticalThreshold < 1 ||
+                criticalThreshold >= lowThreshold ||
+                hullCriticalThreshold is < 1 or > 99 ||
+                missionWarningHours is < 2 or > 720 ||
+                missionCriticalHours < 1 ||
+                missionCriticalHours >= missionWarningHours)
+                return;
 
-        var cfg = _configService.Current;
-        if (cfg.FuelLowThresholdPercent == lowThreshold &&
-            cfg.FuelCriticalThresholdPercent == criticalThreshold &&
-            cfg.HullCriticalThresholdPercent == hullCriticalThreshold &&
-            cfg.MissionExpiryWarningHours == missionWarningHours &&
-            cfg.MissionExpiryCriticalHours == missionCriticalHours)
-            return;
+            var cfg = _configService.Current;
+            if (cfg.FuelLowThresholdPercent == lowThreshold &&
+                cfg.FuelCriticalThresholdPercent == criticalThreshold &&
+                cfg.HullCriticalThresholdPercent == hullCriticalThreshold &&
+                cfg.MissionExpiryWarningHours == missionWarningHours &&
+                cfg.MissionExpiryCriticalHours == missionCriticalHours)
+                return;
 
-        cfg.FuelLowThresholdPercent = lowThreshold;
-        cfg.FuelCriticalThresholdPercent = criticalThreshold;
-        cfg.HullCriticalThresholdPercent = hullCriticalThreshold;
-        cfg.MissionExpiryWarningHours = missionWarningHours;
-        cfg.MissionExpiryCriticalHours = missionCriticalHours;
-        _configService.Save();
-        TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["thresholdSaved"],
-            lowThreshold, criticalThreshold, hullCriticalThreshold, missionWarningHours, missionCriticalHours);
-        _fileWatcher.RefreshState();
-        await _webServer.BroadcastStateAsync();
-    }
+            cfg.FuelLowThresholdPercent = lowThreshold;
+            cfg.FuelCriticalThresholdPercent = criticalThreshold;
+            cfg.HullCriticalThresholdPercent = hullCriticalThreshold;
+            cfg.MissionExpiryWarningHours = missionWarningHours;
+            cfg.MissionExpiryCriticalHours = missionCriticalHours;
+            _configService.Save();
+            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["thresholdSaved"],
+                lowThreshold, criticalThreshold, hullCriticalThreshold, missionWarningHours, missionCriticalHours);
+            _fileWatcher.RefreshState();
+            await _webServer.BroadcastStateAsync();
+        });
 
     private void MaterialFilter_Changed(object sender, EventArgs e)
     {
@@ -1032,31 +1023,33 @@ public partial class MainWindow
     // Piper Neural TTS (Free local voices with automatic download)
     // =========================================================================
 
-    private async void CmbSpeechEngine_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppressEvents || _configService is null) return;
-        if (CmbSpeechEngine.SelectedValue is string engine)
+    private async void CmbSpeechEngine_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        await RunUiAsync("Speech Engine Change", async () =>
         {
-            _configService.Current.SpeechEngine = engine;
-            _configService.Save();
-            RefreshPiperVoicesUi();
-
-            if (string.Equals(engine, "piper", StringComparison.OrdinalIgnoreCase) && !_piperTts.IsEngineInstalled())
+            if (_suppressEvents || _configService is null) return;
+            if (CmbSpeechEngine.SelectedValue is string engine)
             {
-                SetPiperButtonsEnabled(false);
-                var progress = new Progress<string>(msg =>
-                {
-                    TxtPiperStatus.Text = msg;
-                    SetStatusBarMessage(msg);
-                });
-                var (_, msg) = await _piperTts.EnsureEngineInstalledAsync(progress);
+                _configService.Current.SpeechEngine = engine;
+                _configService.Save();
                 RefreshPiperVoicesUi();
-                TxtPiperStatus.Text = msg;
-                SetStatusBarMessage(msg);
-                SetPiperButtonsEnabled(true);
+
+                if (string.Equals(engine, "piper", StringComparison.OrdinalIgnoreCase) && !_piperTts.IsEngineInstalled())
+                {
+                    SetPiperButtonsEnabled(false);
+                    try
+                    {
+                        var progress = new Progress<string>(SetStatusBarMessage);
+                        var (_, msg) = await _piperTts.EnsureEngineInstalledAsync(progress);
+                        RefreshPiperVoicesUi();
+                        SetStatusBarMessage(msg);
+                    }
+                    finally
+                    {
+                        SetPiperButtonsEnabled(true);
+                    }
+                }
             }
-        }
-    }
+        });
 
     private void CmbPiperVoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -1065,7 +1058,6 @@ public partial class MainWindow
         {
             _configService.Current.PiperVoiceId = voiceId;
             _configService.Save();
-            UpdatePiperStatusText();
         }
     }
 
@@ -1097,64 +1089,42 @@ public partial class MainWindow
         CmbPiperVoice.ItemsSource = options;
         CmbPiperVoice.SelectedValue = options.Any(o => o.Key == selected) ? selected : "auto";
         _suppressEvents = false;
-        UpdatePiperStatusText();
     }
 
-    private void UpdatePiperStatusText()
-    {
-        if (TxtPiperStatus is null || _piperTts is null)
-            return;
-
-        var text = SettingsTranslations.ForLanguage(_uiLanguage);
-        string? exePath = _piperTts.FindPiperExecutable();
-        bool engineOk = exePath is not null;
-        var resolved = _piperTts.ResolveVoice(_configService.Current.PiperVoiceId, _uiLanguage);
-        bool voiceOk = resolved is not null && _piperTts.IsVoiceInstalled(resolved.Id);
-
-        if (engineOk && voiceOk && resolved is not null)
+    private async void BtnDownloadPiperVoice_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Download Piper Voice", async () =>
         {
-            TxtPiperStatus.Text = $"{string.Format(text["piperStatusReady"], resolved.DisplayName)} ({exePath})";
-        }
-        else if (engineOk)
-        {
-            TxtPiperStatus.Text = $"✓ Motor Piper listo ({exePath}) · {text["piperStatusMissing"]}";
-        }
-        else
-        {
-            TxtPiperStatus.Text = $"⚠ Motor Piper no instalado · {text["piperStatusMissing"]}";
-        }
-    }
-
-    private async void BtnDownloadPiperVoice_Click(object sender, RoutedEventArgs e)
-    {
-        SetPiperButtonsEnabled(false);
-        var progress = new Progress<string>(msg =>
-        {
-            TxtPiperStatus.Text = msg;
-            SetStatusBarMessage(msg);
+            SetPiperButtonsEnabled(false);
+            try
+            {
+                var progress = new Progress<string>(SetStatusBarMessage);
+                string voiceId = CmbPiperVoice.SelectedValue as string ?? "auto";
+                var (_, msg) = await _piperTts.DownloadVoiceAsync(voiceId, _uiLanguage, progress);
+                RefreshPiperVoicesUi();
+                SetStatusBarMessage(msg);
+            }
+            finally
+            {
+                SetPiperButtonsEnabled(true);
+            }
         });
-        string voiceId = CmbPiperVoice.SelectedValue as string ?? "auto";
-        var (_, msg) = await _piperTts.DownloadVoiceAsync(voiceId, _uiLanguage, progress);
-        RefreshPiperVoicesUi();
-        TxtPiperStatus.Text = msg;
-        SetStatusBarMessage(msg);
-        SetPiperButtonsEnabled(true);
-    }
 
-    private async void BtnDownloadPiperPack_Click(object sender, RoutedEventArgs e)
-    {
-        SetPiperButtonsEnabled(false);
-        var progress = new Progress<string>(msg =>
+    private async void BtnDownloadPiperPack_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Download Piper Voice Pack", async () =>
         {
-            TxtPiperStatus.Text = msg;
-            SetStatusBarMessage(msg);
+            SetPiperButtonsEnabled(false);
+            try
+            {
+                var progress = new Progress<string>(SetStatusBarMessage);
+                var (_, msg) = await _piperTts.DownloadAllSixLanguagesPackAsync(progress);
+                RefreshPiperVoicesUi();
+                SetStatusBarMessage(msg);
+            }
+            finally
+            {
+                SetPiperButtonsEnabled(true);
+            }
         });
-        var (_, msg) = await _piperTts.DownloadAllSixLanguagesPackAsync(progress);
-        RefreshPiperVoicesUi();
-        TxtPiperStatus.Text = msg;
-        SetStatusBarMessage(msg);
-        SetPiperButtonsEnabled(true);
-    }
 
     private async void BtnTestPiperVoice_Click(object sender, RoutedEventArgs e)
     {
@@ -1162,24 +1132,18 @@ public partial class MainWindow
         var resolved = _piperTts.ResolveVoice(voiceId, _uiLanguage);
         if (!_piperTts.IsEngineInstalled())
         {
-            const string missingEngine = "⚠ Motor Piper no instalado. Pulsa «Descargar voz» o «Pack 6 idiomas».";
-            TxtPiperStatus.Text = missingEngine;
-            SetStatusBarMessage(missingEngine);
+            SetStatusBarMessage("⚠ Motor Piper no instalado. Pulsa «Descargar voz» o «Pack 6 idiomas».");
             return;
         }
         if (resolved is null || !_piperTts.IsVoiceInstalled(resolved.Id))
         {
-            string missingVoice = $"⚠ La voz seleccionada ({resolved?.DisplayName ?? voiceId}) no está descargada. Pulsa «Descargar voz».";
-            TxtPiperStatus.Text = missingVoice;
-            SetStatusBarMessage(missingVoice);
+            SetStatusBarMessage($"⚠ La voz seleccionada ({resolved?.DisplayName ?? voiceId}) no está descargada. Pulsa «Descargar voz».");
             return;
         }
 
         SetPiperButtonsEnabled(false);
         BtnTestPiperVoice.IsEnabled = false;
-        string testingVoice = $"Probando voz Piper ({resolved.DisplayName})...";
-        TxtPiperStatus.Text = testingVoice;
-        SetStatusBarMessage(testingVoice);
+        SetStatusBarMessage($"Probando voz Piper ({resolved.DisplayName})...");
 
         try
         {
@@ -1199,14 +1163,11 @@ public partial class MainWindow
                 string err = string.IsNullOrWhiteSpace(_piperTts.LastError)
                     ? "Piper no generó audio."
                     : _piperTts.LastError;
-                TxtPiperStatus.Text = $"⚠ {err}";
                 SetStatusBarMessage($"⚠ {err}");
                 return;
             }
 
-            string playingMsg = $"▶ Reproduciendo Piper ({resolved.DisplayName})...";
-            TxtPiperStatus.Text = playingMsg;
-            SetStatusBarMessage(playingMsg);
+            SetStatusBarMessage($"▶ Reproduciendo Piper ({resolved.DisplayName})...");
             await Task.Run(() =>
             {
                 using var ms = new MemoryStream(wav);
@@ -1218,14 +1179,11 @@ public partial class MainWindow
                 output.Play();
                 done.Wait(TimeSpan.FromSeconds(15));
             });
-            UpdatePiperStatusText();
             SetStatusBarMessage($"✓ Piper ({resolved.DisplayName})");
         }
         catch (Exception ex)
         {
-            string playErr = $"⚠ Error al reproducir Piper: {ex.Message}";
-            TxtPiperStatus.Text = playErr;
-            SetStatusBarMessage(playErr);
+            SetStatusBarMessage($"⚠ Error al reproducir Piper: {ex.Message}");
         }
         finally
         {

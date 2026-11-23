@@ -136,13 +136,14 @@
   }
   nav.section-tabs button {
     flex: 0 0 auto;
-    min-width: 2.3rem;
-    padding: 5px 9px;
+    min-width: 2.65rem;
+    min-height: 2.55rem;
+    padding: 7px 11px;
     border: 1px solid rgba(255,255,255,0.14);
     background: var(--hud-panel-alt);
     color: var(--hud-muted);
     font-family: 'Segoe UI Emoji', 'Segoe UI Symbol', 'Segoe UI', sans-serif;
-    font-size: 1.05rem;
+    font-size: 1.08rem;
     line-height: 1.1;
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
@@ -377,9 +378,10 @@
   .table-scroll {
     overflow-x: auto;
     max-width: 100%;
+    -webkit-overflow-scrolling: touch;
   }
   .table-scroll .hud-table {
-    min-width: 440px;
+    min-width: 0;
   }
   .dashboard-summary .val {
     color: var(--hud-accent);
@@ -550,13 +552,13 @@
     transform: scale(0.96);
   }
   .deck-button.icon-action-btn {
-    min-width: 2.35rem;
-    min-height: 2.35rem;
-    width: 2.35rem;
-    height: 2.35rem;
+    min-width: 2.65rem;
+    min-height: 2.65rem;
+    width: 2.65rem;
+    height: 2.65rem;
     padding: 0;
     gap: 0;
-    font-size: 1.05rem;
+    font-size: 1.08rem;
     line-height: 1;
     flex: 0 0 auto;
   }
@@ -574,21 +576,83 @@
   table.hud-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.86rem;
+    font-size: 0.92rem;
   }
   table.hud-table th, table.hud-table td {
-    padding: 9px 10px;
+    padding: 13px 12px;
     text-align: left;
-    border-bottom: 1px solid rgba(255,255,255,0.07);
+    border-bottom: 1px solid rgba(255,255,255,0.09);
   }
   table.hud-table th {
-    color: var(--hud-muted);
-    font-size: 0.75rem;
+    color: var(--hud-accent);
+    background: #141A24;
+    font-size: 0.78rem;
     text-transform: uppercase;
   }
+  table.hud-table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+  }
+  table.hud-table tbody tr:hover,
+  table.hud-table tbody tr:active {
+    background-color: color-mix(in srgb, var(--hud-accent) 16%, var(--hud-panel-alt));
+  }
   @media (max-width: 520px) {
-    table.hud-table { font-size: 0.76rem; }
-    table.hud-table th, table.hud-table td { padding: 7px 6px; }
+    table.hud-table { font-size: 0.84rem; }
+    table.hud-table th, table.hud-table td { padding: 11px 9px; }
+  }
+  /* Hide secondary detail columns in touch-friendly Web HUD tables (all fields appear in #webRowDetailOverlay when a row is tapped) */
+  table.hud-table:has(#shipModulesTableBody) tr > :nth-child(1):not(:only-child),
+  table.hud-table:has(#shipModulesTableBody) tr > :nth-child(6),
+  table.hud-table:has(#shipModulesTableBody) tr > :nth-child(7),
+  table.hud-table:has(#massacreStacksTableBody) tr > :nth-child(1):not(:only-child),
+  table.hud-table:has(#massacreStacksTableBody) tr > :nth-child(3),
+  table.hud-table:has(#webSystemFactionsTableBody) tr > :nth-child(4),
+  table.hud-table:has(#webSystemFactionsTableBody) tr > :nth-child(5),
+  table.hud-table:has(#spanshStationsTableBody) tr > :nth-child(3),
+  table.hud-table:has(#spanshStationsTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webEliteBgsTableBody) tr > :nth-child(4),
+  table.hud-table:has(#webEliteBgsTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webEliteBgsTableBody) tr > :nth-child(6),
+  table.hud-table:has(#routeTableBody) tr > :nth-child(6),
+  table.hud-table:has(#webSpanshRouteTableBody) tr > :nth-child(2),
+  table.hud-table:has(#webSpanshRouteTableBody) tr > :nth-child(5),
+  table.hud-table:has(#explorationBodiesTableBody) tr > :nth-child(n+3):nth-child(-n+11),
+  table.hud-table:has(#explorationBodiesTableBody) tr > :nth-child(n+13):nth-child(-n+16),
+  table.hud-table:has(#explorationBodiesTableBody) tr > :nth-child(18),
+  table.hud-table:has(#surfaceEventsTableBody) tr > :nth-child(4),
+  table.hud-table:has(#surfaceEventsTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webSpanshServiceTableBody) tr > :nth-child(4),
+  table.hud-table:has(#webSpanshServiceTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webDeepSearchTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webDeepSearchTableBody) tr > :nth-child(6),
+  table.hud-table:has(#webCommunityGoalsTableBody) tr > :nth-child(3),
+  table.hud-table:has(#webCommunityGoalsTableBody) tr > :nth-child(5),
+  table.hud-table:has(#missionsTableBody) tr > :nth-child(3),
+  table.hud-table:has(#missionsTableBody) tr > :nth-child(4),
+  table.hud-table:has(#missionsTableBody) tr > :nth-child(5),
+  table.hud-table:has(#passengerTableBody) tr > :nth-child(4),
+  table.hud-table:has(#passengerTableBody) tr > :nth-child(5),
+  table.hud-table:has(#passengerTableBody) tr > :nth-child(6),
+  table.hud-table:has(#webSpanshMiningTableBody) tr > :nth-child(3),
+  table.hud-table:has(#webSpanshMiningTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webColonisationSupplierTableBody) tr > :nth-child(4),
+  table.hud-table:has(#webColonisationSupplierTableBody) tr > :nth-child(5),
+  table.hud-table:has(#materialsTableBody) tr > :nth-child(3),
+  table.hud-table:has(#materialsTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webWishlistTableBody) tr > :nth-child(2),
+  table.hud-table:has(#webWishlistTableBody) tr > :nth-child(3),
+  table.hud-table:has(#marketTableBody) tr > :nth-child(2),
+  table.hud-table:has(#marketTableBody) tr > :nth-child(5),
+  table.hud-table:has(#marketTableBody) tr > :nth-child(n+7),
+  table.hud-table:has(#webSpanshTradeTableBody) tr > :nth-child(1):not(:only-child),
+  table.hud-table:has(#webSpanshTradeTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webArdentTableBody) tr > :nth-child(n+4),
+  table.hud-table:has(#webStoredModulesTableBody) tr > :nth-child(4),
+  table.hud-table:has(#webStoredModulesTableBody) tr > :nth-child(5),
+  table.hud-table:has(#webStoredShipsTableBody) tr > :nth-child(4),
+  table.hud-table:has(#webStoredShipsTableBody) tr > :nth-child(5) {
+    display: none;
   }
   table.hud-table tr.current-system {
     background-color: color-mix(in srgb, var(--hud-accent) 12%, var(--hud-panel-alt));
@@ -756,8 +820,98 @@
     background: var(--hud-panel-alt);
     border: 1px solid rgba(255,255,255,0.2);
     color: var(--hud-accent);
-    font: 700 0.78rem 'Consolas', monospace;
-    padding: 5px 10px;
+    font: 700 0.85rem 'Consolas', monospace;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 6px 12px;
     cursor: pointer;
     margin-left: 8px;
+  }
+  .row-detail-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    background: rgba(5, 7, 10, 0.82);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .row-detail-overlay[hidden] { display: none; }
+  .row-detail-card {
+    width: min(740px, 100%);
+    max-height: 86vh;
+    background: var(--hud-panel);
+    border: 2px solid var(--hud-accent);
+    box-shadow: 0 12px 42px rgba(0, 0, 0, 0.9);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+  .row-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  }
+  .row-detail-titles { min-width: 0; flex: 1; }
+  .row-detail-category {
+    color: var(--hud-accent);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .row-detail-title {
+    color: var(--hud-text);
+    font-size: 1.15rem;
+    font-weight: 900;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+  }
+  .row-detail-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .row-detail-counter {
+    color: var(--hud-secondary);
+    font: 700 0.78rem 'Consolas', monospace;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+  .row-detail-fields {
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    gap: 10px;
+    padding-right: 4px;
+  }
+  .row-detail-field {
+    background: var(--hud-panel-alt);
+    border-left: 2px solid var(--hud-accent);
+    padding: 10px 12px;
+  }
+  .row-detail-field.wide {
+    grid-column: 1 / -1;
+  }
+  .row-detail-field-label {
+    color: var(--hud-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .row-detail-field-value {
+    color: var(--hud-text);
+    font-size: 0.95rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
   }

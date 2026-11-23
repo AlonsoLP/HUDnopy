@@ -76,19 +76,26 @@ public sealed class FrontierCapiService : IDisposable
 
         LoadTokensFromDisk();
         _gameEvents.JournalEventReceived += OnJournalEventReceived;
+
+        if (_configService.Current.EnableFrontierCapi && IsConnected && HttpClientHeaderDefaults.TestHttpHandlerFactory is null)
+        {
+            _lastAutoSyncUtc = DateTimeOffset.UtcNow;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(1200).ConfigureAwait(false);
+                await SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked).ConfigureAwait(false);
+            });
+        }
     }
-
-    public string GetRedirectUri() => PublicRedirectUri;
-
-    public int GetCallbackPort() => Math.Clamp(_configService.Current.FrontierCapiCallbackPort, 1024, 65535);
 
     private void OnJournalEventReceived(GameJournalEvent gameEvent)
     {
-        if (gameEvent.IsHistorical)
-            return;
-
         var cfg = _configService.Current;
         if (!cfg.EnableFrontierCapi || !IsConnected)
+            return;
+
+        // Allow the very first LoadGame event after startup (even from initial journal read) to trigger auto-sync
+        if (gameEvent.IsHistorical && (_lastAutoSyncUtc != DateTimeOffset.MinValue || gameEvent.EventType != "LoadGame" || HttpClientHeaderDefaults.TestHttpHandlerFactory is not null))
             return;
 
         if (gameEvent.EventType is "LoadGame" or "Docked" &&
@@ -566,23 +573,40 @@ public sealed class FrontierCapiService : IDisposable
 
     private void ApplyFleetCarrierJson(JsonElement root)
     {
-        long id = GetLong(root, "marketId") ?? 0;
-        if (id <= 0) return;
-
-        string callsign = GetStr(root, "name", "callsign") ?? "";
-        string nameHex = GetStr(root, "name", "vanityName") ?? "";
+        string callsign = GetStr(root, "name", "callsign") ?? GetStr(root, "callsign") ?? "";
+        string nameHex = GetStr(root, "name", "vanityName") ?? GetStr(root, "vanityName") ?? "";
         string decodedName = DecodeHexUtf8(nameHex);
-        string sys = GetStr(root, "currentStarSystem") ?? "";
+        long id = GetLong(root, "marketId")
+                  ?? GetLong(root, "carrierId")
+                  ?? (root.TryGetProperty("market", out var mktIdObj) && mktIdObj.ValueKind == JsonValueKind.Object ? GetLong(mktIdObj, "id") : null)
+                  ?? _fileWatcher.State.Carrier?.Id
+                  ?? 0;
+        if (id <= 0 && string.IsNullOrWhiteSpace(callsign) && string.IsNullOrWhiteSpace(decodedName))
+            return;
+
+        string sys = GetStr(root, "currentStarSystem") ?? GetStr(root, "starsystem") ?? "";
         long? fuel = GetLong(root, "fuel");
-        long? balance = GetLong(root, "balance");
-        long? reserve = root.TryGetProperty("finance", out var fin) ? GetLong(fin, "bankReservedBalance") : null;
-        long? available = root.TryGetProperty("finance", out var fin2) ? GetLong(fin2, "bankBalance") : balance;
-        long? weeklyUpkeep = root.TryGetProperty("finance", out var fin3)
-            ? (GetLong(fin3, "maintenance") ?? GetLong(fin3, "maintenanceToDate"))
+        long? balance = GetLong(root, "balance")
+                        ?? (root.TryGetProperty("finance", out var finBal) && finBal.ValueKind == JsonValueKind.Object ? GetLong(finBal, "bankBalance") : null);
+        long? reserve = root.TryGetProperty("finance", out var fin) && fin.ValueKind == JsonValueKind.Object
+            ? (GetLong(fin, "bankReservedBalance") ?? GetLong(fin, "reserveBalance"))
+            : null;
+        long? available = (balance.HasValue && reserve.HasValue && balance.Value >= reserve.Value)
+            ? balance.Value - reserve.Value
+            : balance;
+        double? reservePct = (balance.HasValue && balance.Value > 0 && reserve.HasValue && reserve.Value >= 0)
+            ? Math.Round(100.0 * reserve.Value / balance.Value, 1)
+            : null;
+        double? taxRate = root.TryGetProperty("finance", out var finTax) && finTax.ValueKind == JsonValueKind.Object
+            ? (GetDouble(finTax, "taxRate") ?? GetDouble(finTax, "serviceTax"))
+            : null;
+        long? weeklyUpkeep = root.TryGetProperty("finance", out var fin3) && fin3.ValueKind == JsonValueKind.Object
+            ? (GetLong(fin3, "maintenance") ?? GetLong(fin3, "maintenanceToDate") ?? GetLong(fin3, "coreCost"))
             : null;
         string dockingAccess = GetStr(root, "dockingAccess") ?? "";
         bool? allowNotorious = root.TryGetProperty("notoriousAccess", out var na) && na.ValueKind is JsonValueKind.True or JsonValueKind.False
-            ? na.GetBoolean() : null;
+            ? na.GetBoolean()
+            : (na.ValueKind == JsonValueKind.Number && na.TryGetInt32(out int naInt) ? naInt != 0 : null);
 
         long? freeSpace = null, cargoUsed = null, totalCap = null;
         if (root.TryGetProperty("capacity", out var cap) && cap.ValueKind == JsonValueKind.Object)
@@ -687,7 +711,10 @@ public sealed class FrontierCapiService : IDisposable
                 state.LastCarrierJournalUtc.HasValue &&
                 DateTimeOffset.UtcNow - state.LastCarrierJournalUtc.Value < TimeSpan.FromMinutes(10);
 
-            var carrier = state.Carrier?.Id == id ? state.Carrier.Snapshot() : new CarrierState { Id = id };
+            var carrier = state.Carrier is not null && (state.Carrier.Id == id || id <= 0 || state.Carrier.Id <= 0)
+                ? state.Carrier.Snapshot()
+                : new CarrierState { Id = id };
+            if (id > 0) carrier.Id = id;
             if (!string.IsNullOrWhiteSpace(decodedName)) carrier.Name = decodedName;
             if (!string.IsNullOrWhiteSpace(callsign)) carrier.Callsign = callsign;
             if (!localCarrierFresh || string.IsNullOrWhiteSpace(carrier.System))
@@ -704,6 +731,8 @@ public sealed class FrontierCapiService : IDisposable
             }
             if (reserve.HasValue) carrier.Reserve = reserve;
             if (available.HasValue) carrier.Available = available;
+            if (reservePct.HasValue) carrier.ReservePercent = reservePct;
+            if (taxRate.HasValue) carrier.TaxRate = taxRate;
             if (weeklyUpkeep.HasValue && weeklyUpkeep.Value > 0) carrier.WeeklyUpkeep = weeklyUpkeep;
             if (!string.IsNullOrWhiteSpace(dockingAccess)) carrier.DockingAccess = dockingAccess;
             if (allowNotorious.HasValue) carrier.AllowNotorious = allowNotorious;

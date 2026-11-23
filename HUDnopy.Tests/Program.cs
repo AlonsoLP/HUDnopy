@@ -186,13 +186,18 @@ internal static partial class Program
             throw new InvalidOperationException(message);
     }
 
+    private static string? _cachedRepoRoot;
+    private static readonly Dictionary<string, Dictionary<string, Dictionary<string, string>>> CachedLanguageSections = new(StringComparer.OrdinalIgnoreCase);
+
     private static string FindRepoRoot()
     {
+        if (_cachedRepoRoot is not null)
+            return _cachedRepoRoot;
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
             if (File.Exists(Path.Combine(dir.FullName, "HUDnopy.csproj")))
-                return dir.FullName;
+                return _cachedRepoRoot = dir.FullName;
             dir = dir.Parent;
         }
         throw new DirectoryNotFoundException("Could not locate HUDnopy.csproj repository root.");
@@ -200,6 +205,8 @@ internal static partial class Program
 
     private static Dictionary<string, Dictionary<string, string>> LoadLanguageSections(string lang)
     {
+        if (CachedLanguageSections.TryGetValue(lang, out var cached))
+            return cached;
         string path = Path.Combine(FindRepoRoot(), "Resources", "Languages", $"{lang}.json");
         Assert(File.Exists(path), $"Missing language file: {path}");
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
@@ -216,6 +223,7 @@ internal static partial class Program
             }
             sections[sec.Name] = entries;
         }
+        CachedLanguageSections[lang] = sections;
         return sections;
     }
 
@@ -814,18 +822,36 @@ internal static partial class Program
             Assert(File.Exists(tempZip), "Support ZIP was not created.");
             using var zip = System.IO.Compression.ZipFile.OpenRead(tempZip);
             var crashEntry = zip.GetEntry("crash-report.txt");
-            Assert(crashEntry is not null, "crash-report.txt missing from Support ZIP.");
+            var cfgEntry = zip.GetEntry("config.sanitized.json");
+            Assert(crashEntry is not null && cfgEntry is not null, "crash-report.txt or config.sanitized.json missing from Support ZIP.");
             using var sr = new StreamReader(crashEntry!.Open());
             string zipCrashText = sr.ReadToEnd();
             Assert(!zipCrashText.Contains("SUPERSECRET123", StringComparison.Ordinal) && !zipCrashText.Contains("alons", StringComparison.OrdinalIgnoreCase),
                 "Personal data leaked inside crash-report.txt in Support ZIP.");
+            using var cfgSr = new StreamReader(cfgEntry!.Open());
+            string zipCfgText = cfgSr.ReadToEnd();
+            Assert(zipCfgText.Contains("\"AiSttEngine\"", StringComparison.Ordinal) &&
+                   zipCfgText.Contains("\"UseCustomDeckLayout\"", StringComparison.Ordinal) &&
+                   zipCfgText.Contains("\"OverlayClickThrough\"", StringComparison.Ordinal),
+                "Expected v0.5.0 technical diagnostic fields in config.sanitized.json.");
+
+            // Verify recent diagnostic issues snapshot & reportable exception helper
+            AppDiagnosticsLogger.Warn("TestDiagnostics", "Synthetic non-fatal warning");
+            var recentIssues = AppDiagnosticsLogger.GetRecentIssuesSnapshot();
+            Assert(recentIssues.Count >= 1 && recentIssues[0].Category == "TestDiagnostics",
+                "Expected AppDiagnosticsLogger.GetRecentIssuesSnapshot() to record recent session issues.");
+            var (reportEx, reportSrc) = AppDiagnosticsLogger.GetLastReportableException();
+            Assert(reportEx is not null && !string.IsNullOrWhiteSpace(reportSrc),
+                "Expected AppDiagnosticsLogger.GetLastReportableException() to return a valid reportable exception.");
         }
         finally
         {
             try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
         }
 
-        // 2. Real WPF STA layout smoke-test: instantiate MainWindow and run Measure/Arrange
+        // 2. Real WPF STA layout smoke-test: instantiate MainWindow in an isolated sandbox directory and run Measure/Arrange
+        string smokeTempDir = Path.Combine(Path.GetTempPath(), $"hudnopy_wpf_smoke_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(smokeTempDir);
         Exception? wpfError = null;
         var staThread = new Thread(() =>
         {
@@ -836,12 +862,37 @@ internal static partial class Program
                     var app = new HUDnopy.App();
                     app.InitializeComponent();
                 }
-                var services = new ApplicationServices();
+                var cfgSvc = new ConfigService();
+                cfgSvc.Current.JournalFolderPath = smokeTempDir;
+                cfgSvc.Current.BindingsFolderPath = smokeTempDir;
+                cfgSvc.Current.CaptureUnhandledEvents = false;
+                cfgSvc.Current.EnableFrontierCapi = false;
+                cfgSvc.Current.EnableSpanshSystemData = false;
+                cfgSvc.Current.EnableEdsmSync = false;
+                cfgSvc.Current.EnableInaraSync = false;
+                cfgSvc.Current.EnableEliteBgsWatchlist = false;
+                cfgSvc.Current.EnableEdastroDssa = false;
+                cfgSvc.Current.EnableDiscord = false;
+                var services = new ApplicationServices(cfgSvc);
                 var win = new HUDnopy.MainWindow(services);
                 win.Measure(new System.Windows.Size(1280, 720));
                 win.Arrange(new System.Windows.Rect(0, 0, 1280, 720));
                 win.UpdateLayout();
                 win.Close();
+                services.ShipState.Dispose();
+                services.CommunitySync.Dispose();
+                services.FrontierCapi.Dispose();
+                services.GalaxyStatus.Dispose();
+                services.Galnet.Dispose();
+                services.EliteBgsWatchlist.Dispose();
+                services.ArdentMarket.Dispose();
+                services.EdastroCanonn.Dispose();
+                services.Discord.Dispose();
+                services.AiCopilot.Dispose();
+                services.CockpitRadio.Dispose();
+                services.WhisperStt.Dispose();
+                services.PiperTts.Dispose();
+                services.WebServer.Dispose();
             }
             catch (Exception ex)
             {
@@ -850,7 +901,14 @@ internal static partial class Program
         });
         staThread.SetApartmentState(ApartmentState.STA);
         staThread.Start();
-        Assert(staThread.Join(TimeSpan.FromSeconds(15)), "WPF STA smoke-test timed out.");
+        try
+        {
+            Assert(staThread.Join(TimeSpan.FromSeconds(15)), "WPF STA smoke-test timed out.");
+        }
+        finally
+        {
+            try { Directory.Delete(smokeTempDir, recursive: true); } catch { }
+        }
         if (wpfError is not null)
             throw new InvalidOperationException($"WPF MainWindow layout smoke-test failed: {wpfError.GetType().Name}: {wpfError.Message}\n{wpfError.StackTrace}", wpfError);
     }
@@ -969,17 +1027,25 @@ internal static partial class Program
         Assert(swText.Contains("/ws", StringComparison.Ordinal) && swText.Contains("/api/", StringComparison.Ordinal),
             "PWA service worker must bypass live /ws and /api/ endpoints.");
 
-        // 2. AppConfig v0.6.0 defaults & CustomDeckButtonItem round-trip
+        // 2. AppConfig v0.5.0 defaults & DeckTabs round-trip
         var cfg = new AppConfig();
         Assert(cfg.OverlayClickThrough && cfg.OverlayOpacity is > 0.25 and <= 1.0, "Invalid default overlay config.");
         Assert(cfg.AiSttEngine == "auto" && cfg.WhisperModelId == "tiny", "Whisper STT must default to opt-in 'auto' mode.");
         Assert(cfg.RadioAutoDuckEnabled && cfg.RadioVolumePercent is >= 0 and <= 100, "Invalid default radio config.");
-        cfg.CustomDeckButtons.Add(new CustomDeckButtonItem { Label = "Landing Gear", Icon = "🛬", ActionId = "LandingGearToggle", Order = 1, IsVisible = true });
-        cfg.CustomDeckButtons.Add(new CustomDeckButtonItem { Label = "Cargo Scoop", Icon = "📦", ActionId = "ToggleCargoScoop", Order = 0, IsVisible = true });
+        cfg.DeckTabs.Add(new DeckTabDefinition
+        {
+            Id = "flight",
+            Name = "Flight",
+            Buttons =
+            [
+                new CustomDeckButtonItem { Label = "Landing Gear", Icon = "🛬", ActionId = "LandingGearToggle", Order = 1, IsVisible = true },
+                new CustomDeckButtonItem { Label = "Cargo Scoop", Icon = "📦", ActionId = "ToggleCargoScoop", Order = 0, IsVisible = true }
+            ]
+        });
         string cfgJson = JsonSerializer.Serialize(cfg, AppConfigJsonContext.Default.AppConfig);
         var roundTrip = JsonSerializer.Deserialize(cfgJson, AppConfigJsonContext.Default.AppConfig);
-        Assert(roundTrip is not null && roundTrip.CustomDeckButtons.Count == 2, "CustomDeckButtons failed JSON round-trip.");
-        Assert(roundTrip!.CustomDeckButtons.OrderBy(b => b.Order).First().ActionId == "ToggleCargoScoop", "CustomDeckButtons ordering failed.");
+        Assert(roundTrip is not null && roundTrip.DeckTabs.Count == 1 && roundTrip.DeckTabs[0].Buttons.Count == 2, "DeckTabs failed JSON round-trip.");
+        Assert(roundTrip!.DeckTabs[0].Buttons.OrderBy(b => b.Order).First().ActionId == "ToggleCargoScoop", "DeckTabs button ordering failed.");
 
         // 2b. DeckLayoutService: ★ FAVORITES tab first, 0.5x-4.0x scale clamping, live active state, auto-context & JSON export/import
         var sampleTabs = new List<DeckTabDefinition>

@@ -420,13 +420,13 @@
                                               AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                               ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Ranura" local:TableHeader.Key="slot" Binding="{Binding Slot}" Width="140" MinWidth="120" />
+                                            <DataGridTextColumn Header="Ranura" local:TableHeader.Key="slot" Binding="{Binding Slot}" Width="140" MinWidth="120" Visibility="Collapsed" />
                                             <DataGridTextColumn Header="Módulo" local:TableHeader.Key="module" Binding="{Binding DisplayName}" Width="2*" MinWidth="160" />
-                                            <DataGridTextColumn Header="Salud" local:TableHeader.Key="healthCol" Binding="{Binding HealthDisplay}" Width="80" MinWidth="70" />
-                                            <DataGridTextColumn Header="Prioridad" local:TableHeader.Key="priority" Binding="{Binding PriorityDisplay}" Width="85" MinWidth="75" />
-                                            <DataGridTextColumn Header="Energía" local:TableHeader.Key="powerDraw" Binding="{Binding PowerDisplay}" Width="95" MinWidth="85" />
-                                            <DataGridTextColumn Header="Munición" local:TableHeader.Key="ammo" Binding="{Binding AmmoDisplay}" Width="95" MinWidth="85" />
-                                            <DataGridTextColumn Header="Ingeniería" local:TableHeader.Key="engineering" Binding="{Binding Engineering}" Width="2*" MinWidth="160" />
+                                            <DataGridTextColumn Header="Salud" local:TableHeader.Key="healthCol" Binding="{Binding HealthDisplay}" Width="90" MinWidth="75" />
+                                            <DataGridTextColumn Header="Prioridad" local:TableHeader.Key="priority" Binding="{Binding PriorityDisplay}" Width="95" MinWidth="80" />
+                                            <DataGridTextColumn Header="Energía" local:TableHeader.Key="powerDraw" Binding="{Binding PowerDisplay}" Width="110" MinWidth="90" />
+                                            <DataGridTextColumn Header="Munición" local:TableHeader.Key="ammo" Binding="{Binding AmmoDisplay}" Width="95" MinWidth="85" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Ingeniería" local:TableHeader.Key="engineering" Binding="{Binding Engineering}" Width="2*" MinWidth="160" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -467,11 +467,11 @@
                                               AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                               ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Facción emisora" local:TableHeader.Key="issuingFaction" Binding="{Binding IssuingFaction}" Width="*" MinWidth="130" />
+                                            <DataGridTextColumn Header="Facción emisora" local:TableHeader.Key="issuingFaction" Binding="{Binding IssuingFaction}" Width="*" MinWidth="130" Visibility="Collapsed" />
                                             <DataGridTextColumn Header="Facción objetivo" local:TableHeader.Key="targetFaction" Binding="{Binding TargetFaction}" Width="*" MinWidth="130" />
-                                            <DataGridTextColumn Header="Misiones" local:TableHeader.Key="missionsCol" Binding="{Binding MissionCount}" Width="80" MinWidth="70" />
-                                            <DataGridTextColumn Header="Bajas" local:TableHeader.Key="kills" Binding="{Binding RequiredKills}" Width="80" MinWidth="70" />
-                                            <DataGridTextColumn Header="Recompensa" local:TableHeader.Key="reward" Binding="{Binding RewardDisplay}" Width="120" MinWidth="105" />
+                                            <DataGridTextColumn Header="Misiones" local:TableHeader.Key="missionsCol" Binding="{Binding MissionCount}" Width="80" MinWidth="70" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Bajas" local:TableHeader.Key="kills" Binding="{Binding RequiredKills}" Width="90" MinWidth="75" />
+                                            <DataGridTextColumn Header="Recompensa" local:TableHeader.Key="reward" Binding="{Binding RewardDisplay}" Width="130" MinWidth="105" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -568,11 +568,11 @@
                                                   AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                                   ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                             <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Facción" local:TableHeader.Key="faction" Binding="{Binding DisplayName}" Width="2*" MinWidth="130" />
-                                                <DataGridTextColumn Header="Influencia" local:TableHeader.Key="influence" Binding="{Binding InfluenceDisplay}" Width="85" MinWidth="75" />
-                                                <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding FactionState}" Width="110" MinWidth="95" />
-                                                <DataGridTextColumn Header="Gobierno" local:TableHeader.Key="government" Binding="{Binding Government}" Width="110" MinWidth="95" />
-                                                <DataGridTextColumn Header="Reputación" local:TableHeader.Key="reputation" Binding="{Binding ReputationDisplay}" Width="85" MinWidth="75" />
+                                                <DataGridTextColumn Header="Facción" local:TableHeader.Key="faction" Binding="{Binding DisplayName}" Width="2*" MinWidth="140" />
+                                                <DataGridTextColumn Header="Influencia" local:TableHeader.Key="influence" Binding="{Binding InfluenceDisplay}" Width="95" MinWidth="80" />
+                                                <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding FactionState}" Width="120" MinWidth="95" />
+                                                <DataGridTextColumn Header="Gobierno" local:TableHeader.Key="government" Binding="{Binding Government}" Width="110" MinWidth="95" Visibility="Collapsed" />
+                                                <DataGridTextColumn Header="Reputación" local:TableHeader.Key="reputation" Binding="{Binding ReputationDisplay}" Width="85" MinWidth="75" Visibility="Collapsed" />
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </StackPanel>
@@ -592,11 +592,11 @@
                                                   ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}"
                                                   Visibility="Collapsed">
                                             <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Estación" Binding="{Binding Name}" Width="2*" MinWidth="120" />
+                                                <DataGridTextColumn Header="Estación" Binding="{Binding Name}" Width="2*" MinWidth="130" />
                                                 <DataGridTextColumn Header="Tipo" Binding="{Binding Type}" Width="*" MinWidth="100" />
-                                                <DataGridTextColumn Header="Cuerpo" Binding="{Binding BodyName}" Width="2*" MinWidth="100" />
+                                                <DataGridTextColumn Header="Cuerpo" Binding="{Binding BodyName}" Width="2*" MinWidth="100" Visibility="Collapsed" />
                                                 <DataGridTextColumn Header="Distancia (LS)" Binding="{Binding ArrivalDistance}" Width="*" MinWidth="100" />
-                                                <DataGridTextColumn Header="Facción" Binding="{Binding ControllingFaction}" Width="2*" MinWidth="100" />
+                                                <DataGridTextColumn Header="Facción" Binding="{Binding ControllingFaction}" Width="2*" MinWidth="100" Visibility="Collapsed" />
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </StackPanel>
@@ -616,10 +616,10 @@
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Facción" local:TableHeader.Key="faction" Binding="{Binding FactionName}" Width="2*" MinWidth="130" />
                                                 <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="120" />
-                                                <DataGridTextColumn Header="Influencia" local:TableHeader.Key="influence" Binding="{Binding InfluenceDisplay}" Width="80" />
-                                                <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding State}" Width="95" />
-                                                <DataGridTextColumn Header="Activos" local:TableHeader.Key="activeStates" Binding="{Binding ActiveStates}" Width="*" MinWidth="100" />
-                                                <DataGridTextColumn Header="Pendientes" local:TableHeader.Key="pendingStates" Binding="{Binding PendingStates}" Width="*" MinWidth="100" />
+                                                <DataGridTextColumn Header="Influencia" local:TableHeader.Key="influence" Binding="{Binding InfluenceDisplay}" Width="90" />
+                                                <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding State}" Width="95" Visibility="Collapsed" />
+                                                <DataGridTextColumn Header="Activos" local:TableHeader.Key="activeStates" Binding="{Binding ActiveStates}" Width="*" MinWidth="100" Visibility="Collapsed" />
+                                                <DataGridTextColumn Header="Pendientes" local:TableHeader.Key="pendingStates" Binding="{Binding PendingStates}" Width="*" MinWidth="100" Visibility="Collapsed" />
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </StackPanel>
@@ -792,8 +792,9 @@
                                                 <Setter Property="Background" Value="{StaticResource RouteCurrentSystemBrush}" />
                                             </DataTrigger>
                                             <Trigger Property="IsSelected" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                                                <Setter Property="Background" Value="{DynamicResource HudAccentDimBrush}" />
+                                                <Setter Property="Foreground" Value="{StaticResource HudTextBrush}" />
+                                                <Setter Property="BorderBrush" Value="{DynamicResource HudAccentBrush}" />
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
@@ -801,8 +802,8 @@
                                         <Setter Property="Background" Value="Transparent" />
                                         <Style.Triggers>
                                             <Trigger Property="IsSelected" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                                                <Setter Property="Background" Value="{DynamicResource HudAccentDimBrush}" />
+                                                <Setter Property="Foreground" Value="{StaticResource HudTextBrush}" />
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
@@ -831,18 +832,18 @@
                                     </Style>
                                 </DataGrid.Resources>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="38" MinWidth="38" ElementStyle="{StaticResource RouteCenteredCellStyle}" HeaderStyle="{StaticResource RouteCenteredHeaderStyle}" />
-                                    <DataGridTextColumn Header="SISTEMA ESTELAR" local:TableHeader.Key="starSystem" Binding="{Binding StarSystem}" Width="*" MinWidth="120" />
-                                    <DataGridTextColumn Header="CLASE" local:TableHeader.Key="starClass" Binding="{Binding StarClass}" Width="65" MinWidth="65" ElementStyle="{StaticResource RouteCenteredCellStyle}" HeaderStyle="{StaticResource RouteCenteredHeaderStyle}" />
-                                    <DataGridTemplateColumn Header="REPOSTABLE" local:TableHeader.Key="scoopable" Width="115" MinWidth="115" HeaderStyle="{StaticResource RouteCenteredHeaderStyle}">
+                                    <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="44" MinWidth="44" ElementStyle="{StaticResource RouteCenteredCellStyle}" HeaderStyle="{StaticResource RouteCenteredHeaderStyle}" />
+                                    <DataGridTextColumn Header="SISTEMA ESTELAR" local:TableHeader.Key="starSystem" Binding="{Binding StarSystem}" Width="*" MinWidth="130" />
+                                    <DataGridTextColumn Header="CLASE" local:TableHeader.Key="starClass" Binding="{Binding StarClass}" Width="75" MinWidth="70" ElementStyle="{StaticResource RouteCenteredCellStyle}" HeaderStyle="{StaticResource RouteCenteredHeaderStyle}" />
+                                    <DataGridTemplateColumn Header="REPOSTABLE" local:TableHeader.Key="scoopable" Width="115" MinWidth="100" HeaderStyle="{StaticResource RouteCenteredHeaderStyle}">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding FuelStarIndicator}" Style="{StaticResource RouteFuelIndicatorStyle}" />
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTextColumn Header="SALTO (AL)" local:TableHeader.Key="jumpDistance" Binding="{Binding StepDistanceLy, StringFormat='{}{0:0.0} AL'}" Width="90" MinWidth="90" />
-                                    <DataGridTextColumn Header="TOTAL (AL)" local:TableHeader.Key="totalDistance" Binding="{Binding DistanceFromStartLy, StringFormat='{}{0:0.0} AL'}" Width="90" MinWidth="90" />
+                                    <DataGridTextColumn Header="SALTO (AL)" local:TableHeader.Key="jumpDistance" Binding="{Binding StepDistanceLy, StringFormat='{}{0:0.0} AL'}" Width="105" MinWidth="95" />
+                                    <DataGridTextColumn Header="TOTAL (AL)" local:TableHeader.Key="totalDistance" Binding="{Binding DistanceFromStartLy, StringFormat='{}{0:0.0} AL'}" Width="90" MinWidth="90" Visibility="Collapsed" />
                                 </DataGrid.Columns>
                             </DataGrid>
                             <Border x:Name="SpanshRouteCard" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,14,0,0">
@@ -873,11 +874,11 @@
                                               ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}"
                                               MouseDoubleClick="GridSpanshRoute_MouseDoubleClick">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="42" />
-                                            <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding StatusDisplay}" Width="65" />
+                                            <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="44" />
+                                            <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding StatusDisplay}" Width="65" Visibility="Collapsed" />
                                             <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="150" />
-                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="90" />
-                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Details}" Width="2*" MinWidth="150" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="105" />
+                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Details}" Width="2*" MinWidth="150" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -931,21 +932,21 @@
                                     </Style>
                                 </DataGrid.Resources>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Cuerpo" local:TableHeader.Key="body" Binding="{Binding Body.HierarchyName}" Width="200" MinWidth="180" />
-                                    <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding Body.BodyType}" Width="180" MinWidth="180" />
-                                    <DataGridTextColumn Header="Radio" local:TableHeader.Key="radius" Binding="{Binding Radius}" Width="100" MinWidth="100" />
-                                    <DataGridTextColumn Header="Gravedad superficial" local:TableHeader.Key="surfaceGravity" Binding="{Binding Gravity}" Width="130" MinWidth="130" />
-                                    <DataGridTextColumn Header="Temperatura superficial" local:TableHeader.Key="surfaceTemperature" Binding="{Binding Temperature}" Width="140" MinWidth="140" />
-                                    <DataGridTextColumn Header="Atmósfera" local:TableHeader.Key="atmosphere" Binding="{Binding Body.AtmosphereDisplay}" Width="160" MinWidth="160" />
-                                    <DataGridTextColumn Header="Materiales" local:TableHeader.Key="materials" Binding="{Binding Materials}" Width="220" MinWidth="220" />
-                                    <DataGridTextColumn Header="Composición" local:TableHeader.Key="composition" Binding="{Binding Composition}" Width="180" MinWidth="180" />
-                                    <DataGridTextColumn Header="Composición atmosférica" local:TableHeader.Key="atmosphereComposition" Binding="{Binding AtmosphereComposition}" Width="220" MinWidth="220" />
-                                    <DataGridTextColumn Header="Datos orbitales" local:TableHeader.Key="orbitalData" Binding="{Binding Orbital}" Width="320" MinWidth="320" />
-                                    <DataGridTextColumn Header="Anillos" local:TableHeader.Key="rings" Binding="{Binding Body.RingsDisplay}" Width="180" MinWidth="180" />
-                                    <DataGridTextColumn Header="Interés registrado" local:TableHeader.Key="interest" Binding="{Binding Interest}" Width="*" MinWidth="120" />
-                                    <DataGridTextColumn Header="Géneros biológicos" local:TableHeader.Key="biologicalGenera" Binding="{Binding Body.GenusesDisplay}" Width="180" MinWidth="180" />
-                                    <DataGridTextColumn Header="Especies analizadas" local:TableHeader.Key="analysedSpecies" Binding="{Binding Body.AnalysedSpeciesDisplay}" Width="180" MinWidth="180" />
-                                    <DataGridTemplateColumn Header="Descubierto" local:TableHeader.Key="discovered" Width="100" MinWidth="100">
+                                    <DataGridTextColumn Header="Cuerpo" local:TableHeader.Key="body" Binding="{Binding Body.HierarchyName}" Width="2*" MinWidth="160" />
+                                    <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding Body.BodyType}" Width="1.5*" MinWidth="140" />
+                                    <DataGridTextColumn Header="Radio" local:TableHeader.Key="radius" Binding="{Binding Radius}" Width="100" MinWidth="100" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Gravedad superficial" local:TableHeader.Key="surfaceGravity" Binding="{Binding Gravity}" Width="130" MinWidth="130" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Temperatura superficial" local:TableHeader.Key="surfaceTemperature" Binding="{Binding Temperature}" Width="140" MinWidth="140" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Atmósfera" local:TableHeader.Key="atmosphere" Binding="{Binding Body.AtmosphereDisplay}" Width="160" MinWidth="160" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Materiales" local:TableHeader.Key="materials" Binding="{Binding Materials}" Width="220" MinWidth="220" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Composición" local:TableHeader.Key="composition" Binding="{Binding Composition}" Width="180" MinWidth="180" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Composición atmosférica" local:TableHeader.Key="atmosphereComposition" Binding="{Binding AtmosphereComposition}" Width="220" MinWidth="220" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Datos orbitales" local:TableHeader.Key="orbitalData" Binding="{Binding Orbital}" Width="320" MinWidth="320" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Anillos" local:TableHeader.Key="rings" Binding="{Binding Body.RingsDisplay}" Width="180" MinWidth="180" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Interés registrado" local:TableHeader.Key="interest" Binding="{Binding Interest}" Width="2*" MinWidth="140" />
+                                    <DataGridTextColumn Header="Géneros biológicos" local:TableHeader.Key="biologicalGenera" Binding="{Binding Body.GenusesDisplay}" Width="180" MinWidth="180" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Especies analizadas" local:TableHeader.Key="analysedSpecies" Binding="{Binding Body.AnalysedSpeciesDisplay}" Width="180" MinWidth="180" Visibility="Collapsed" />
+                                    <DataGridTemplateColumn Header="Descubierto" local:TableHeader.Key="discovered" Width="100" MinWidth="100" Visibility="Collapsed">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Body.DiscoveryIndicator}"
@@ -969,7 +970,7 @@
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTemplateColumn Header="Cartografiado" local:TableHeader.Key="mapped" Width="115" MinWidth="115">
+                                    <DataGridTemplateColumn Header="Cartografiado" local:TableHeader.Key="mapped" Width="115" MinWidth="115" Visibility="Collapsed">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Body.MappingIndicator}"
@@ -993,8 +994,8 @@
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTextColumn Header="Est. venta" local:TableHeader.Key="estimatedSale" Binding="{Binding Estimate}" Width="120" MinWidth="120" />
-                                    <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Body.DataSource}" Width="115" MinWidth="95" />
+                                    <DataGridTextColumn Header="Est. venta" local:TableHeader.Key="estimatedSale" Binding="{Binding Estimate}" Width="130" MinWidth="115" />
+                                    <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Body.DataSource}" Width="115" MinWidth="95" Visibility="Collapsed" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>
@@ -1057,11 +1058,11 @@
                                               AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                               ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Hora" local:TableHeader.Key="time" Binding="{Binding Timestamp}" Width="80" MinWidth="70" />
-                                            <DataGridTextColumn Header="Evento" local:TableHeader.Key="event" Binding="{Binding EventType}" Width="130" MinWidth="110" />
-                                            <DataGridTextColumn Header="Cuerpo" local:TableHeader.Key="body" Binding="{Binding BodyName}" Width="120" MinWidth="100" />
-                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Details}" Width="*" MinWidth="120" />
-                                            <DataGridTextColumn Header="Coordenadas" local:TableHeader.Key="coordinates" Binding="{Binding CoordinatesDisplay}" Width="135" MinWidth="115" />
+                                            <DataGridTextColumn Header="Hora" local:TableHeader.Key="time" Binding="{Binding Timestamp}" Width="90" MinWidth="75" />
+                                            <DataGridTextColumn Header="Evento" local:TableHeader.Key="event" Binding="{Binding EventType}" Width="140" MinWidth="110" />
+                                            <DataGridTextColumn Header="Cuerpo" local:TableHeader.Key="body" Binding="{Binding BodyName}" Width="*" MinWidth="110" />
+                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Details}" Width="*" MinWidth="120" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Coordenadas" local:TableHeader.Key="coordinates" Binding="{Binding CoordinatesDisplay}" Width="135" MinWidth="115" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -1097,9 +1098,9 @@
                                         <DataGrid.Columns>
                                             <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
                                             <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="2*" MinWidth="140" />
-                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="90" MinWidth="80" />
-                                            <DataGridTextColumn Header="Pad" local:TableHeader.Key="landingPad" Binding="{Binding LandingPad}" Width="60" MinWidth="55" />
-                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Detail}" Width="2*" MinWidth="130" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="105" MinWidth="85" />
+                                            <DataGridTextColumn Header="Pad" local:TableHeader.Key="landingPad" Binding="{Binding LandingPad}" Width="60" MinWidth="55" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Detail}" Width="2*" MinWidth="130" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -1130,10 +1131,10 @@
                                         <DataGrid.Columns>
                                             <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
                                             <DataGridTextColumn Header="Cuerpo" local:TableHeader.Key="body" Binding="{Binding BodyName}" Width="2*" MinWidth="130" />
-                                            <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding SubType}" Width="*" MinWidth="110" />
-                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="85" />
-                                            <DataGridTextColumn Header="G" local:TableHeader.Key="surfaceGravity" Binding="{Binding GravityDisplay}" Width="65" />
-                                            <DataGridTextColumn Header="Materiales" local:TableHeader.Key="materials" Binding="{Binding MaterialsSummary}" Width="2*" MinWidth="140" />
+                                            <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding SubType}" Width="*" MinWidth="110" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="105" />
+                                            <DataGridTextColumn Header="G" local:TableHeader.Key="surfaceGravity" Binding="{Binding GravityDisplay}" Width="65" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Materiales" local:TableHeader.Key="materials" Binding="{Binding MaterialsSummary}" Width="2*" MinWidth="140" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                     <DataGrid x:Name="GridSupportCarriers" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed" MaxHeight="240"
@@ -1141,12 +1142,12 @@
                                               AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                               ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Callsign" local:TableHeader.Key="callsign" Binding="{Binding Callsign}" Width="100" />
+                                            <DataGridTextColumn Header="Callsign" local:TableHeader.Key="callsign" Binding="{Binding Callsign}" Width="100" Visibility="Collapsed" />
                                             <DataGridTextColumn Header="Nombre" local:TableHeader.Key="shipName" Binding="{Binding Name}" Width="2*" MinWidth="130" />
                                             <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
-                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="90" />
-                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Details}" Width="2*" MinWidth="150" />
-                                            <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Source}" Width="85" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="105" />
+                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Details}" Width="2*" MinWidth="150" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Source}" Width="85" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -1173,7 +1174,6 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel>
                                 <WrapPanel x:Name="DeckButtonsWrapPanel" Orientation="Horizontal" />
-                                <ItemsControl x:Name="ItemsControlDeck" Visibility="Collapsed" HorizontalAlignment="Stretch" Tag="1" SizeChanged="Deck_SizeChanged" />
                             </StackPanel>
                         </ScrollViewer>
                     </DockPanel>
@@ -1202,9 +1202,9 @@
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Objetivo comunitario" local:TableHeader.Key="goalTitle" Binding="{Binding Title}" Width="*" MinWidth="180" />
                                                 <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding StarSystem}" Width="140" MinWidth="110" />
-                                                <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="160" MinWidth="120" />
+                                                <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="160" MinWidth="120" Visibility="Collapsed" />
                                                 <DataGridTextColumn Header="Progreso" local:TableHeader.Key="progress" Binding="{Binding ProgressDisplay}" Width="170" MinWidth="130" />
-                                                <DataGridTextColumn Header="Vence" local:TableHeader.Key="expires" Binding="{Binding ExpiryDisplay}" Width="130" MinWidth="110" />
+                                                <DataGridTextColumn Header="Vence" local:TableHeader.Key="expires" Binding="{Binding ExpiryDisplay}" Width="130" MinWidth="110" Visibility="Collapsed" />
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </StackPanel>
@@ -1228,12 +1228,12 @@
                                     </Style>
                                 </DataGrid.Resources>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Misión" local:TableHeader.Key="mission" Binding="{Binding Name}" Width="*" MinWidth="120" />
-                                    <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding DestinationSystem}" Width="170" MinWidth="170" />
-                                    <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding DestinationStation}" Width="150" MinWidth="150" />
-                                    <DataGridTextColumn Header="Objetivo" local:TableHeader.Key="objective" Binding="{Binding ObjectiveDisplay}" Width="180" MinWidth="180" />
-                                    <DataGridTextColumn Header="Vence" local:TableHeader.Key="expires" Binding="{Binding ExpiryDisplay}" Width="135" MinWidth="135" />
-                                    <DataGridTextColumn Header="Restante" local:TableHeader.Key="remaining" Binding="{Binding TimeRemaining}" Width="140" MinWidth="140" />
+                                    <DataGridTextColumn Header="Misión" local:TableHeader.Key="mission" Binding="{Binding Name}" Width="*" MinWidth="140" />
+                                    <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding DestinationSystem}" Width="170" MinWidth="130" />
+                                    <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding DestinationStation}" Width="150" MinWidth="150" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Objetivo" local:TableHeader.Key="objective" Binding="{Binding ObjectiveDisplay}" Width="180" MinWidth="180" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Vence" local:TableHeader.Key="expires" Binding="{Binding ExpiryDisplay}" Width="135" MinWidth="135" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Restante" local:TableHeader.Key="remaining" Binding="{Binding TimeRemaining}" Width="140" MinWidth="120" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>
@@ -1247,12 +1247,12 @@
                                       AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                       ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Misión" local:TableHeader.Key="mission" Binding="{Binding Type}" Width="*" MinWidth="120" />
-                                    <DataGridTextColumn Header="Pasajeros" local:TableHeader.Key="passengers" Binding="{Binding CountDisplay}" Width="100" MinWidth="100" />
-                                    <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding DestinationSystem}" Width="170" MinWidth="170" />
-                                    <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding DestinationStation}" Width="150" MinWidth="150" />
-                                    <DataGridTextColumn Header="Vence" local:TableHeader.Key="expires" Binding="{Binding ExpiryDisplay}" Width="135" MinWidth="135" />
-                                    <DataGridTextColumn Header="ID de misión" local:TableHeader.Key="missionId" Binding="{Binding MissionId}" Width="180" MinWidth="180" />
+                                    <DataGridTextColumn Header="Misión" local:TableHeader.Key="mission" Binding="{Binding Type}" Width="*" MinWidth="140" />
+                                    <DataGridTextColumn Header="Pasajeros" local:TableHeader.Key="passengers" Binding="{Binding CountDisplay}" Width="120" MinWidth="100" />
+                                    <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding DestinationSystem}" Width="170" MinWidth="130" />
+                                    <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding DestinationStation}" Width="150" MinWidth="150" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Vence" local:TableHeader.Key="expires" Binding="{Binding ExpiryDisplay}" Width="135" MinWidth="135" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="ID de misión" local:TableHeader.Key="missionId" Binding="{Binding MissionId}" Width="180" MinWidth="180" Visibility="Collapsed" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>
@@ -1321,9 +1321,9 @@
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="120" />
                                                 <DataGridTextColumn Header="Anillo" local:TableHeader.Key="ring" Binding="{Binding RingName}" Width="2*" MinWidth="120" />
-                                                <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding RingType}" Width="95" />
-                                                <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="80" />
-                                                <DataGridTextColumn Header="Hotspots" local:TableHeader.Key="hotspots" Binding="{Binding Signals}" Width="*" MinWidth="100" />
+                                                <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding RingType}" Width="95" Visibility="Collapsed" />
+                                                <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="95" />
+                                                <DataGridTextColumn Header="Hotspots" local:TableHeader.Key="hotspots" Binding="{Binding Signals}" Width="*" MinWidth="100" Visibility="Collapsed" />
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </StackPanel>
@@ -1349,9 +1349,9 @@
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
                                         <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="2*" MinWidth="140" />
-                                        <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="85" />
-                                        <DataGridTextColumn Header="Pad" local:TableHeader.Key="landingPad" Binding="{Binding LandingPad}" Width="55" />
-                                        <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Detail}" Width="2*" MinWidth="130" />
+                                        <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="95" />
+                                        <DataGridTextColumn Header="Pad" local:TableHeader.Key="landingPad" Binding="{Binding LandingPad}" Width="55" Visibility="Collapsed" />
+                                        <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Detail}" Width="2*" MinWidth="130" Visibility="Collapsed" />
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </StackPanel>
@@ -1469,11 +1469,11 @@
                                     </Style>
                                 </DataGrid.Resources>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Material" local:TableHeader.Key="material" Binding="{Binding DisplayName}" Width="2*" MinWidth="120" />
-                                    <DataGridTextColumn Header="Categoría" local:TableHeader.Key="category" Binding="{Binding Category}" Width="1.3*" MinWidth="120" />
-                                    <DataGridTextColumn Header="Rareza" local:TableHeader.Key="rarity" Binding="{Binding Rarity}" Width="1.1*" MinWidth="120" />
-                                    <DataGridTextColumn Header="Actual" local:TableHeader.Key="current" Binding="{Binding CountWithCapacityDisplay}" Width="0.9*" MinWidth="105" />
-                                    <DataGridTextColumn Header="Seguimiento" local:TableHeader.Key="wishlist" Binding="{Binding WishlistDisplay}" Width="0.9*" MinWidth="105" />
+                                    <DataGridTextColumn Header="Material" local:TableHeader.Key="material" Binding="{Binding DisplayName}" Width="2*" MinWidth="140" />
+                                    <DataGridTextColumn Header="Categoría" local:TableHeader.Key="category" Binding="{Binding Category}" Width="1.2*" MinWidth="120" />
+                                    <DataGridTextColumn Header="Rareza" local:TableHeader.Key="rarity" Binding="{Binding Rarity}" Width="1.1*" MinWidth="120" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Actual" local:TableHeader.Key="current" Binding="{Binding CountWithCapacityDisplay}" Width="1*" MinWidth="105" />
+                                    <DataGridTextColumn Header="Seguimiento" local:TableHeader.Key="wishlist" Binding="{Binding WishlistDisplay}" Width="0.9*" MinWidth="105" Visibility="Collapsed" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>
@@ -1508,10 +1508,10 @@
                                                   ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Material" local:TableHeader.Key="material" Binding="{Binding MaterialName}" Width="*" MinWidth="130" />
-                                                <DataGridTextColumn Header="Categoría" local:TableHeader.Key="category" Binding="{Binding Category}" Width="80" MinWidth="70" />
-                                                <DataGridTextColumn Header="Necesario" local:TableHeader.Key="required" Binding="{Binding Required}" Width="80" MinWidth="70" />
-                                                <DataGridTextColumn Header="Actual" local:TableHeader.Key="current" Binding="{Binding Owned}" Width="70" MinWidth="65" />
-                                                <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding StatusDisplay}" Width="95" MinWidth="85" />
+                                                <DataGridTextColumn Header="Categoría" local:TableHeader.Key="category" Binding="{Binding Category}" Width="80" MinWidth="70" Visibility="Collapsed" />
+                                                <DataGridTextColumn Header="Necesario" local:TableHeader.Key="required" Binding="{Binding Required}" Width="80" MinWidth="70" Visibility="Collapsed" />
+                                                <DataGridTextColumn Header="Actual" local:TableHeader.Key="current" Binding="{Binding Owned}" Width="80" MinWidth="70" />
+                                                <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding StatusDisplay}" Width="105" MinWidth="90" />
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </StackPanel>
@@ -1594,17 +1594,17 @@
                                       AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                       ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Mercancía" local:TableHeader.Key="commodity" Binding="{Binding DisplayName}" Width="*" MinWidth="120" />
-                                    <DataGridTextColumn Header="Categoría" local:TableHeader.Key="category" Binding="{Binding DisplayCategory}" Width="150" MinWidth="150" />
-                                    <DataGridTextColumn Header="Compra" local:TableHeader.Key="buy" Binding="{Binding BuyPriceDisplay}" Width="115" MinWidth="115" />
-                                    <DataGridTextColumn Header="Venta" local:TableHeader.Key="sell" Binding="{Binding SellPriceDisplay}" Width="115" MinWidth="115" />
-                                    <DataGridTextColumn Header="Precio medio" local:TableHeader.Key="meanPrice" Binding="{Binding MeanPriceDisplay}" Width="125" MinWidth="125" />
-                                    <DataGridTextColumn Header="Stock" local:TableHeader.Key="stock" Binding="{Binding StockDisplay}" Width="90" MinWidth="90" />
-                                    <DataGridTextColumn Header="Nivel de stock" local:TableHeader.Key="stockLevel" Binding="{Binding StockBracketDisplay}" Width="115" MinWidth="115" />
-                                    <DataGridTextColumn Header="Demanda" local:TableHeader.Key="demand" Binding="{Binding DemandDisplay}" Width="90" MinWidth="90" />
-                                    <DataGridTextColumn Header="Nivel de demanda" local:TableHeader.Key="demandLevel" Binding="{Binding DemandBracketDisplay}" Width="125" MinWidth="125" />
-                                    <DataGridTextColumn Header="Colonización" local:TableHeader.Key="colonisation" Binding="{Binding ColonisationDisplay}" Width="125" MinWidth="110" />
-                                    <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding FlagsDisplay}" Width="140" MinWidth="140" />
+                                    <DataGridTextColumn Header="Mercancía" local:TableHeader.Key="commodity" Binding="{Binding DisplayName}" Width="*" MinWidth="140" />
+                                    <DataGridTextColumn Header="Categoría" local:TableHeader.Key="category" Binding="{Binding DisplayCategory}" Width="150" MinWidth="150" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Compra" local:TableHeader.Key="buy" Binding="{Binding BuyPriceDisplay}" Width="125" MinWidth="115" />
+                                    <DataGridTextColumn Header="Venta" local:TableHeader.Key="sell" Binding="{Binding SellPriceDisplay}" Width="125" MinWidth="115" />
+                                    <DataGridTextColumn Header="Precio medio" local:TableHeader.Key="meanPrice" Binding="{Binding MeanPriceDisplay}" Width="125" MinWidth="125" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Stock" local:TableHeader.Key="stock" Binding="{Binding StockDisplay}" Width="110" MinWidth="95" />
+                                    <DataGridTextColumn Header="Nivel de stock" local:TableHeader.Key="stockLevel" Binding="{Binding StockBracketDisplay}" Width="115" MinWidth="115" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Demanda" local:TableHeader.Key="demand" Binding="{Binding DemandDisplay}" Width="90" MinWidth="90" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Nivel de demanda" local:TableHeader.Key="demandLevel" Binding="{Binding DemandBracketDisplay}" Width="125" MinWidth="125" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Colonización" local:TableHeader.Key="colonisation" Binding="{Binding ColonisationDisplay}" Width="125" MinWidth="110" Visibility="Collapsed" />
+                                    <DataGridTextColumn Header="Tipo" local:TableHeader.Key="type" Binding="{Binding FlagsDisplay}" Width="140" MinWidth="140" Visibility="Collapsed" />
                                 </DataGrid.Columns>
                             </DataGrid>
                             <Border DockPanel.Dock="Bottom" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,12,0,0">
@@ -1620,11 +1620,11 @@
                                               ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}"
                                               MouseDoubleClick="GridSpanshTrade_MouseDoubleClick">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="#" Binding="{Binding Hop}" Width="38" />
+                                            <DataGridTextColumn Header="#" Binding="{Binding Hop}" Width="38" Visibility="Collapsed" />
                                             <DataGridTextColumn Header="Ruta" local:TableHeader.Key="tradeRoute" Binding="{Binding RouteDisplay}" Width="2*" MinWidth="200" />
                                             <DataGridTextColumn Header="Mercancía" local:TableHeader.Key="commodity" Binding="{Binding Commodity}" Width="*" MinWidth="130" />
-                                            <DataGridTextColumn Header="Beneficio" local:TableHeader.Key="profit" Binding="{Binding ProfitDisplay}" Width="115" />
-                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="85" />
+                                            <DataGridTextColumn Header="Beneficio" local:TableHeader.Key="profit" Binding="{Binding ProfitDisplay}" Width="125" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="85" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -1648,10 +1648,10 @@
                                         <DataGrid.Columns>
                                             <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
                                             <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="2*" MinWidth="140" />
-                                            <DataGridTextColumn Header="Precio" local:TableHeader.Key="price" Binding="{Binding PriceDisplay}" Width="115" />
-                                            <DataGridTextColumn Header="Cantidad" local:TableHeader.Key="quantity" Binding="{Binding QuantityDisplay}" Width="90" />
-                                            <DataGridTextColumn Header="Pad" local:TableHeader.Key="landingPad" Binding="{Binding MaxLandingPad}" Width="55" />
-                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="85" />
+                                            <DataGridTextColumn Header="Precio" local:TableHeader.Key="price" Binding="{Binding PriceDisplay}" Width="125" />
+                                            <DataGridTextColumn Header="Cantidad" local:TableHeader.Key="quantity" Binding="{Binding QuantityDisplay}" Width="90" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Pad" local:TableHeader.Key="landingPad" Binding="{Binding MaxLandingPad}" Width="55" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="85" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -1673,8 +1673,8 @@
                                             <DataGridTextColumn Header="Módulo" local:TableHeader.Key="equipment" Binding="{Binding DisplayName}" Width="2*" MinWidth="160" />
                                             <DataGridTextColumn Header="Ingeniería" local:TableHeader.Key="engineering" Binding="{Binding Engineering}" Width="*" MinWidth="120" />
                                             <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding StarSystem}" Width="140" />
-                                            <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="160" />
-                                            <DataGridTextColumn Header="Precio" local:TableHeader.Key="price" Binding="{Binding PriceDisplay}" Width="110" />
+                                            <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="160" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Precio" local:TableHeader.Key="price" Binding="{Binding PriceDisplay}" Width="110" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -1706,8 +1706,8 @@
                                             <DataGridTextColumn Header="Nave" local:TableHeader.Key="ship" Binding="{Binding ShipType}" Width="150" MinWidth="120" />
                                             <DataGridTextColumn Header="Nombre" local:TableHeader.Key="shipName" Binding="{Binding ShipName}" Width="*" MinWidth="120" />
                                             <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding StarSystem}" Width="160" MinWidth="120" />
-                                            <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="180" MinWidth="120" />
-                                            <DataGridTextColumn Header="Valor" local:TableHeader.Key="value" Binding="{Binding ValueDisplay}" Width="130" MinWidth="110" />
+                                            <DataGridTextColumn Header="Estación" local:TableHeader.Key="station" Binding="{Binding StationName}" Width="180" MinWidth="120" Visibility="Collapsed" />
+                                            <DataGridTextColumn Header="Valor" local:TableHeader.Key="value" Binding="{Binding ValueDisplay}" Width="130" MinWidth="110" Visibility="Collapsed" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -1766,11 +1766,11 @@
                                             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                                             <Style.Triggers>
                                                 <Trigger Property="IsSelected" Value="True">
-                                                    <Setter Property="Background" Value="#1B2A38" />
+                                                    <Setter Property="Background" Value="{DynamicResource HudAccentDimBrush}" />
                                                     <Setter Property="Foreground" Value="{StaticResource HudTextBrush}" />
                                                 </Trigger>
                                                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                                    <Setter Property="Background" Value="#1B2A38" />
+                                                    <Setter Property="Background" Value="{DynamicResource HudAccentDimBrush}" />
                                                     <Setter Property="Foreground" Value="{StaticResource HudTextBrush}" />
                                                     <Setter Property="BorderBrush" Value="Transparent" />
                                                 </Trigger>
@@ -1786,12 +1786,12 @@
                                             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                                             <Style.Triggers>
                                                 <Trigger Property="IsSelected" Value="True">
-                                                    <Setter Property="Background" Value="#1B2A38" />
+                                                    <Setter Property="Background" Value="{DynamicResource HudAccentDimBrush}" />
                                                     <Setter Property="Foreground" Value="{StaticResource HudTextBrush}" />
                                                     <Setter Property="BorderBrush" Value="{DynamicResource HudAccentBrush}" />
                                                 </Trigger>
                                                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                                    <Setter Property="Background" Value="#1B2A38" />
+                                                    <Setter Property="Background" Value="{DynamicResource HudAccentDimBrush}" />
                                                     <Setter Property="Foreground" Value="{StaticResource HudTextBrush}" />
                                                 </Trigger>
                                             </Style.Triggers>
@@ -2372,7 +2372,6 @@
                                                             <Button x:Name="BtnFrontierSyncNow" Content="🔄" local:UiText.TooltipKey="frontierSyncBtn" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,6,4" Click="BtnFrontierSyncNow_Click" />
                                                             <Button x:Name="BtnFrontierDisconnect" Content="🔌" local:UiText.TooltipKey="frontierDisconnectBtn" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,0,4" Click="BtnFrontierDisconnect_Click" />
                                                         </WrapPanel>
-                                                        <TextBlock x:Name="TxtFrontierCapiStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
                                                         <Expander Header="Opciones avanzadas (Client ID / puerto callback)" Foreground="{StaticResource HudMutedBrush}" FontSize="11" IsExpanded="False">
                                                             <Grid Margin="0,6,0,0">
                                                                 <Grid.ColumnDefinitions>
@@ -2457,7 +2456,6 @@
                                                             <WrapPanel>
                                                                 <Button x:Name="BtnFetchInaraProfile" Content="👤" ToolTip="Cargar Perfil Inara" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,6,4" Click="BtnFetchInaraProfile_Click" />
                                                                 <Button x:Name="BtnFetchInaraCgs" Content="🎯" ToolTip="Cargar CGs desde Inara" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,8,4" Click="BtnFetchInaraCgs_Click" />
-                                                                <TextBlock x:Name="TxtInaraReadStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" />
                                                             </WrapPanel>
                                                         </StackPanel>
                                                     </Expander>
@@ -2480,7 +2478,6 @@
                                                         <Button x:Name="BtnSaveCommunitySync" Content="💾" local:UiText.TooltipKey="saveCommunitySync" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,6,0" Click="BtnSaveCommunitySync_Click" />
                                                         <Button x:Name="BtnTestCommunitySync" Content="☁" local:UiText.TooltipKey="testCommunitySync" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Click="BtnTestCommunitySync_Click" />
                                                     </WrapPanel>
-                                                    <TextBlock x:Name="TxtCommunitySyncStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
@@ -2518,7 +2515,6 @@
                                                                 <TextBlock DockPanel.Dock="Left" Text="Facciones:" local:UiText.Key="eliteBgsFactionsLabel" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
                                                                 <TextBox x:Name="TxtEliteBgsFactions" MinHeight="38" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                                             </DockPanel>
-                                                            <TextBlock x:Name="TxtEliteBgsSettingsStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Expander>
                                                 </Border>
@@ -2546,7 +2542,6 @@
                                                                 <CheckBox x:Name="ChkDiscordWebhookCarrier" Content="Fleet Carrier" Foreground="{StaticResource HudTextBrush}" Margin="0,0,12,4" Click="ChkDiscordWebhookEvents_Click" />
                                                                 <CheckBox x:Name="ChkDiscordWebhookBgs" Content="EliteBGS" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,4" Click="ChkDiscordWebhookEvents_Click" />
                                                             </WrapPanel>
-                                                            <TextBlock x:Name="TxtDiscordStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Expander>
                                                 </Border>
@@ -2713,7 +2708,6 @@
                                             <TextBlock Text="Briefing exprés al llegar a sistema (nota personal, portanaves, anarquía)" local:UiText.Key="aiArrivalBriefingToggle" TextWrapping="Wrap" />
                                         </CheckBox>
                                         <TextBlock x:Name="TxtAiMemoryPreview" Foreground="{StaticResource HudSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4" />
-                                        <TextBlock x:Name="TxtAiConfigStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                     </StackPanel>
 
                                     <StackPanel Grid.Column="2" Grid.Row="0">
@@ -2843,7 +2837,6 @@
                                                         <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
                                                     </ComboBox>
                                                 </DockPanel>
-                                                <TextBlock x:Name="TxtPiperStatus" Visibility="Collapsed" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </Border>
                                         <WrapPanel x:Name="SapiVoiceRow" Margin="0,0,0,4">
@@ -2924,7 +2917,6 @@
                                         </DockPanel>
                                         <TextBlock Text="Vincula carpetas para seleccionar sonidos propios." local:UiText.Key="soundDirsHelp" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,6" />
                                         <ListBox x:Name="LstSoundDirectories" MinHeight="76" MaxHeight="160" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VirtualizingPanel.IsVirtualizing="False" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                                        <TextBlock x:Name="TxtSoundDirectoryStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -3175,19 +3167,43 @@
                                     <TextBox x:Name="TxtUnhandledSearch" Width="260" MinHeight="38" HorizontalAlignment="Left" Padding="8,5" Background="#080A0E" Foreground="{DynamicResource HudTextBrush}" CaretBrush="{DynamicResource HudAccentBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" local:UiText.TooltipKey="unhandledSearch" TextChanged="TxtUnhandledSearch_TextChanged" />
                                     <TextBlock x:Name="TxtUnhandledStatus" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="12,0,0,0" />
                                 </DockPanel>
-                                <DataGrid x:Name="GridUnhandledEvents" AutoGenerateColumns="False" IsReadOnly="True" RowHeight="36" MinHeight="220" MaxHeight="440"
+                                <DataGrid x:Name="GridUnhandledEvents" AutoGenerateColumns="False" IsReadOnly="True" RowHeight="44" MinHeight="180" MaxHeight="340"
                                           Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
                                           AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                           ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}"
                                           MouseDoubleClick="GridUnhandledEvents_MouseDoubleClick">
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Hora" local:TableHeader.Key="time" Binding="{Binding Timestamp}" Width="90" MinWidth="85" />
-                                        <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Source}" Width="135" MinWidth="110" />
-                                        <DataGridTextColumn Header="Evento" local:TableHeader.Key="event" Binding="{Binding EventType}" Width="185" MinWidth="140" />
-                                        <DataGridTextColumn Header="Veces" local:TableHeader.Key="occurrences" Binding="{Binding Count}" Width="80" MinWidth="70" />
-                                        <DataGridTextColumn Header="JSON bruto (doble clic para copiar)" local:TableHeader.Key="rawJson" Binding="{Binding RawJson}" Width="*" MinWidth="240" FontFamily="Consolas" />
+                                        <DataGridTextColumn Header="Hora" local:TableHeader.Key="time" Binding="{Binding Timestamp}" Width="100" MinWidth="85" />
+                                        <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Source}" Width="135" MinWidth="110" Visibility="Collapsed" />
+                                        <DataGridTextColumn Header="Evento" local:TableHeader.Key="event" Binding="{Binding EventType}" Width="*" MinWidth="150" />
+                                        <DataGridTextColumn Header="Veces" local:TableHeader.Key="occurrences" Binding="{Binding Count}" Width="90" MinWidth="75" />
+                                        <DataGridTextColumn Header="JSON bruto (doble clic para copiar)" local:TableHeader.Key="rawJson" Binding="{Binding RawJson}" Width="*" MinWidth="240" FontFamily="Consolas" Visibility="Collapsed" />
                                     </DataGrid.Columns>
                                 </DataGrid>
+
+                                <Border Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12" Margin="0,14,0,0">
+                                    <StackPanel>
+                                        <DockPanel Margin="0,0,0,6">
+                                            <WrapPanel DockPanel.Dock="Right">
+                                                <Button x:Name="BtnReportLastError" Content="🐛 Reportar fallo / Asistente" Style="{StaticResource HudButtonStyle}" MinHeight="38" Padding="12,5" Margin="0,0,6,0" Click="BtnReportLastError_Click" />
+                                                <Button x:Name="BtnClearDiagnosticIssues" Content="🗑" ToolTip="Limpiar registro de incidencias recientes" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,5" Click="BtnClearDiagnosticIssues_Click" />
+                                            </WrapPanel>
+                                            <TextBlock Text="INCIDENCIAS Y ERRORES RECIENTES DE LA SESIÓN (ERROR / WARN)" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                                        </DockPanel>
+                                        <TextBlock x:Name="TxtDiagnosticIssuesStatus" Text="0 incidencias registradas en esta sesión." Foreground="{StaticResource HudMutedBrush}" FontSize="11" Margin="0,0,0,6" />
+                                        <DataGrid x:Name="GridDiagnosticIssues" AutoGenerateColumns="False" IsReadOnly="True" RowHeight="44" MinHeight="140" MaxHeight="260"
+                                                  Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
+                                                  AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
+                                                  ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Hora" local:TableHeader.Key="time" Binding="{Binding TimestampUtc}" Width="95" MinWidth="85" />
+                                                <DataGridTextColumn Header="Nivel" Binding="{Binding Level}" Width="85" MinWidth="75" />
+                                                <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Category}" Width="140" MinWidth="110" />
+                                                <DataGridTextColumn Header="Detalle" local:TableHeader.Key="details" Binding="{Binding Message}" Width="*" MinWidth="200" />
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 
@@ -3311,5 +3327,54 @@
                 <Button Grid.Column="1" Content="×" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="0" Margin="12,0,0,0" Click="DismissAlertToast_Click" />
             </Grid>
         </Border>
+
+        <!-- POPUP HUD INTEGRADO DE DETALLE DE FILA (TÁCTIL) -->
+        <Grid x:Name="RowDetailOverlay" Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="30" Visibility="Collapsed"
+              Background="#CC05070A"
+              MouseLeftButtonDown="RowDetailOverlayBackdrop_MouseDown"
+              MouseLeftButtonUp="RowDetailOverlayBackdrop_MouseUp">
+            <Border x:Name="RowDetailCard" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Width="740" MaxWidth="820" MinWidth="380" MaxHeight="640" Margin="20" Padding="20"
+                    Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudAccentBrush}" BorderThickness="2"
+                    MouseLeftButtonDown="RowDetailCard_MouseLeftButtonDown"
+                    MouseLeftButtonUp="RowDetailCard_MouseLeftButtonUp">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.85" BlurRadius="28" ShadowDepth="6" />
+                </Border.Effect>
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+                        <Button x:Name="BtnCloseRowDetail" DockPanel.Dock="Right" Content="✕"
+                                Style="{StaticResource HudButtonStyle}" MinWidth="44" MinHeight="44"
+                                FontSize="16" FontWeight="Bold" Padding="0" Margin="8,0,0,0"
+                                Click="CloseRowDetailOverlay_Click" />
+                        <Button x:Name="BtnCopyRowDetail" DockPanel.Dock="Right" Content="📋"
+                                ToolTip="Copiar detalle al portapapeles" Style="{StaticResource HudButtonStyle}"
+                                MinWidth="44" MinHeight="44" FontSize="15" Padding="0" Margin="8,0,0,0"
+                                Click="BtnCopyRowDetail_Click" />
+                        <Button x:Name="BtnNextRowDetail" DockPanel.Dock="Right" Content="▶"
+                                ToolTip="Fila siguiente" Style="{StaticResource HudButtonStyle}"
+                                MinWidth="44" MinHeight="44" FontSize="14" FontWeight="Bold" Padding="0"
+                                Click="BtnNextRowDetail_Click" />
+                        <TextBlock x:Name="TxtRowDetailCounter" DockPanel.Dock="Right" Text="1 / 1"
+                                   Foreground="{DynamicResource HudSecondaryBrush}" FontFamily="Consolas"
+                                   FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="10,0" />
+                        <Button x:Name="BtnPrevRowDetail" DockPanel.Dock="Right" Content="◀"
+                                ToolTip="Fila anterior" Style="{StaticResource HudButtonStyle}"
+                                MinWidth="44" MinHeight="44" FontSize="14" FontWeight="Bold" Padding="0"
+                                Click="BtnPrevRowDetail_Click" />
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock x:Name="TxtRowDetailCategory" Foreground="{DynamicResource HudAccentBrush}"
+                                       FontSize="11" FontWeight="Bold" />
+                            <TextBlock x:Name="TxtRowDetailTitle" Foreground="{StaticResource HudTextBrush}"
+                                       FontSize="18" FontWeight="Black" TextWrapping="Wrap" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </DockPanel>
+                    <Border DockPanel.Dock="Top" Height="1" Background="#33FFFFFF" Margin="0,0,0,14" />
+                    <ScrollViewer PanningMode="VerticalOnly" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="RowDetailFieldsPanel" />
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

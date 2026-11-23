@@ -3097,39 +3097,23 @@ function renderWebSystemMap(mapData) {
       }));
     }
 
-    const lbl = makeEl('text', {
-      x: n.x, y: n.y + n.radiusPx + 13,
-      fill: '#D8E2EE', 'font-size': 10, 'font-family': 'Consolas, monospace',
-      'text-anchor': 'middle'
-    });
-    lbl.textContent = n.shortLabel || '';
-    g.appendChild(lbl);
-
-    if (n.badgeText) {
-      const bdg = makeEl('text', {
-        x: n.x, y: n.y - n.radiusPx - 5,
-        fill: n.isStar ? n.fillHex : (n.isHighGravity ? '#FF6B6B' : '#42D674'),
-        'font-size': 9, 'font-weight': '700', 'font-family': 'Consolas, monospace',
-        'text-anchor': 'middle'
-      });
-      bdg.textContent = n.badgeText;
-      g.appendChild(bdg);
-    }
+    const tip = makeEl('title', {});
+    tip.textContent = `${n.bodyName || n.shortLabel || ''} (${n.bodyType || ''})`;
+    g.appendChild(tip);
 
     g.addEventListener('click', () => {
-      if (!detail) return;
-      const parts = [
-        `<strong style="color:var(--hud-accent);">${escapeHtml(n.bodyName || n.shortLabel)}</strong>`,
-        escapeHtml(n.bodyType || '')
-      ];
-      if (n.distanceLs != null) parts.push(`${Number(n.distanceLs).toFixed(0)} Ls`);
-      if (n.gravityG != null) parts.push(`${n.gravityG} G`);
-      if (n.bioSignals > 0) parts.push(`🧬 Bio: ${n.bioSignals}`);
-      if (n.geoSignals > 0) parts.push(`🌋 Geo: ${n.geoSignals}`);
-      if (n.estimatedValue > 0) parts.push(`💰 ${Number(n.estimatedValue).toLocaleString()} CR`);
-      if (n.dataSource) parts.push(`[${escapeHtml(n.dataSource)}]`);
-      detail.innerHTML = parts.filter(Boolean).join(' &nbsp;·&nbsp; ');
-      detail.hidden = false;
+      if (detail) detail.hidden = true;
+      const tbody = document.getElementById('explorationBodiesTableBody');
+      if (!tbody) return;
+      const rows = [...tbody.querySelectorAll('tr')].filter(r => r.children.length > 1);
+      const targetName = (n.bodyName || n.shortLabel || '').trim().toLowerCase();
+      let matchTr = rows.find(r => {
+        const cellText = (r.children[0]?.textContent || '').replace(/^[└─\s]+/, '').trim().toLowerCase();
+        return cellText === targetName || (targetName && cellText.endsWith(targetName));
+      }) || rows[idx] || rows[0];
+      if (matchTr) {
+        openWebRowDetailFromTr(matchTr);
+      }
     });
 
     svg.appendChild(g);
@@ -3215,4 +3199,134 @@ if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
 
 initWebInputConstraints();
 updateSectionTabs();
+
+// Integrated Touchscreen Table Row Detail HUD Popup
+let currentWebRowDetailText = '';
+let currentWebRowDetailTr = null;
+
+function getNavigableWebTableRows(table) {
+  if (!table) return [];
+  return [...table.querySelectorAll('tbody tr')].filter(r => {
+    const c = r.children;
+    return c.length > 0 && !(c.length === 1 && c[0].hasAttribute('colspan'));
+  });
+}
+
+function openWebRowDetailFromTr(tr) {
+  const table = tr.closest('table.hud-table');
+  if (!table) return;
+  const cells = [...tr.children];
+  if (!cells.length) return;
+  if (cells.length === 1 && cells[0].hasAttribute('colspan')) return;
+
+  currentWebRowDetailTr = tr;
+  const rows = getNavigableWebTableRows(table);
+  const rowIndex = Math.max(0, rows.indexOf(tr));
+  const counterEl = document.getElementById('webRowDetailCounter');
+  const prevBtn = document.getElementById('btnWebPrevRowDetail');
+  const nextBtn = document.getElementById('btnWebNextRowDetail');
+  if (counterEl) counterEl.textContent = `${rowIndex + 1} / ${Math.max(1, rows.length)}`;
+  if (prevBtn) prevBtn.disabled = rowIndex <= 0;
+  if (nextBtn) nextBtn.disabled = rowIndex + 1 >= rows.length;
+
+  const headers = [...table.querySelectorAll('thead th')].map(th => (th.textContent || '').trim());
+  const fields = [];
+  for (let i = 0; i < cells.length; i++) {
+    const label = headers[i] || `#${i + 1}`;
+    const td = cells[i];
+    const titleAttr = td.getAttribute('title') || td.querySelector('[title]')?.getAttribute('title') || '';
+    let value = (td.textContent || '').trim();
+    if (titleAttr && titleAttr !== value && !value.includes(titleAttr)) {
+      value = value ? `${value} (${titleAttr})` : titleAttr;
+    }
+    fields.push({ label, value: value || '—' });
+  }
+  if (!fields.length) return;
+
+  let title = fields[0].value;
+  if (fields.length > 1 && (fields[0].label === '#' || /^\d+$/.test(fields[0].value))) {
+    title = `${fields[0].label}${fields[0].value} · ${fields[1].value}`;
+  }
+
+  const card = table.closest('.hud-card');
+  const h3Span = card?.querySelector('h3 span, h4 span') || card?.querySelector('h3, h4');
+  const category = (h3Span?.textContent || card?.dataset.sectionTitle || 'DETALLE').trim();
+
+  const overlay = document.getElementById('webRowDetailOverlay');
+  const catEl = document.getElementById('webRowDetailCategory');
+  const titleEl = document.getElementById('webRowDetailTitle');
+  const fieldsEl = document.getElementById('webRowDetailFields');
+  if (!overlay || !catEl || !titleEl || !fieldsEl) return;
+
+  catEl.textContent = category;
+  titleEl.textContent = title;
+  fieldsEl.innerHTML = fields.map(f => {
+    const wide = f.value.length > 48 || f.value.includes('\n') ? ' wide' : '';
+    return `<div class="row-detail-field${wide}">` +
+      `<div class="row-detail-field-label">${escapeHtml(f.label)}</div>` +
+      `<div class="row-detail-field-value">${escapeHtml(f.value)}</div>` +
+      `</div>`;
+  }).join('');
+
+  currentWebRowDetailText = `${category}: ${title}\n` + fields.map(f => `${f.label}: ${f.value}`).join('\n');
+  overlay.hidden = false;
+}
+
+function stepWebRowDetail(delta) {
+  if (!currentWebRowDetailTr) return;
+  const table = currentWebRowDetailTr.closest('table.hud-table');
+  const rows = getNavigableWebTableRows(table);
+  if (!rows.length) return;
+  const idx = rows.indexOf(currentWebRowDetailTr);
+  const nextIdx = Math.min(rows.length - 1, Math.max(0, (idx < 0 ? 0 : idx) + delta));
+  if (nextIdx === idx) return;
+  const nextTr = rows[nextIdx];
+  if (nextTr.parentElement?.id !== 'explorationBodiesTableBody') {
+    nextTr.scrollIntoView({ block: 'nearest' });
+  }
+  openWebRowDetailFromTr(nextTr);
+}
+window.stepWebRowDetail = stepWebRowDetail;
+
+function closeWebRowDetail() {
+  const overlay = document.getElementById('webRowDetailOverlay');
+  if (overlay) overlay.hidden = true;
+}
+window.closeWebRowDetail = closeWebRowDetail;
+
+function onWebRowDetailBackdropClick(e) {
+  if (e && e.target && e.target.id === 'webRowDetailOverlay') {
+    closeWebRowDetail();
+  }
+}
+window.onWebRowDetailBackdropClick = onWebRowDetailBackdropClick;
+
+async function copyWebRowDetail() {
+  if (!currentWebRowDetailText) return;
+  try {
+    await navigator.clipboard.writeText(currentWebRowDetailText);
+    showToast('✓ Copiado');
+  } catch { }
+}
+window.copyWebRowDetail = copyWebRowDetail;
+
+document.addEventListener('click', e => {
+  if (e.target.closest('button, a, input, select, textarea')) return;
+  const tr = e.target.closest('table.hud-table tbody tr');
+  if (tr) openWebRowDetailFromTr(tr);
+});
+
+document.addEventListener('keydown', e => {
+  const overlay = document.getElementById('webRowDetailOverlay');
+  if (!overlay || overlay.hidden) return;
+  if (e.key === 'Escape') {
+    closeWebRowDetail();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    stepWebRowDetail(-1);
+  } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    stepWebRowDetail(1);
+  }
+});
 connectWs();

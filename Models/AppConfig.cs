@@ -120,7 +120,6 @@ public class AppConfig
     public double? OverlayLeft { get; set; }
     public double? OverlayTop { get; set; }
     public string OverlayToggleHotkey { get; set; } = "Ctrl+Alt+O";
-    public List<CustomDeckButtonItem> CustomDeckButtons { get; set; } = new();
     public List<DeckTabDefinition> DeckTabs { get; set; } = new();
     public bool UseCustomDeckLayout { get; set; } = false;
     public string AiSttEngine { get; set; } = "auto";

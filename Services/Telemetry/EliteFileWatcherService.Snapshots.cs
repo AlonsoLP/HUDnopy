@@ -139,7 +139,7 @@ public partial class EliteFileWatcherService
                 _state.PlanetRadius > 0)
             {
                 double minDist = _activeExoSampleCoords.Min(coord =>
-                    ExobiologyPredictor.CalculateSurfaceDistanceMeters(
+                    SurfaceNavigationService.CalculateDistanceMeters(
                         coord.Lat, coord.Lon, _state.Latitude, _state.Longitude, _state.PlanetRadius));
                 var nextTracker = tracker.Snapshot();
                 nextTracker.CurrentDistanceMeters = Math.Round(minDist, 0);

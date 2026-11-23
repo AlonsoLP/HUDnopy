@@ -37,26 +37,168 @@ public sealed class CockpitRadioService : IDisposable
 {
     public static readonly IReadOnlyList<RadioStationItem> BuiltInStations = new[]
     {
+        // Elite Dangerous Community Stations
         new RadioStationItem
         {
             Id = "sidewinder",
             Name = "Radio Sidewinder",
             StreamUrl = "https://radiosidewinder.out.airtime.pro/radiosidewinder_a",
-            Genre = "Elite Dangerous Sci-Fi & News"
+            Genre = "Elite Dangerous Sci-Fi & GalNet News"
         },
         new RadioStationItem
         {
             Id = "lave",
             Name = "Lave Radio",
             StreamUrl = "https://stream.laveradio.com/laveradio.mp3",
-            Genre = "Elite Community Talk & Music"
+            Genre = "Elite Community Talk & Sci-Fi Music"
         },
         new RadioStationItem
         {
             Id = "hutton",
             Name = "Hutton Orbital Radio",
             StreamUrl = "https://stream.zeno.fm/4d27t19r9k8uv",
-            Genre = "For the Mug! 24/7"
+            Genre = "For the Mug! 24/7 Truckers"
+        },
+
+        // Space Exploration, NASA Comms & Deep Ambient
+        new RadioStationItem
+        {
+            Id = "somafm-missioncontrol",
+            Name = "SomaFM · Mission Control (NASA)",
+            StreamUrl = "https://ice2.somafm.com/missioncontrol-128-mp3",
+            Genre = "Live/Historical NASA Audio + Space Ambient"
+        },
+        new RadioStationItem
+        {
+            Id = "somafm-deepspaceone",
+            Name = "SomaFM · Deep Space One",
+            StreamUrl = "https://ice2.somafm.com/deepspaceone-128-mp3",
+            Genre = "Deep Space Exploration Ambient"
+        },
+        new RadioStationItem
+        {
+            Id = "somafm-spacestation",
+            Name = "SomaFM · Space Station Soma",
+            StreamUrl = "https://ice2.somafm.com/spacestation-128-mp3",
+            Genre = "Orbital Mid-Tempo & Spaced-Out Electronica"
+        },
+        new RadioStationItem
+        {
+            Id = "somafm-synphaera",
+            Name = "SomaFM · Synphaera Space",
+            StreamUrl = "https://ice2.somafm.com/synphaera-128-mp3",
+            Genre = "Modern Cosmic Synths & Exosphere Ambient"
+        },
+        new RadioStationItem
+        {
+            Id = "somafm-dronezone",
+            Name = "SomaFM · Drone Zone",
+            StreamUrl = "https://ice2.somafm.com/dronezone-128-mp3",
+            Genre = "Atmospheric Minimalist Space Drone"
+        },
+        new RadioStationItem
+        {
+            Id = "somafm-darkzone",
+            Name = "SomaFM · Dark Zone (The Abyss)",
+            StreamUrl = "https://ice2.somafm.com/darkzone-128-mp3",
+            Genre = "Deep Black-Hole & Thargoid Sector Ambient"
+        },
+        new RadioStationItem
+        {
+            Id = "ambient-sleeping-pill",
+            Name = "Ambient Sleeping Pill",
+            StreamUrl = "https://radio.stereoscenic.com/asp-s",
+            Genre = "Serene Long-Range Exploration Ambient"
+        },
+        new RadioStationItem
+        {
+            Id = "stereoscenic-modern",
+            Name = "Stereoscenic · Modern Ambient",
+            StreamUrl = "https://radio.stereoscenic.com/mod-s",
+            Genre = "Cinematic Ambient & Post-Rock Landscapes"
+        },
+
+        // Epic, Orchestral & Cinematic Sci-Fi
+        new RadioStationItem
+        {
+            Id = "somafm-n5md",
+            Name = "SomaFM · n5MD Cinematic",
+            StreamUrl = "https://ice2.somafm.com/n5md-128-mp3",
+            Genre = "Emotional Cinematic & Epic Electronic"
+        },
+        new RadioStationItem
+        {
+            Id = "klassik-symphonic",
+            Name = "Klassik Radio · Symphonic Docking",
+            StreamUrl = "https://live.streams.klassikradio.de/klassikradio-deutschland/stream/mp3",
+            Genre = "Blue Danube Auto-Dock & Orchestral Classics"
+        },
+        new RadioStationItem
+        {
+            Id = "somafm-sf1033",
+            Name = "SomaFM · SF 10-33 (Comms + Ambient)",
+            StreamUrl = "https://ice2.somafm.com/sf1033-128-mp3",
+            Genre = "Live Radio Dispatch Comms + Ambient"
+        },
+
+        // Spacesynth, Synthwave & Combat
+        new RadioStationItem
+        {
+            Id = "nightride-spacesynth",
+            Name = "Nightride · Spacesynth FM",
+            StreamUrl = "https://stream.nightride.fm/spacesynth.mp3",
+            Genre = "Cosmic Disco & Retro Space Synth"
+        },
+        new RadioStationItem
+        {
+            Id = "nightride-chillsynth",
+            Name = "Nightride · Chillsynth FM",
+            StreamUrl = "https://stream.nightride.fm/chillsynth.mp3",
+            Genre = "Relaxing Supercruise Space Synthwave"
+        },
+        new RadioStationItem
+        {
+            Id = "nightride-fm",
+            Name = "Nightride · Nightride FM",
+            StreamUrl = "https://stream.nightride.fm/nightride.mp3",
+            Genre = "Outrun & Retro-Futuristic Synthwave"
+        },
+        new RadioStationItem
+        {
+            Id = "nightride-darksynth",
+            Name = "Nightride · Darksynth FM (Combat)",
+            StreamUrl = "https://stream.nightride.fm/darksynth.mp3",
+            Genre = "Heavy Combat & Conflict Zone Darksynth"
+        },
+        new RadioStationItem
+        {
+            Id = "somafm-defcon",
+            Name = "SomaFM · DEF CON Radio",
+            StreamUrl = "https://ice2.somafm.com/defcon-128-mp3",
+            Genre = "High-Tech Cyberpunk & Mining Beats"
+        },
+
+        // Cockpit Chillout, Downtempo & Lounge
+        new RadioStationItem
+        {
+            Id = "somafm-groovesalad",
+            Name = "SomaFM · Groove Salad",
+            StreamUrl = "https://ice2.somafm.com/groovesalad-128-mp3",
+            Genre = "Classic Downtempo & Cockpit Chillout"
+        },
+        new RadioStationItem
+        {
+            Id = "somafm-vaporwaves",
+            Name = "SomaFM · Vaporwaves",
+            StreamUrl = "https://ice2.somafm.com/vaporwaves-128-mp3",
+            Genre = "Retro-Futuristic Starport Lounge"
+        },
+        new RadioStationItem
+        {
+            Id = "nightwave-plaza",
+            Name = "Nightwave Plaza",
+            StreamUrl = "https://radio.plaza.one/mp3",
+            Genre = "Late-Night Cockpit Vaporwave & Future Funk"
         }
     };
 
@@ -160,7 +302,9 @@ public sealed class CockpitRadioService : IDisposable
                 _reader = reader;
                 _output = output;
                 _isPlaying = true;
-                _statusMessage = $"♪ {station.Name}";
+                _statusMessage = string.IsNullOrWhiteSpace(station.Genre)
+                    ? $"♪ {station.Name}"
+                    : $"♪ {station.Name} — {station.Genre}";
                 ApplyEffectiveVolumeLocked();
                 _output.Play();
             }

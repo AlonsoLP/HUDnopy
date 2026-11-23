@@ -54,6 +54,8 @@ public partial class EliteFileWatcherService
             fs.Seek(_lastJournalPosition, SeekOrigin.Begin);
 
             bool isInitialReplay = _lastJournalPosition == 0 && !_hasCompletedInitialJournalLoad;
+            if (isInitialReplay)
+                RestoreCarrierHistoryFromRecentJournals(folder, latest);
             string journalFileName = Path.GetFileName(latest);
             foreach (var (line, endPosition) in ReadCompleteJournalLines(fs))
             {
@@ -78,6 +80,56 @@ public partial class EliteFileWatcherService
         catch
         {
             // Ignorar errores de acceso concurrente
+        }
+    }
+
+    /// <summary>
+    /// Scans recent historical Journal files on initial startup so the commander's last known
+    /// <c>CarrierStats</c> (name, callsign, tritium fuel, balance, reserve, capacity, docking access)
+    /// is populated immediately even when the current session's Journal only contains <c>CarrierLocation</c>.
+    /// </summary>
+    private void RestoreCarrierHistoryFromRecentJournals(string folder, string latestJournalPath)
+    {
+        try
+        {
+            var recentJournals = new DirectoryInfo(folder)
+                .EnumerateFiles("Journal.*.log")
+                .Where(f => !string.Equals(f.FullName, latestJournalPath, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(static f => f.LastWriteTimeUtc)
+                .Take(20)
+                .OrderBy(static f => f.LastWriteTimeUtc)
+                .ToList();
+
+            foreach (var journalInfo in recentJournals)
+            {
+                try
+                {
+                    using var stream = new FileStream(journalInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    foreach (var (line, _) in ReadCompleteJournalLines(stream))
+                    {
+                        if (string.IsNullOrWhiteSpace(line) || !line.Contains("\"Carrier", StringComparison.Ordinal))
+                            continue;
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(line);
+                            var root = doc.RootElement;
+                            if (!root.TryGetProperty("event", out var evtProp) || evtProp.ValueKind != JsonValueKind.String)
+                                continue;
+                            string evt = evtProp.GetString() ?? "";
+                            CarrierJournal.Apply(_state, evt, root);
+                        }
+                        catch (JsonException)
+                        {
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+        catch
+        {
         }
     }
 

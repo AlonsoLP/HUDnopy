@@ -815,6 +815,25 @@
   <div id="toast">Comando enviado</div>
   <div id="alertToast" role="status" aria-live="assertive"><div id="alertToastTitle"></div><div id="alertToastMessage"></div></div>
 
+  <div id="webRowDetailOverlay" class="row-detail-overlay" hidden onclick="onWebRowDetailBackdropClick(event)">
+    <div class="row-detail-card" role="dialog" aria-modal="true">
+      <div class="row-detail-header">
+        <div class="row-detail-titles">
+          <div id="webRowDetailCategory" class="row-detail-category">DETALLE</div>
+          <div id="webRowDetailTitle" class="row-detail-title">---</div>
+        </div>
+        <div class="row-detail-actions">
+          <button id="btnWebPrevRowDetail" type="button" class="deck-button icon-action-btn" onclick="stepWebRowDetail(-1)" title="Fila anterior">◀</button>
+          <span id="webRowDetailCounter" class="row-detail-counter">1 / 1</span>
+          <button id="btnWebNextRowDetail" type="button" class="deck-button icon-action-btn" onclick="stepWebRowDetail(1)" title="Fila siguiente">▶</button>
+          <button type="button" class="deck-button icon-action-btn" onclick="copyWebRowDetail()" title="Copiar">📋</button>
+          <button type="button" class="deck-button icon-action-btn" onclick="closeWebRowDetail()" title="Cerrar">✕</button>
+        </div>
+      </div>
+      <div id="webRowDetailFields" class="row-detail-fields"></div>
+    </div>
+  </div>
+
   <script src="/app.js"></script>
 </body>
 </html>

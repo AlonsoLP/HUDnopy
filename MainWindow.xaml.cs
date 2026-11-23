@@ -190,16 +190,9 @@ public partial class MainWindow : Window
         SldDesktopFontScale.ValueChanged += SldDesktopFontScale_ValueChanged;
         if (SystemMapControl is not null)
             SystemMapControl.BodySelected += OnSystemMapBodySelected;
+        AddHandler(DataGridRow.MouseLeftButtonUpEvent, new System.Windows.Input.MouseButtonEventHandler(OnAnyDataGridRowTapped), handledEventsToo: true);
         InitializeTrayIcon();
-        _alertSpeechService.SpeechFailed += message => Dispatcher.BeginInvoke(() =>
-        {
-            SetStatusBarMessage($"⚠ {message}");
-            if (TxtPiperStatus is not null &&
-                string.Equals(_configService.Current.SpeechEngine, "piper", StringComparison.OrdinalIgnoreCase))
-            {
-                TxtPiperStatus.Text = $"⚠ {message}";
-            }
-        });
+        _alertSpeechService.SpeechFailed += message => Dispatcher.BeginInvoke(() => SetStatusBarMessage($"⚠ {message}"));
         _communitySync.SyncStatusChanged += () => Dispatcher.BeginInvoke(RefreshCommunitySyncStatus);
         _communitySync.EdsmSystemIntelUpdated += intel => Dispatcher.BeginInvoke(() => ApplyEdsmSystemIntel(intel));
         _communitySync.EdsmDiscoveryUpdated += intel => Dispatcher.BeginInvoke(() => ApplyEdsmDiscoveryIntel(intel));
@@ -242,6 +235,7 @@ public partial class MainWindow : Window
 
         _fileWatcher.StateUpdated += OnShipStateUpdated;
         _fileWatcher.UnhandledMessagesUpdated += () => Dispatcher.BeginInvoke(RefreshUnhandledMessagesUi);
+        AppDiagnosticsLogger.RecentIssuesChanged += () => Dispatcher.BeginInvoke(RefreshDiagnosticIssuesUi);
         _spanshSystemDataService.StateChanged += OnSpanshDataChanged;
         _alertService.AlertsChanged += () => Dispatcher.BeginInvoke(RefreshAlertsUi);
         _alertService.AlertRaised += alert => Dispatcher.BeginInvoke(() => ShowAlertToast(alert));
@@ -261,24 +255,42 @@ public partial class MainWindow : Window
         RefreshHeaderOptions();
         UpdateShipUi(_fileWatcher.State);
         RefreshAlertsUi();
+        RefreshDiagnosticIssuesUi();
         SwitchView(0);
 
-        Loaded += async (_, _) =>
+        Loaded += async (_, _) => await RunUiAsync("MainWindow Loaded", async () =>
         {
             Task loadVoicesTask = LoadAlertSpeechVoicesAsync(_configService.Current.SpeechVoiceName);
             if (_configService.Current.AutoStartWebServer)
             {
-                await _webServer.StartAsync();
+                try
+                {
+                    await _webServer.StartAsync();
+                }
+                catch (Exception webEx)
+                {
+                    AppDiagnosticsLogger.Error("WebServer", "Failed to auto-start Kestrel web server on startup.", webEx);
+                    SetStatusBarMessage($"⚠ Web HUD: {webEx.Message}");
+                }
             }
 
-            await loadVoicesTask;
+            try
+            {
+                await loadVoicesTask;
+            }
+            catch (Exception voiceEx)
+            {
+                AppDiagnosticsLogger.Warn("Speech", $"Failed to enumerate system speech voices: {voiceEx.Message}");
+            }
+
             RefreshWebServerUi();
             ApplyDesktopFontScale(_configService.Current.DesktopFontScalePercent / 100d);
+            _ = TriggerStartupIntegrationsSyncAsync();
             if (_configService.Current.StartMinimizedToTray)
             {
                 MinimizeToTray();
             }
-        };
+        });
     }
 
     private void InitializeTrayIcon()

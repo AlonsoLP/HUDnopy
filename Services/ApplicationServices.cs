@@ -39,9 +39,9 @@ public sealed class ApplicationServices
     public AiCopilotService AiCopilot { get; }
     public WebServerService WebServer { get; }
 
-    public ApplicationServices()
+    public ApplicationServices(ConfigService? customConfiguration = null)
     {
-        Configuration = new ConfigService();
+        Configuration = customConfiguration ?? new ConfigService();
         Bindings = new BindingsService(Configuration);
         InputSimulator = new InputSimulatorService(Bindings, Configuration);
         GameEvents = new GameEventHub();

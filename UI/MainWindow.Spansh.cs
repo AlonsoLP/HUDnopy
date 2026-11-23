@@ -152,32 +152,33 @@ public partial class MainWindow
             }
         });
 
-    private async void BtnPlotSpanshRoute_Click(object sender, RoutedEventArgs e)
-    {
-        string mode = (CmbSpanshRouteMode.SelectedItem as ComboBoxItem)?.Tag as string ?? "neutron";
-        string dest = TxtSpanshRouteDest.Text.Trim();
-        double range = double.TryParse(
-            TxtSpanshRouteRange.Text.Trim().Replace(',', '.'),
-            System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out double r) && r > 0 ? r : 50.0;
+    private async void BtnPlotSpanshRoute_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Spansh Route", async () =>
+        {
+            string mode = (CmbSpanshRouteMode.SelectedItem as ComboBoxItem)?.Tag as string ?? "neutron";
+            string dest = TxtSpanshRouteDest.Text.Trim();
+            double range = double.TryParse(
+                TxtSpanshRouteRange.Text.Trim().Replace(',', '.'),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out double r) && r > 0 ? r : 50.0;
 
-        var state = _fileWatcher.State;
-        long carrierUsed = state.Carrier?.Capacity is long cap && state.Carrier?.FreeSpace is long free
-            ? Math.Max(0, cap - free)
-            : (state.Carrier?.Cargo ?? 0);
+            var state = _fileWatcher.State;
+            long carrierUsed = state.Carrier?.Capacity is long cap && state.Carrier?.FreeSpace is long free
+                ? Math.Max(0, cap - free)
+                : (state.Carrier?.Cargo ?? 0);
 
-        var flight = FlightTranslations.ForLanguage(_uiLanguage);
-        TxtSpanshRouteStatus.Text = flight["spanshRouteCalculating"];
+            var flight = FlightTranslations.ForLanguage(_uiLanguage);
+            TxtSpanshRouteStatus.Text = flight["spanshRouteCalculating"];
 
-        var (success, waypoints, message) = await _spanshSystemDataService.PlotSpanshRouteAsync(
-            mode, state.CurrentSystem, dest, range, carrierUsed);
+            var (success, waypoints, message) = await _spanshSystemDataService.PlotSpanshRouteAsync(
+                mode, state.CurrentSystem, dest, range, carrierUsed);
 
-        if (success && waypoints.Count > 0)
-            ApplySpanshRouteWaypoints(waypoints);
-        else
-            TxtSpanshRouteStatus.Text = message;
-    }
+            if (success && waypoints.Count > 0)
+                ApplySpanshRouteWaypoints(waypoints);
+            else
+                TxtSpanshRouteStatus.Text = message;
+        });
 
     private void BtnImportSpanshCsv_Click(object sender, RoutedEventArgs e)
     {
@@ -336,44 +337,45 @@ public partial class MainWindow
         CopySystemToClipboard(ring.SystemName);
     }
 
-    private async void BtnFindColonisationSupplier_Click(object sender, RoutedEventArgs e)
-    {
-        var state = _fileWatcher.State;
-        var selected = GridColonisationResources.SelectedItem as ColonisationResourceItem
-            ?? state.Colonisation.Resources.FirstOrDefault(static r => r.RequiredAmount > r.ProvidedAmount);
-        var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-
-        if (selected is null)
+    private async void BtnFindColonisationSupplier_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Colonisation Supplier", async () =>
         {
-            TxtColonisationSupplierStatus.Text = ops["colonisationNoPending"];
+            var state = _fileWatcher.State;
+            var selected = GridColonisationResources.SelectedItem as ColonisationResourceItem
+                ?? state.Colonisation.Resources.FirstOrDefault(static r => r.RequiredAmount > r.ProvidedAmount);
+            var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+
+            if (selected is null)
+            {
+                TxtColonisationSupplierStatus.Text = ops["colonisationNoPending"];
+                TxtColonisationSupplierStatus.Visibility = Visibility.Visible;
+                return;
+            }
+
+            long remaining = Math.Max(1, selected.RequiredAmount - selected.ProvidedAmount);
+            TxtColonisationSupplierStatus.Text = string.Format(ops["colonisationSearching"], selected.DisplayName);
             TxtColonisationSupplierStatus.Visibility = Visibility.Visible;
-            return;
-        }
 
-        long remaining = Math.Max(1, selected.RequiredAmount - selected.ProvidedAmount);
-        TxtColonisationSupplierStatus.Text = string.Format(ops["colonisationSearching"], selected.DisplayName);
-        TxtColonisationSupplierStatus.Visibility = Visibility.Visible;
+            var (success, results, message) = await _spanshSystemDataService.SearchCommoditySupplierAsync(
+                selected.DisplayName,
+                Math.Min(remaining, 500),
+                requireLargePad: true,
+                state.CurrentSystem,
+                state.StarPos);
 
-        var (success, results, message) = await _spanshSystemDataService.SearchCommoditySupplierAsync(
-            selected.DisplayName,
-            Math.Min(remaining, 500),
-            requireLargePad: true,
-            state.CurrentSystem,
-            state.StarPos);
-
-        if (success && results.Count > 0)
-        {
-            GridColonisationSuppliers.ItemsSource = results;
-            GridColonisationSuppliers.Visibility = Visibility.Visible;
-            TxtColonisationSupplierStatus.Text = string.Format(ops["colonisationSuppliersFound"], selected.DisplayName, results.Count);
-        }
-        else
-        {
-            GridColonisationSuppliers.ItemsSource = null;
-            GridColonisationSuppliers.Visibility = Visibility.Collapsed;
-            TxtColonisationSupplierStatus.Text = success ? ops["spanshTradeEmpty"] : message;
-        }
-    }
+            if (success && results.Count > 0)
+            {
+                GridColonisationSuppliers.ItemsSource = results;
+                GridColonisationSuppliers.Visibility = Visibility.Visible;
+                TxtColonisationSupplierStatus.Text = string.Format(ops["colonisationSuppliersFound"], selected.DisplayName, results.Count);
+            }
+            else
+            {
+                GridColonisationSuppliers.ItemsSource = null;
+                GridColonisationSuppliers.Visibility = Visibility.Collapsed;
+                TxtColonisationSupplierStatus.Text = success ? ops["spanshTradeEmpty"] : message;
+            }
+        });
 
     private void GridColonisationSuppliers_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {

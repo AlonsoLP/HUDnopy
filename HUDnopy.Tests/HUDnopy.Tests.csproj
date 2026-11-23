@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>HUDnopy.Tests</RootNamespace>
     <AssemblyName>HUDnopy.Tests</AssemblyName>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

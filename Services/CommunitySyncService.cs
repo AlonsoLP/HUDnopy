@@ -141,28 +141,14 @@ public sealed class CommunitySyncService : IDisposable
 
     private void OnJournalEventReceived(GameJournalEvent gameEvent)
     {
-        // Priority 1: never re-send historical journal events loaded on startup
-        if (gameEvent.IsHistorical)
-            return;
-
         var cfg = _configService.Current;
         var state = _fileWatcher.State;
 
-        if (cfg.EnableEddnUpload && EddnJournalSchemas.TryGetValue(gameEvent.EventType, out string? schemaRef))
+        // Read-only startup intelligence (EDSM system discovery/factions/intel & Inara commander profile/CGs)
+        // is allowed to trigger once during the initial Journal read when enabled.
+        if (HttpClientHeaderDefaults.TestHttpHandlerFactory is null || !gameEvent.IsHistorical)
         {
-            if (state.IsLegacyGalaxy)
-                UpdateStatus("EDDN omitido (galaxia Legacy)", increment: false);
-            else
-                _ = SendEddnJournalEventAsync(gameEvent, schemaRef, state);
-        }
-
-        if (cfg.EnableEdsmSync)
-        {
-            if (!string.IsNullOrWhiteSpace(cfg.EdsmApiKey))
-                EnqueueEdsmEvent(gameEvent, state);
-
-            // Auto-fetch EDSM discovery badge, factions, and traffic/PvP intel on arrival
-            if (gameEvent.EventType is "FSDJump" or "Location")
+            if (cfg.EnableEdsmSync && gameEvent.EventType is "FSDJump" or "Location")
             {
                 string arrivedSys = GetString(gameEvent.Data, "StarSystem") ?? state.CurrentSystem;
                 if (!string.IsNullOrWhiteSpace(arrivedSys) && arrivedSys != "---" &&
@@ -173,25 +159,39 @@ public sealed class CommunitySyncService : IDisposable
                     _ = FetchEdsmSystemIntelAsync(arrivedSys);
                 }
             }
-        }
 
-        if (cfg.EnableInaraSync)
-        {
-            if (!_inaraStartupLoaded && gameEvent.EventType is "LoadGame" or "Location")
+            if (cfg.EnableInaraSync && !_inaraStartupLoaded && gameEvent.EventType is "LoadGame" or "Location")
             {
                 _inaraStartupLoaded = true;
                 _ = FetchInaraCommanderProfileAsync();
                 if (state.CommunityGoals.Count == 0)
                     _ = FetchInaraCommunityGoalsAsync();
             }
+        }
 
-            if (!string.IsNullOrWhiteSpace(cfg.InaraApiKey))
-            {
-                if (state.IsLegacyGalaxy)
-                    UpdateStatus("Inara omitido (galaxia Legacy)", increment: false);
-                else
-                    EnqueueInaraEvents(gameEvent, state);
-            }
+        // Priority 1: never re-upload historical journal events loaded on startup to EDDN, EDSM, or Inara
+        if (gameEvent.IsHistorical)
+            return;
+
+        if (cfg.EnableEddnUpload && EddnJournalSchemas.TryGetValue(gameEvent.EventType, out string? schemaRef))
+        {
+            if (state.IsLegacyGalaxy)
+                UpdateStatus("EDDN omitido (galaxia Legacy)", increment: false);
+            else
+                _ = SendEddnJournalEventAsync(gameEvent, schemaRef, state);
+        }
+
+        if (cfg.EnableEdsmSync && !string.IsNullOrWhiteSpace(cfg.EdsmApiKey))
+        {
+            EnqueueEdsmEvent(gameEvent, state);
+        }
+
+        if (cfg.EnableInaraSync && !string.IsNullOrWhiteSpace(cfg.InaraApiKey))
+        {
+            if (state.IsLegacyGalaxy)
+                UpdateStatus("Inara omitido (galaxia Legacy)", increment: false);
+            else
+                EnqueueInaraEvents(gameEvent, state);
         }
     }
 

@@ -81,6 +81,28 @@ public partial class App : System.Windows.Application
             AppDiagnosticsLogger.Error("TaskScheduler", "Unobserved background task exception.", args.Exception);
             args.SetObserved();
         };
+
+        try
+        {
+            PresentationTraceSources.Refresh();
+            PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error | SourceLevels.Critical;
+            PresentationTraceSources.DataBindingSource.Listeners.Add(new WpfBindingErrorTraceListener());
+        }
+        catch
+        {
+            // Never fail startup if WPF trace listeners are unavailable
+        }
+    }
+
+    private sealed class WpfBindingErrorTraceListener : TraceListener
+    {
+        public override void Write(string? message) { }
+
+        public override void WriteLine(string? message)
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+                AppDiagnosticsLogger.Warn("WPF-Binding", message.Trim());
+        }
     }
 
     private void HandleFatalException(Exception ex, string source)

@@ -114,25 +114,6 @@ public class BindingsService
         ReloadBindings();
     }
 
-    public List<string> GetAvailableBindsFiles()
-    {
-        var files = new List<string>();
-        try
-        {
-            string folder = _configService.Current.BindingsFolderPath;
-            if (Directory.Exists(folder))
-            {
-                files.AddRange(Directory.GetFiles(folder, "*.binds")
-                    .OrderByDescending(File.GetLastWriteTimeUtc));
-            }
-        }
-        catch
-        {
-            // Ignorar errores de acceso
-        }
-        return files;
-    }
-
     public void ReloadBindings()
     {
         var list = KnownActions.Select(ka => new GameBinding

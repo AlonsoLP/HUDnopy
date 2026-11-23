@@ -163,13 +163,6 @@ public sealed class HudOverlayWindow : Window
         UpdateLockVisuals();
     }
 
-    public void SetOverlayOpacity(double opacity)
-    {
-        double clamped = Math.Clamp(opacity, 0.25, 1.0);
-        Opacity = clamped;
-        _configService.Current.OverlayOpacity = clamped;
-    }
-
     public void UpdateTelemetry(ShipState s, string uiLanguage)
     {
         string sys = string.IsNullOrWhiteSpace(s.CurrentSystem) ? "NO SIGNAL" : s.CurrentSystem.ToUpperInvariant();

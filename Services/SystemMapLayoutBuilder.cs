@@ -70,13 +70,13 @@ public sealed record SystemMapLayoutResult(
 /// </summary>
 public static partial class SystemMapLayoutBuilder
 {
-    private const double StarColumnX = 50;
-    private const double FirstPlanetX = 122;
-    private const double PlanetStepX = 56;
-    private const double BinaryPairStepX = 46;
-    private const double MoonStepY = 40;
-    private const double SubMoonIndentX = 28;
-    private const double MinBandHeight = 108;
+    private const double StarColumnX = 46;
+    private const double FirstPlanetX = 112;
+    private const double PlanetStepX = 48;
+    private const double BinaryPairStepX = 40;
+    private const double MoonStepY = 38;
+    private const double SubMoonIndentX = 25;
+    private const double MinBandHeight = 96;
 
     [GeneratedRegex(@"^([A-Z]+)(?:\s+|$)", RegexOptions.CultureInvariant)]
     private static partial Regex StarLetterPrefixRegex();

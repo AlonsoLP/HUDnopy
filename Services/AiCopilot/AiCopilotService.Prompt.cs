@@ -26,24 +26,6 @@ namespace HUDnopy.Services;
 
 public sealed partial class AiCopilotService
 {
-    internal readonly record struct PromptAuditSnapshot(
-        bool IsInstant,
-        string InstantReply,
-        string CompactJson,
-        string PreInjected,
-        int ThinkingBudget,
-        int SystemPromptLength);
-
-    internal PromptAuditSnapshot InspectPromptPipeline(AppConfig cfg, ShipState s, string userPrompt)
-    {
-        var (instantOk, instantReply) = TryAnswerInstantTelemetryQuery(cfg, userPrompt);
-        string compact = BuildCompactTelemetryJson(cfg, s, userPrompt);
-        string pre = BuildPreInjectedAnalytics(s, userPrompt);
-        int thinking = ResolveThinkingBudget(cfg, userPrompt);
-        string full = BuildSystemPrompt(cfg, s, userPrompt);
-        return new PromptAuditSnapshot(instantOk, instantReply, compact, pre, thinking, full.Length);
-    }
-
     /// <summary>
     /// Builds a prefix-cache-friendly system prompt: static rules, query/action schemas, and memory go FIRST
     /// (enabling automatic Ollama KV cache and Gemini/OpenAI implicit prefix caching), followed by compact

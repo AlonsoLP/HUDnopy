@@ -982,9 +982,10 @@ public partial class MainWindow
                 FontFamily = new System.Windows.Media.FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),
                 Tag = element,
                 Style = (Style)FindResource("HudButtonStyle"),
-                MinWidth = 36,
-                Margin = new Thickness(2),
-                Padding = new Thickness(10, 5, 10, 5)
+                MinWidth = 42,
+                MinHeight = 40,
+                Margin = new Thickness(3, 2, 3, 2),
+                Padding = new Thickness(12, 6, 12, 6)
             };
             System.Windows.Automation.AutomationProperties.SetName(button, title);
             button.SetResourceReference(BorderBrushProperty, selected ? "HudAccentBrush" : "HudBorderBrush");
@@ -1630,14 +1631,16 @@ public partial class MainWindow
     {
         if (GridExplorationBodies?.ItemsSource is not IEnumerable<ExplorationBodyView> rows)
             return;
-        var match = rows.FirstOrDefault(r =>
+        var list = rows.ToList();
+        int idx = list.FindIndex(r =>
             ReferenceEquals(r.Body, body) ||
             (!string.IsNullOrEmpty(body.Id) && r.Body.Id == body.Id) ||
             string.Equals(r.Body.BodyName, body.BodyName, StringComparison.OrdinalIgnoreCase));
-        if (match is not null)
+        if (idx >= 0)
         {
+            var match = list[idx];
             GridExplorationBodies.SelectedItem = match;
-            GridExplorationBodies.ScrollIntoView(match);
+            ShowDataGridRowDetailOverlay(GridExplorationBodies, match, idx);
         }
     }
 
@@ -1825,6 +1828,28 @@ public partial class MainWindow
 
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (RowDetailOverlay?.Visibility == Visibility.Visible)
+        {
+            if (e.Key == Key.Escape)
+            {
+                CloseRowDetailOverlay();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key is Key.Left or Key.Up)
+            {
+                StepRowDetail(-1);
+                e.Handled = true;
+                return;
+            }
+            if (e.Key is Key.Right or Key.Down)
+            {
+                StepRowDetail(1);
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (e.Key != Key.F11)
             return;
 
@@ -2102,6 +2127,38 @@ public partial class MainWindow
         _fileWatcher.ClearUnhandledMessages();
         RefreshUnhandledMessagesUi();
         TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["unhandledCleared"];
+    }
+
+    private void RefreshDiagnosticIssuesUi()
+    {
+        if (GridDiagnosticIssues is null || TxtDiagnosticIssuesStatus is null)
+            return;
+
+        var issues = AppDiagnosticsLogger.GetRecentIssuesSnapshot();
+        GridDiagnosticIssues.ItemsSource = issues;
+        TxtDiagnosticIssuesStatus.Text = issues.Count == 0
+            ? "✓ 0 incidencias registradas en esta sesión."
+            : $"⚠ {issues.Count} incidencia(s) registrada(s) en esta sesión (toca cualquier fila para ver la traza completa).";
+    }
+
+    private void BtnReportLastError_Click(object sender, RoutedEventArgs e)
+    {
+        if (GridDiagnosticIssues?.SelectedItem is DiagnosticIssueEntry selected)
+        {
+            var ex = selected.ExceptionObject ?? new InvalidOperationException($"[{selected.Level}] {selected.Category}: {selected.Message}\n\n{selected.Details}");
+            App.ShowExceptionDialog(ex, selected.Category, _configService.Current, isFatal: false);
+            return;
+        }
+
+        var (lastEx, source) = AppDiagnosticsLogger.GetLastReportableException();
+        App.ShowExceptionDialog(lastEx, source, _configService.Current, isFatal: false);
+    }
+
+    private void BtnClearDiagnosticIssues_Click(object sender, RoutedEventArgs e)
+    {
+        AppDiagnosticsLogger.ClearRecentIssues();
+        RefreshDiagnosticIssuesUi();
+        SetStatusBarMessage("✓ Registro de incidencias recientes limpiado.");
     }
 
 }

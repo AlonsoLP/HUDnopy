@@ -21,11 +21,23 @@ namespace HUDnopy.Services;
 internal static class WebHttpsCertificate
 {
     private sealed record StoredCertificate(string Pfx, string[] Addresses);
+    private static readonly object CertCacheLock = new();
+    private static (X509Certificate2 Cert, string[] Addresses)? _inMemoryCachedCert;
 
     public static X509Certificate2 LoadOrCreate(IEnumerable<IPAddress> addresses)
     {
         string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "web-certificate.dat");
         string[] required = addresses.Select(address => address.ToString()).Distinct(StringComparer.Ordinal).ToArray();
+        lock (CertCacheLock)
+        {
+            if (_inMemoryCachedCert is { } cached &&
+                cached.Cert.HasPrivateKey &&
+                cached.Cert.NotAfter.ToUniversalTime() > DateTime.UtcNow.AddDays(7) &&
+                required.All(address => cached.Addresses.Contains(address, StringComparer.Ordinal)))
+            {
+                return cached.Cert;
+            }
+        }
         if (File.Exists(path))
         {
             byte[] plaintext = ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
@@ -39,7 +51,11 @@ internal static class WebHttpsCertificate
                     var certificate = X509CertificateLoader.LoadPkcs12(pfx, null, X509KeyStorageFlags.UserKeySet);
                     if (certificate.HasPrivateKey && certificate.NotAfter.ToUniversalTime() > DateTime.UtcNow.AddDays(7) &&
                         required.All(address => stored.Addresses.Contains(address, StringComparer.Ordinal)))
+                    {
+                        lock (CertCacheLock)
+                            _inMemoryCachedCert = (certificate, stored.Addresses);
                         return certificate;
+                    }
                     certificate.Dispose();
                 }
                 finally
@@ -79,7 +95,10 @@ internal static class WebHttpsCertificate
             {
                 CryptographicOperations.ZeroMemory(serialized);
             }
-            return X509CertificateLoader.LoadPkcs12(exported, null, X509KeyStorageFlags.UserKeySet);
+            var loadedCert = X509CertificateLoader.LoadPkcs12(exported, null, X509KeyStorageFlags.UserKeySet);
+            lock (CertCacheLock)
+                _inMemoryCachedCert = (loadedCert, required);
+            return loadedCert;
         }
         finally
         {

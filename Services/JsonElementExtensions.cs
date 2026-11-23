@@ -31,23 +31,37 @@ internal static class JsonElementExtensions
     public static string? GetStr(JsonElement el, string parent, string prop) =>
         el.TryGetProperty(parent, out var p) && p.ValueKind == JsonValueKind.Object ? GetStr(p, prop) : null;
 
-    public static long? GetLong(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out long n) ? n : null;
-
-    public static int? GetInt(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : null;
-
-    public static double? GetDouble(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double n) ? n : null;
-
-    // C# 14 extension block for fluent instance-style access on JsonElement values
-    extension(JsonElement element)
+    public static long? GetLong(JsonElement el, string prop)
     {
-        public string? ReadStr(string prop) => GetStr(element, prop);
-        public long? ReadLong(string prop) => GetLong(element, prop);
-        public int? ReadInt(string prop) => GetInt(element, prop);
-        public double? ReadDouble(string prop) => GetDouble(element, prop);
-        public bool IsNonEmptyString => element.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(element.GetString());
+        if (!el.TryGetProperty(prop, out var v))
+            return null;
+        if (v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out long n))
+            return n;
+        if (v.ValueKind == JsonValueKind.String && long.TryParse(v.GetString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long sn))
+            return sn;
+        return null;
+    }
+
+    public static int? GetInt(JsonElement el, string prop)
+    {
+        if (!el.TryGetProperty(prop, out var v))
+            return null;
+        if (v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n))
+            return n;
+        if (v.ValueKind == JsonValueKind.String && int.TryParse(v.GetString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int sn))
+            return sn;
+        return null;
+    }
+
+    public static double? GetDouble(JsonElement el, string prop)
+    {
+        if (!el.TryGetProperty(prop, out var v))
+            return null;
+        if (v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double n))
+            return n;
+        if (v.ValueKind == JsonValueKind.String && double.TryParse(v.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double sn))
+            return sn;
+        return null;
     }
 }
 

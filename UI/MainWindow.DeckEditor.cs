@@ -653,7 +653,6 @@ public partial class MainWindow
         await RunUiAsync("Deck Reset Defaults", async () =>
         {
             _configService.Current.DeckTabs = DeckLayoutService.CreateDefaultTabs(_bindingsService, _uiLanguage);
-            _configService.Current.CustomDeckButtons.Clear();
             _configService.Current.UseCustomDeckLayout = false;
             _configService.Save();
             RefreshDeckEditorTabsList(selectIndex: 0);

@@ -105,7 +105,6 @@ public partial class MainWindow
         _configService.Save();
         RefreshAiMemoryPreview();
         string clearedMsg = SettingsTranslations.ForLanguage(_uiLanguage)["aiMemoryCleared"];
-        TxtAiConfigStatus.Text = clearedMsg;
         SetStatusBarMessage($"✓ {clearedMsg}");
     }
 
@@ -294,54 +293,52 @@ public partial class MainWindow
         UpdateAiConfigVisibility();
     }
 
-    private async void BtnFetchAiModels_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not System.Windows.Controls.Button btn || btn.Tag is not string provider)
-            return;
+    private async void BtnFetchAiModels_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Fetch AI Models", async () =>
+        {
+            if (sender is not System.Windows.Controls.Button btn || btn.Tag is not string provider)
+                return;
 
-        var text = SettingsTranslations.ForLanguage(_uiLanguage);
-        TxtAiConfigStatus.Text = text["aiFetchingModels"];
-        SetStatusBarMessage(text["aiFetchingModels"]);
+            var text = SettingsTranslations.ForLanguage(_uiLanguage);
+            SetStatusBarMessage(text["aiFetchingModels"]);
 
-        string endpoint = provider switch
-        {
-            "openai" => TxtAiOpenAiEndpoint.Text.Trim(),
-            "ollama" => TxtAiOllamaEndpoint.Text.Trim(),
-            _ => ""
-        };
-        string apiKey = provider switch
-        {
-            "gemini" => TxtAiGeminiApiKey.Text.Trim(),
-            "openai" => TxtAiOpenAiApiKey.Text.Trim(),
-            _ => ""
-        };
-        var targetCombo = provider switch
-        {
-            "gemini" => CmbAiGeminiModel,
-            "openai" => CmbAiOpenAiModel,
-            _ => CmbAiOllamaModel
-        };
+            string endpoint = provider switch
+            {
+                "openai" => TxtAiOpenAiEndpoint.Text.Trim(),
+                "ollama" => TxtAiOllamaEndpoint.Text.Trim(),
+                _ => ""
+            };
+            string apiKey = provider switch
+            {
+                "gemini" => TxtAiGeminiApiKey.Text.Trim(),
+                "openai" => TxtAiOpenAiApiKey.Text.Trim(),
+                _ => ""
+            };
+            var targetCombo = provider switch
+            {
+                "gemini" => CmbAiGeminiModel,
+                "openai" => CmbAiOpenAiModel,
+                _ => CmbAiOllamaModel
+            };
 
-        var (success, models, message) = await _aiCopilot.FetchAvailableModelsAsync(provider, endpoint, apiKey);
-        if (success && models.Count > 0)
-        {
-            string previous = (targetCombo.SelectedItem as string ?? "").Trim();
-            string chosen = models.FirstOrDefault(m => string.Equals(m, previous, StringComparison.OrdinalIgnoreCase))
-                ?? models[0];
-            targetCombo.ItemsSource = models;
-            targetCombo.SelectedItem = chosen;
-            SaveAiFieldsToConfig();
-            string loadedMsg = string.Format(text["aiModelsLoaded"], models.Count);
-            TxtAiConfigStatus.Text = loadedMsg;
-            SetStatusBarMessage($"✓ {loadedMsg}");
-        }
-        else
-        {
-            string errMsg = success ? text["aiModelsEmpty"] : message;
-            TxtAiConfigStatus.Text = errMsg;
-            SetStatusBarMessage($"⚠ {errMsg}");
-        }
-    }
+            var (success, models, message) = await _aiCopilot.FetchAvailableModelsAsync(provider, endpoint, apiKey);
+            if (success && models.Count > 0)
+            {
+                string previous = (targetCombo.SelectedItem as string ?? "").Trim();
+                string chosen = models.FirstOrDefault(m => string.Equals(m, previous, StringComparison.OrdinalIgnoreCase))
+                    ?? models[0];
+                targetCombo.ItemsSource = models;
+                targetCombo.SelectedItem = chosen;
+                SaveAiFieldsToConfig();
+                string loadedMsg = string.Format(text["aiModelsLoaded"], models.Count);
+                SetStatusBarMessage($"✓ {loadedMsg}");
+            }
+            else
+            {
+                string errMsg = success ? text["aiModelsEmpty"] : message;
+                SetStatusBarMessage($"⚠ {errMsg}");
+            }
+        });
 
     private void AiField_AutoSave(object sender, RoutedEventArgs e)
     {
@@ -362,16 +359,15 @@ public partial class MainWindow
         _configService.Save();
     }
 
-    private async void BtnTestAiConfig_Click(object sender, RoutedEventArgs e)
-    {
-        SaveAiFieldsToConfig();
-        string testingMsg = SettingsTranslations.ForLanguage(_uiLanguage)["aiTesting"];
-        TxtAiConfigStatus.Text = testingMsg;
-        SetStatusBarMessage(testingMsg);
-        var (_, reply) = await _aiCopilot.TestConnectionAsync();
-        TxtAiConfigStatus.Text = reply;
-        SetStatusBarMessage(reply);
-    }
+    private async void BtnTestAiConfig_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Test AI Config", async () =>
+        {
+            SaveAiFieldsToConfig();
+            string testingMsg = SettingsTranslations.ForLanguage(_uiLanguage)["aiTesting"];
+            SetStatusBarMessage(testingMsg);
+            var (_, reply) = await _aiCopilot.TestConnectionAsync();
+            SetStatusBarMessage(reply);
+        });
 
     private void TxtAiPrompt_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {

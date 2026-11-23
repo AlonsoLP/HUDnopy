@@ -67,16 +67,18 @@ public class WebServerService : IDisposable
     private sealed class PrecompressedAsset
     {
         public byte[] Raw { get; }
-        public byte[] Brotli { get; }
-        public byte[] Gzip { get; }
+        private readonly Lazy<byte[]> _brotli;
+        private readonly Lazy<byte[]> _gzip;
+        public byte[] Brotli => _brotli.Value;
+        public byte[] Gzip => _gzip.Value;
         public string ContentType { get; }
 
         public PrecompressedAsset(string text, string contentType)
         {
             ContentType = contentType;
             Raw = Encoding.UTF8.GetBytes(text);
-            Brotli = Compress(Raw, static s => new BrotliStream(s, CompressionLevel.Optimal, leaveOpen: true));
-            Gzip = Compress(Raw, static s => new GZipStream(s, CompressionLevel.Optimal, leaveOpen: true));
+            _brotli = new Lazy<byte[]>(() => Compress(Raw, static s => new BrotliStream(s, CompressionLevel.Optimal, leaveOpen: true)));
+            _gzip = new Lazy<byte[]>(() => Compress(Raw, static s => new GZipStream(s, CompressionLevel.Optimal, leaveOpen: true)));
         }
 
         private static byte[] Compress(byte[] input, Func<Stream, Stream> factory)
@@ -105,6 +107,14 @@ public class WebServerService : IDisposable
             return context.Response.Body.WriteAsync(Raw, context.RequestAborted).AsTask();
         }
     }
+
+    private static (PrecompressedAsset Html, PrecompressedAsset Css, PrecompressedAsset Js)? _cachedStaticAssets;
+
+    private static (PrecompressedAsset Html, PrecompressedAsset Css, PrecompressedAsset Js) GetOrLoadPrecompressedAssets() =>
+        _cachedStaticAssets ??= (
+            new PrecompressedAsset(WebUiDocument.Load(), "text/html; charset=utf-8"),
+            new PrecompressedAsset(WebUiDocument.LoadAsset("styles.css"), "text/css; charset=utf-8"),
+            new PrecompressedAsset(WebUiDocument.LoadAsset("app.js"), "application/javascript; charset=utf-8"));
 
     private WebApplication? _app;
     private CancellationTokenSource? _cts;
@@ -252,9 +262,7 @@ public class WebServerService : IDisposable
 
         try
         {
-            var webUiHtml = new PrecompressedAsset(WebUiDocument.Load(), "text/html; charset=utf-8");
-            var webUiCss = new PrecompressedAsset(WebUiDocument.LoadAsset("styles.css"), "text/css; charset=utf-8");
-            var webUiJs = new PrecompressedAsset(WebUiDocument.LoadAsset("app.js"), "application/javascript; charset=utf-8");
+            var (webUiHtml, webUiCss, webUiJs) = GetOrLoadPrecompressedAssets();
             string mode = _configService.Current.WebAccessMode;
             if (mode is not ("local" or "open" or "code" or "vpn"))
                 throw new InvalidOperationException("Modo de acceso web no válido.");
@@ -1142,7 +1150,6 @@ public class WebServerService : IDisposable
                 await _app.DisposeAsync();
                 _app = null;
             }
-            _certificate?.Dispose();
             _certificate = null;
             _accessControl = null;
             _activeUrls = [];
@@ -1185,7 +1192,6 @@ public class WebServerService : IDisposable
         finally
         {
             _app = null;
-            _certificate?.Dispose();
             _certificate = null;
             _accessControl = null;
             _activeUrls = [];

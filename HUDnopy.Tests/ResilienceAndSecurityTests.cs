@@ -471,7 +471,7 @@ internal static partial class Program
             // Touching file with identical content triggers watcher re-read, but SHA-256 deduplication must block a second POST
             File.SetLastWriteTimeUtc(marketPath, DateTime.UtcNow.AddSeconds(4));
             watcher.RefreshStateForTest();
-            bool duplicateSent = await eddnSignal.WaitAsync(TimeSpan.FromMilliseconds(350));
+            bool duplicateSent = await eddnSignal.WaitAsync(TimeSpan.FromMilliseconds(40));
             Assert(!duplicateSent, "EDDN SHA-256 deduplication failed: duplicate identical Market snapshot was sent twice.");
         }
         finally

@@ -94,17 +94,6 @@ internal static class ExobiologyPredictor
         return firstFootfall ? baseValue * 5 : baseValue;
     }
 
-    public static double CalculateSurfaceDistanceMeters(
-        double lat1Deg, double lon1Deg,
-        double lat2Deg, double lon2Deg,
-        double radiusMeters) =>
-        SurfaceNavigationService.CalculateDistanceMeters(lat1Deg, lon1Deg, lat2Deg, lon2Deg, radiusMeters);
-
-    public static double CalculateSurfaceBearingDegrees(
-        double lat1Deg, double lon1Deg,
-        double lat2Deg, double lon2Deg) =>
-        Math.Round(SurfaceNavigationService.CalculateBearingDegrees(lat1Deg, lon1Deg, lat2Deg, lon2Deg), 0) % 360;
-
     public static void UpdateBodyInsights(ExplorationBodyItem body)
     {
         body.Anomalies = DetectAnomalies(body);

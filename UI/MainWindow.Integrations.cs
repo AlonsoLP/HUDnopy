@@ -263,13 +263,7 @@ public partial class MainWindow
 
     private void RefreshCommunitySyncStatus()
     {
-        if (TxtCommunitySyncStatus is null)
-            return;
-        var text = SettingsTranslations.ForLanguage(_uiLanguage);
-        string status = string.IsNullOrWhiteSpace(_communitySync.LastSyncStatus)
-            ? (_configService.Current.EnableEddnUpload ? "EDDN" : "—")
-            : _communitySync.LastSyncStatus;
-        TxtCommunitySyncStatus.Text = string.Format(text["communitySyncStatus"], _communitySync.SyncedEventsCount, status);
+        RefreshServiceHealthUi();
     }
 
     // =========================================================================
@@ -300,22 +294,17 @@ public partial class MainWindow
 
     private void RefreshFrontierCapiUi()
     {
-        if (FrontierCapiOptionsPanel is null || TxtFrontierCapiStatus is null)
+        if (FrontierCapiOptionsPanel is null)
             return;
 
         bool enabled = ChkEnableFrontierCapi.IsChecked == true;
         FrontierCapiOptionsPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
-        TxtFrontierRedirectUri.Text = _frontierCapi.GetRedirectUri();
+        TxtFrontierRedirectUri.Text = FrontierCapiService.PublicRedirectUri;
 
-        var text = SettingsTranslations.ForLanguage(_uiLanguage);
         bool connected = _frontierCapi.IsConnected;
         BtnFrontierSyncNow.IsEnabled = connected;
         BtnFrontierDisconnect.IsEnabled = connected;
-
-        string baseState = connected ? text["frontierConnected"] : text["frontierDisconnected"];
-        TxtFrontierCapiStatus.Text = string.IsNullOrWhiteSpace(_frontierCapi.LastStatus)
-            ? baseState
-            : $"{baseState} · {_frontierCapi.LastStatus}";
+        RefreshServiceHealthUi();
     }
 
     private async void BtnFrontierAuthorize_Click(object sender, RoutedEventArgs e)
@@ -507,12 +496,9 @@ public partial class MainWindow
 
     private void RefreshV3IntegrationsStatus()
     {
-        if (TxtDiscordStatus is not null)
-            TxtDiscordStatus.Text = _discord.LastStatus;
-        if (TxtEliteBgsSettingsStatus is not null)
-            TxtEliteBgsSettingsStatus.Text = _eliteBgsWatchlist.LastStatus;
         if (TxtEliteBgsWatchlistStatus is not null)
             TxtEliteBgsWatchlistStatus.Text = _eliteBgsWatchlist.LastStatus;
+        RefreshServiceHealthUi();
     }
 
     private void ChkEdsmAnnounceFirstDiscovery_Click(object sender, RoutedEventArgs e)
@@ -543,8 +529,6 @@ public partial class MainWindow
             string summary = ok && profile is not null
                 ? $"✓ {profile.CommanderName} · {profile.SquadronName} ({profile.PreferredAllegiance})"
                 : msg;
-            if (TxtInaraReadStatus is not null)
-                TxtInaraReadStatus.Text = summary;
             SetStatusBarMessage(summary);
         });
 
@@ -552,8 +536,6 @@ public partial class MainWindow
         await RunUiAsync("Inara CGs", async () =>
         {
             var (_, _, msg) = await _communitySync.FetchInaraCommunityGoalsAsync();
-            if (TxtInaraReadStatus is not null)
-                TxtInaraReadStatus.Text = msg;
             SetStatusBarMessage(msg);
         });
 
@@ -927,20 +909,68 @@ public partial class MainWindow
     private async void BtnRefreshServicesHealth_Click(object sender, RoutedEventArgs e) =>
         await RunUiAsync("Services Health Refresh", async () =>
         {
-            var cfg = _configService.Current;
-            var tasks = new List<Task>();
-            if (cfg.EnableFrontierCapi && _frontierCapi.IsConnected)
-                tasks.Add(_frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked));
-            if (cfg.EnableEliteBgsWatchlist)
-                tasks.Add(_eliteBgsWatchlist.RefreshAsync());
-            if (cfg.EnableEdsmSync || cfg.EnableInaraSync)
-                tasks.Add(_communitySync.SyncCommanderAsync());
-            if (cfg.EnableDiscord)
-                tasks.Add(_discord.RefreshPresenceAsync());
-            if (tasks.Count > 0)
-                await Task.WhenAll(tasks);
-            RefreshServiceHealthUi(forceOverlay: true);
+            await TriggerStartupIntegrationsSyncAsync(forceOverlay: true);
         });
+
+    /// <summary>
+    /// Immediately synchronizes all enabled opt-in external integrations on application startup
+    /// (or when manually refreshed from the service health strip).
+    /// </summary>
+    private async Task TriggerStartupIntegrationsSyncAsync(bool forceOverlay = false)
+    {
+        if (HttpClientHeaderDefaults.TestHttpHandlerFactory is not null && !forceOverlay)
+            return;
+
+        var cfg = _configService.Current;
+        var s = _fileWatcher.State;
+        var tasks = new List<Task>();
+
+        if (cfg.EnableFrontierCapi && _frontierCapi.IsConnected)
+            tasks.Add(_frontierCapi.SyncAllAsync(includeDockedEndpoints: s.Docked));
+
+        if (cfg.EnableEliteBgsWatchlist)
+            tasks.Add(_eliteBgsWatchlist.RefreshAsync());
+
+        if (cfg.EnableEdsmSync && !string.IsNullOrWhiteSpace(s.CurrentSystem) && s.CurrentSystem != "---")
+        {
+            tasks.Add(_communitySync.FetchEdsmDiscoveryAndFactionsAsync(s.CurrentSystem));
+            tasks.Add(_communitySync.FetchEdsmSystemIntelAsync(s.CurrentSystem));
+        }
+
+        if (cfg.EnableInaraSync)
+        {
+            tasks.Add(_communitySync.FetchInaraCommanderProfileAsync());
+            if (s.CommunityGoals.Count == 0)
+                tasks.Add(_communitySync.FetchInaraCommunityGoalsAsync());
+            if (!string.IsNullOrWhiteSpace(cfg.InaraApiKey))
+                tasks.Add(_communitySync.SyncCommanderAsync());
+        }
+
+        if (cfg.EnableEdastroDssa)
+            tasks.Add(_edastroCanonn.GetNearestDssaCarriersAsync(s.StarPos));
+
+        if (cfg.EnableDiscord)
+            tasks.Add(_discord.RefreshPresenceAsync());
+
+        tasks.Add(_galnetService.RefreshAsync(_uiLanguage));
+
+        if (!forceOverlay && cfg.EnableAutoUpdateCheck)
+            tasks.Add(CheckForUpdatesInBackgroundAsync(manualTrigger: false));
+
+        if (tasks.Count > 0)
+        {
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch
+            {
+                // Individual service tasks handle and report their own status
+            }
+        }
+
+        RefreshServiceHealthUi(forceOverlay: forceOverlay);
+    }
 
     private void BtnExitApp_Click(object sender, RoutedEventArgs e)
     {

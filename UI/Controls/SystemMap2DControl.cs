@@ -332,52 +332,12 @@ public sealed class SystemMap2DControl : Border
                 Canvas.SetTop(innerRing, n.Y - innerRing.Height / 2);
                 _canvas.Children.Add(innerRing);
             }
-
-            var label = new TextBlock
-            {
-                Text = n.ShortLabel,
-                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(226, 232, 240)),
-                FontSize = 10,
-                FontWeight = FontWeights.SemiBold,
-                Opacity = opacity,
-                Cursor = System.Windows.Input.Cursors.Hand
-            };
-            label.MouseLeftButtonUp += (_, _) => ShowBodyDetail(captured);
-            Canvas.SetLeft(label, n.X - Math.Min(28, n.ShortLabel.Length * 3));
-            Canvas.SetTop(label, n.Y + n.RadiusPx + 3);
-            _canvas.Children.Add(label);
-
-            if (!string.IsNullOrEmpty(n.BadgeText))
-            {
-                var badge = new TextBlock
-                {
-                    Text = n.BadgeText,
-                    Foreground = stroke,
-                    FontSize = 9,
-                    FontWeight = FontWeights.Bold
-                };
-                Canvas.SetLeft(badge, n.X + n.RadiusPx - 2);
-                Canvas.SetTop(badge, n.Y - n.RadiusPx - 8);
-                _canvas.Children.Add(badge);
-            }
         }
     }
 
     private void ShowBodyDetail(ExplorationBodyItem b)
     {
-        double gravG = b.SurfaceGravity.HasValue ? b.SurfaceGravity.Value / 9.80665 : 0;
-        _detailTitle.Text = $"{b.BodyName} — {b.BodyType} [{b.DataSource}]";
-        var parts = new List<string>();
-        if (b.DistanceFromArrivalLs.HasValue) parts.Add($"{b.DistanceFromArrivalLs.Value:N0} LS");
-        if (b.SurfaceGravity.HasValue) parts.Add($"{gravG:0.00} G");
-        if (b.Landable == true) parts.Add("Landable");
-        if (b.BiologicalSignalCount > 0) parts.Add($"{b.BiologicalSignalCount} Bio");
-        if (b.EstimatedCredits is > 0) parts.Add($"Carto ~{b.EstimatedCredits.Value:N0} CR");
-        if (b.EstimatedExobiologyCredits is > 0) parts.Add($"Exo ~{b.EstimatedExobiologyCredits.Value:N0} CR");
-        if (b.WasMapped == true) parts.Add("DSS Mapped");
-        if (b.Materials.Count > 0) parts.Add($"Mats: {b.MaterialsDisplay}");
-        _detailMetrics.Text = string.Join(" · ", parts);
-        _detailCard.Visibility = Visibility.Visible;
+        _detailCard.Visibility = Visibility.Collapsed;
         BodySelected?.Invoke(b);
     }
 
