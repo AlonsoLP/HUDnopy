@@ -46,6 +46,7 @@ public partial class MainWindow
         UpdateWebUrlListHeight(urls.Length);
 
         BtnOpenWebHeader.IsEnabled = _webServer.IsRunning;
+        RefreshWebCertificateTrustUi();
         BtnOpenWebHeader.Visibility = _configService.Current.AutoStartWebServer ? Visibility.Visible : Visibility.Collapsed;
         WebServerOptionsPanel.Visibility = _configService.Current.AutoStartWebServer ? Visibility.Visible : Visibility.Collapsed;
         BtnOpenWebConfig.IsEnabled = _webServer.IsRunning;
@@ -531,8 +532,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             AppDiagnosticsLogger.Error("UI", $"Unhandled error in {actionName}.", ex);
-            if (TxtStatusBarLeft is not null)
-                TxtStatusBarLeft.Text = $"⚠ {actionName}: {ex.Message}";
+            SetStatusBarMessage($"⚠ {actionName}: {ex.Message}");
         }
     }
 
@@ -540,11 +540,12 @@ public partial class MainWindow
         await RunUiAsync("Inara Profile", async () =>
         {
             var (ok, profile, msg) = await _communitySync.FetchInaraCommanderProfileAsync();
+            string summary = ok && profile is not null
+                ? $"✓ {profile.CommanderName} · {profile.SquadronName} ({profile.PreferredAllegiance})"
+                : msg;
             if (TxtInaraReadStatus is not null)
-                TxtInaraReadStatus.Text = ok && profile is not null
-                    ? $"{profile.CommanderName} · {profile.SquadronName} ({profile.PreferredAllegiance})"
-                    : msg;
-            TxtStatusBarLeft.Text = msg;
+                TxtInaraReadStatus.Text = summary;
+            SetStatusBarMessage(summary);
         });
 
     private async void BtnFetchInaraCgs_Click(object sender, RoutedEventArgs e) =>
@@ -553,7 +554,7 @@ public partial class MainWindow
             var (_, _, msg) = await _communitySync.FetchInaraCommunityGoalsAsync();
             if (TxtInaraReadStatus is not null)
                 TxtInaraReadStatus.Text = msg;
-            TxtStatusBarLeft.Text = msg;
+            SetStatusBarMessage(msg);
         });
 
     private void BtnOpenInaraCommanderProfile_Click(object sender, RoutedEventArgs e)
@@ -686,6 +687,8 @@ public partial class MainWindow
             }
         });
 
+    private sealed record SupportCarrierRow(string Callsign, string Name, string SystemName, string DistanceDisplay, string Details, string Source);
+
     private async void BtnSearchSpanshCarriers_Click(object sender, RoutedEventArgs e) =>
         await RunUiAsync("Spansh Carriers", async () =>
         {
@@ -696,10 +699,13 @@ public partial class MainWindow
             var (ok, results, msg) = await _spanshSystemDataService.SearchFleetCarriersAsync(service, st.CurrentSystem, st.StarPos);
             if (TxtSpanshDeepSearchStatus is not null)
                 TxtSpanshDeepSearchStatus.Text = msg;
-            if (GridSpanshCarriersSearch is not null)
+            if (GridSupportCarriers is not null)
             {
-                GridSpanshCarriersSearch.ItemsSource = ok && results.Count > 0 ? results : null;
-                GridSpanshCarriersSearch.Visibility = ok && results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                var rows = ok && results.Count > 0
+                    ? results.Select(static r => new SupportCarrierRow(r.Callsign, "—", r.SystemName, r.DistanceDisplay, r.ServicesSummary, "Spansh")).ToList()
+                    : null;
+                GridSupportCarriers.ItemsSource = rows;
+                GridSupportCarriers.Visibility = rows is { Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
             }
         });
 
@@ -711,10 +717,13 @@ public partial class MainWindow
             var (ok, carriers, msg) = await _edastroCanonn.GetNearestDssaCarriersAsync();
             if (TxtSpanshDeepSearchStatus is not null)
                 TxtSpanshDeepSearchStatus.Text = msg;
-            if (GridNearestDssa is not null)
+            if (GridSupportCarriers is not null)
             {
-                GridNearestDssa.ItemsSource = ok && carriers.Count > 0 ? carriers : null;
-                GridNearestDssa.Visibility = ok && carriers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                var rows = ok && carriers.Count > 0
+                    ? carriers.Select(static c => new SupportCarrierRow(c.Callsign, c.Name, c.SystemName, c.DistanceDisplay, c.Region, "DSSA")).ToList()
+                    : null;
+                GridSupportCarriers.ItemsSource = rows;
+                GridSupportCarriers.Visibility = rows is { Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
             }
         });
 
@@ -784,6 +793,154 @@ public partial class MainWindow
             _alertSpeechService.SpeakCustomText(msg);
         }
     }
+
+    private string _lastServiceHealthSignature = "";
+
+    private void RefreshServiceHealthUi(bool forceOverlay = false)
+    {
+        if (ServiceHealthStrip is null)
+            return;
+
+        var items = ExternalServiceHealthEvaluator.Build(
+            _configService.Current,
+            _fileWatcher.State,
+            _spanshSystemDataService,
+            _communitySync,
+            _frontierCapi,
+            _eliteBgsWatchlist,
+            _ardentMarket,
+            _edastroCanonn,
+            _discord);
+
+        string sig = $"{_desktopFontScale:0.00}|" + string.Join("|", items.Select(static i => $"{i.Id}:{i.Enabled}:{i.Status}:{i.Detail}"));
+        bool overlayOpen = ServiceHealthOverlay?.Visibility == Visibility.Visible;
+        if (!forceOverlay && string.Equals(sig, _lastServiceHealthSignature, StringComparison.Ordinal))
+            return;
+        _lastServiceHealthSignature = sig;
+        double scale = Math.Clamp(_desktopFontScale, 0.5, 2.0);
+
+        System.Windows.Media.Brush LedBrush(string status) => status switch
+        {
+            "ok" => (System.Windows.Media.Brush)FindResource("HudOkBrush"),
+            "error" => (System.Windows.Media.Brush)FindResource("HudDangerBrush"),
+            "warn" => (System.Windows.Media.Brush)FindResource("HudSecondaryBrush"),
+            _ => (System.Windows.Media.Brush)FindResource("HudMutedBrush")
+        };
+
+        ServiceHealthStrip.Children.Clear();
+        var enabled = items.Where(static i => i.Enabled).ToList();
+        if (enabled.Count == 0)
+        {
+            ServiceHealthStrip.Children.Add(new TextBlock
+            {
+                Text = "● APIs: OFF",
+                Foreground = (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
+                FontSize = 10.5,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+        }
+        else
+        {
+            foreach (var item in enabled)
+            {
+                var pill = new Border
+                {
+                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 255, 255)),
+                    BorderBrush = LedBrush(item.Status),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(3),
+                    Padding = new Thickness(6, 1, 6, 1),
+                    Margin = new Thickness(0, 0, 5, 0),
+                    ToolTip = $"{item.Name}: {item.Detail}"
+                };
+                var sp = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+                sp.Children.Add(new TextBlock
+                {
+                    Text = "● ",
+                    Foreground = LedBrush(item.Status),
+                    FontSize = 9.5,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                sp.Children.Add(new TextBlock
+                {
+                    Text = item.Name,
+                    Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"),
+                    FontSize = 10,
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                pill.Child = sp;
+                ServiceHealthStrip.Children.Add(pill);
+            }
+        }
+
+        if ((overlayOpen || forceOverlay) && ServiceHealthCardsGrid is not null)
+        {
+            ServiceHealthCardsGrid.Children.Clear();
+            foreach (var item in items)
+            {
+                var card = new Border
+                {
+                    Width = 225 * Math.Max(1.0, scale),
+                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(10, 14, 20)),
+                    BorderBrush = item.Enabled ? LedBrush(item.Status) : (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(9, 7, 9, 7),
+                    Margin = new Thickness(4),
+                    Opacity = item.Enabled ? 1.0 : 0.55
+                };
+                var stack = new StackPanel();
+                var header = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+                header.Children.Add(new TextBlock { Text = "● ", Foreground = LedBrush(item.Status), FontSize = 11 * scale, VerticalAlignment = VerticalAlignment.Center });
+                header.Children.Add(new TextBlock { Text = item.Name, Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"), FontWeight = FontWeights.Bold, FontSize = 11.5 * scale });
+                stack.Children.Add(header);
+                stack.Children.Add(new TextBlock
+                {
+                    Text = item.Detail,
+                    Foreground = (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
+                    FontSize = 10.5 * scale,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 3, 0, 0)
+                });
+                card.Child = stack;
+                ServiceHealthCardsGrid.Children.Add(card);
+            }
+        }
+    }
+
+    private void ServiceHealthStrip_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (ServiceHealthOverlay is null)
+            return;
+        bool show = ServiceHealthOverlay.Visibility != Visibility.Visible;
+        ServiceHealthOverlay.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (show)
+            RefreshServiceHealthUi(forceOverlay: true);
+    }
+
+    private void CloseServiceHealthOverlay_Click(object sender, RoutedEventArgs e)
+    {
+        if (ServiceHealthOverlay is not null)
+            ServiceHealthOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private async void BtnRefreshServicesHealth_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Services Health Refresh", async () =>
+        {
+            var cfg = _configService.Current;
+            var tasks = new List<Task>();
+            if (cfg.EnableFrontierCapi && _frontierCapi.IsConnected)
+                tasks.Add(_frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked));
+            if (cfg.EnableEliteBgsWatchlist)
+                tasks.Add(_eliteBgsWatchlist.RefreshAsync());
+            if (cfg.EnableEdsmSync || cfg.EnableInaraSync)
+                tasks.Add(_communitySync.SyncCommanderAsync());
+            if (cfg.EnableDiscord)
+                tasks.Add(_discord.RefreshPresenceAsync());
+            if (tasks.Count > 0)
+                await Task.WhenAll(tasks);
+            RefreshServiceHealthUi(forceOverlay: true);
+        });
 
     private void BtnExitApp_Click(object sender, RoutedEventArgs e)
     {

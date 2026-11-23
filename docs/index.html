@@ -30,25 +30,20 @@
         <div class="swatch" style="background:#00E676;color:#00E676" onclick="setHudTheme('#00E676','0,230,118','#69F0AE',this)" title="Thargoid Bio-Green"></div>
       </div>
       <select class="lang-select" id="langSelect" onchange="setLang(this.value)" aria-label="Select Language">
-        <option value="en">🌐 EN · ENGLISH</option>
-        <option value="es">🌐 ES · ESPAÑOL</option>
-        <option value="fr">🌐 FR · FRANÇAIS</option>
-        <option value="de">🌐 DE · DEUTSCH</option>
-        <option value="ru">🌐 RU · РУССКИЙ</option>
-        <option value="pt">🌐 PT · PORTUGUÊS</option>
+        <option value="en">🇬🇧 English</option>
+        <option value="es">🇪🇸 Español</option>
+        <option value="fr">🇫🇷 Français</option>
+        <option value="de">🇩🇪 Deutsch</option>
+        <option value="ru">🇷🇺 Русский</option>
+        <option value="pt">🇵🇹 Português</option>
       </select>
-      <a href="https://github.com/AlonsoLP/HUDnopy/wiki" target="_blank" rel="noopener" class="lang-btn" data-i18n="navWiki">WIKI / DOCS ↗</a>
     </div>
   </header>
 
   <div class="cockpit-wrapper">
-    <!-- Hero + Interactive Cockpit MFD Preview -->
+    <!-- Hero + Realistic Auto-Rotating HUDnopy App Preview -->
     <section class="hero">
       <div>
-        <div class="eyebrow">
-          <span class="status-dot"></span>
-          <span id="releaseBadgeText">RELEASE v0.4.0 AVAILABLE · WINDOWS x64</span>
-        </div>
         <h1 data-i18n="heroTitle">
           YOUR SHIP'S SECOND COCKPIT <span>&amp; VOICE AI COPILOT</span>
         </h1>
@@ -63,115 +58,215 @@
           <a id="btnDownloadZip" href="https://github.com/AlonsoLP/HUDnopy/releases/latest/download/HUDnopy-v0.4.0-win-x64-portable.zip" class="btn-hud btn-secondary">
             <span>📦</span> <span data-i18n="btnPortable">PORTABLE (.ZIP)</span>
           </a>
-          <a href="https://github.com/AlonsoLP/HUDnopy/wiki" target="_blank" rel="noopener" class="btn-hud btn-ghost">
-            <span>📖</span> <span data-i18n="btnWiki">OFFICIAL WIKI</span>
-          </a>
-        </div>
-
-        <div class="release-meta">
-          <span>✔ 100% Free &amp; Open Source (GPL-3.0)</span>
-          <span>✔ Self-Contained (.NET 10 Included)</span>
-          <span>✔ EN · ES · FR · DE · RU · PT</span>
         </div>
       </div>
 
-      <!-- Interactive MFD Preview -->
-      <div class="mfd-frame">
-        <div class="mfd-header">
-          <span>◈ HUDNOPY LIVE COCKPIT MFD SIMULATOR</span>
-          <span>CMDR ALONSOLP · ANACONDA</span>
-        </div>
-        <div class="mfd-tabs">
-          <button class="mfd-tab active" onclick="switchMfd(0, this)">[01] TELEMETRY &amp; PAD</button>
-          <button class="mfd-tab" onclick="switchMfd(1, this)">[02] COVAS AI &amp; VOICE</button>
-          <button class="mfd-tab" onclick="switchMfd(2, this)">[03] NAV &amp; COMPASS</button>
-          <button class="mfd-tab" onclick="switchMfd(3, this)">[04] WISHLIST &amp; MFD</button>
+      <!-- Realistic Auto-Rotating HUDnopy App Window Preview -->
+      <div class="mfd-frame" id="hudPreviewFrame">
+        <!-- App Title / Telemetry Header -->
+        <div class="app-sim-header">
+          <div class="app-sim-brand">
+            <img src="HUDnopy.png" alt="HUDnopy" />
+            <div>
+              <div class="app-sim-title">HUDNOPY</div>
+              <div class="app-sim-sub">CMDR ALONSOLP · ANACONDA [L] · SHINRARTA DEZHRA</div>
+            </div>
+          </div>
+          <div class="app-sim-actions">
+            <span class="app-sim-pill live">● LIVE</span>
+            <span class="app-sim-icon" title="Overlay">🪟</span>
+            <span class="app-sim-icon" title="Web HUD">🌐</span>
+            <span class="app-sim-icon" title="TTS">🔊</span>
+          </div>
         </div>
 
-        <!-- Screen 1: Telemetry & Landing Pad -->
+        <!-- Real-style Navigation Tabs -->
+        <div class="mfd-tabs mfd-tabs-5">
+          <button class="mfd-tab active" onclick="switchMfd(0, this, true)">🚀 CABINA</button>
+          <button class="mfd-tab" onclick="switchMfd(1, this, true)">🧭 MAPA 2D</button>
+          <button class="mfd-tab" onclick="switchMfd(2, this, true)">🎛 BOTONERA</button>
+          <button class="mfd-tab" onclick="switchMfd(3, this, true)">💬 COVAS &amp; RADIO</button>
+          <button class="mfd-tab" onclick="switchMfd(4, this, true)">⚙ OPERACIONES</button>
+        </div>
+
+        <!-- Auto-rotate progress bar -->
+        <div class="mfd-progress-track"><div class="mfd-progress-bar" id="mfdProgressBar"></div></div>
+
+        <!-- Panel 1: Cockpit Telemetry, PIPs & Landing Pad -->
         <div class="mfd-screen active" id="mfd-0">
           <div class="mfd-row">
             <div class="mfd-box">
-              <div class="mfd-box-title"><span>DOCKING GRANTED · JAMESON MEMORIAL</span><span>PAD 14 [L]</span></div>
+              <div class="mfd-box-title"><span>ESTADO DE LA NAVE</span><span style="color:var(--hud-ok)">SHIELDS ON</span></div>
+              <div class="sim-metric-line"><span>CASCO</span><strong>98%</strong></div>
+              <div class="hud-bar"><div class="hud-bar-fill" style="width:98%"></div></div>
+              <div class="sim-metric-line"><span>COMBUSTIBLE</span><strong>28.4 / 32.0 t</strong></div>
+              <div class="hud-bar"><div class="hud-bar-fill" style="width:89%"></div></div>
+              <div class="sim-pips-grid">
+                <div class="sim-pip-col"><span>SYS</span><div class="sim-pip-bars"><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+                <div class="sim-pip-col"><span>ENG</span><div class="sim-pip-bars"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+                <div class="sim-pip-col"><span>WEP</span><div class="sim-pip-bars"><i></i><i></i><i></i><i></i></div></div>
+              </div>
+            </div>
+            <div class="mfd-box">
+              <div class="mfd-box-title"><span>JAMESON MEMORIAL</span><span>PAD 14 [L]</span></div>
               <div class="pad-radar">
                 <div class="pad-circle">
                   <span style="font-weight:900;font-size:1.1rem;color:var(--hud-accent)">14</span>
                   <div class="pad-dot"></div>
                 </div>
-                <div style="font-size:0.78rem;line-height:1.5">
-                  <div><strong style="color:var(--hud-ok)">CLOCK:</strong> 02:00 (GREEN LIGHTS RIGHT)</div>
-                  <div><strong style="color:var(--hud-accent)">DEPTH:</strong> FAR ROW [░░█]</div>
-                  <div style="color:var(--hud-muted)">🔊 TTS: "Pad 14, 2 o'clock, far row"</div>
+                <div style="font-size:0.74rem;line-height:1.5">
+                  <div><strong style="color:var(--hud-ok)">RELOJ:</strong> 02:00 (DERECHA)</div>
+                  <div><strong style="color:var(--hud-accent)">FONDO:</strong> FILA LEJANA [░░█]</div>
+                  <div style="color:var(--hud-muted)">🔊 "Plataforma 14, a las dos"</div>
+                </div>
+              </div>
+              <div class="sim-badges-row">
+                <span class="sim-chip on">TREN</span>
+                <span class="sim-chip">BODEGA</span>
+                <span class="sim-chip on">FA ON</span>
+                <span class="sim-chip">ANÁLISIS</span>
+              </div>
+            </div>
+          </div>
+          <div class="mfd-box">
+            <div class="mfd-box-title"><span>GALAXIA · BGS TICK &amp; SERVIDORES</span><span style="color:var(--hud-ok)">● ONLINE</span></div>
+            <div style="font-size:0.75rem;color:#D5DCE6;line-height:1.45">
+              BGS TICK: <strong>14:12 UTC</strong> · SISTEMA: <strong>SHINRARTA DEZHRA</strong> (Pilots' Federation · Boom) · OVERLAY: <strong>CTRL+ALT+O</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 2: Interactive 2D System Map & Exobiology Radar -->
+        <div class="mfd-screen" id="mfd-1">
+          <div class="mfd-box" style="margin-bottom:10px">
+            <div class="mfd-box-title"><span>MAPA DE SISTEMA 2D · COLONIA</span><span>EST. +95.4M CR</span></div>
+            <div class="sim-sysmap">
+              <div class="sim-star" title="K-Class Star"></div>
+              <div class="sim-orbit-line"></div>
+              <div class="sim-body hmc" title="HMC"><span>1</span></div>
+              <div class="sim-body ww" title="Terraformable Water World"><span>2 💎</span></div>
+              <div class="sim-body ringed" title="Ringed Gas Giant"><span>3</span></div>
+              <div class="sim-moon-group">
+                <div class="sim-body exo" title="Stratum Tectonicas"><span>3a 🧬</span></div>
+                <div class="sim-body rocky" title="Rocky"><span>3b</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="mfd-row" style="margin-bottom:0">
+            <div class="mfd-box">
+              <div class="mfd-box-title"><span>RADAR EXOBIOLOGÍA 2D</span><span style="color:var(--hud-ok)">800m OK</span></div>
+              <div class="sim-exo-radar">
+                <div class="sim-exo-ring">
+                  <span class="sim-exo-dot d1"></span>
+                  <span class="sim-exo-dot d2"></span>
+                  <span class="sim-exo-ship">▲</span>
+                </div>
+                <div style="font-size:0.73rem;line-height:1.45">
+                  <div><strong>Stratum Tectonicas</strong></div>
+                  <div style="color:var(--hud-ok)">Muestras: 2 / 3 · +19.0M</div>
+                  <div style="color:var(--hud-muted)">Rumbo 142° SE · 840m</div>
                 </div>
               </div>
             </div>
             <div class="mfd-box">
-              <div class="mfd-box-title"><span>SHIP SYSTEMS &amp; RESOURCES</span><span>EDSY / CORIOLIS ↗</span></div>
-              <div style="font-size:0.75rem">HULL INTEGRITY: 98% · SHIELDS: ONLINE</div>
-              <div class="hud-bar"><div class="hud-bar-fill" style="width:98%"></div></div>
-              <div style="font-size:0.75rem">FUEL MAIN: 28.4 / 32.0 T · PIPS: [SYS 2 | ENG 4 | WEP 0]</div>
-              <div class="hud-bar"><div class="hud-bar-fill" style="width:88%"></div></div>
+              <div class="mfd-box-title"><span>BRÚJULA DE SUPERFICIE</span><span>0.42 G</span></div>
+              <div class="compass-tape" style="margin:4px 0 6px;padding:6px;font-size:0.74rem">
+                125° | [ ▲ 142° SE ] | 155°
+              </div>
+              <div style="font-size:0.72rem;color:#C9D2E0">LAT -14.82° · LON 68.14° · ALT 180m</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 3: Custom Touch Control Deck & Favorites -->
+        <div class="mfd-screen" id="mfd-2">
+          <div class="sim-deck-tabs">
+            <span class="sim-deck-tab active">★ FAVORITOS</span>
+            <span class="sim-deck-tab">🚀 NAVE</span>
+            <span class="sim-deck-tab">⚔ COMBATE</span>
+            <span class="sim-deck-tab">🔭 EXPLORACIÓN</span>
+          </div>
+          <div class="sim-deck-grid">
+            <div class="sim-deck-btn wide active-state">
+              <span class="sim-deck-ico">🚀</span>
+              <span class="sim-deck-lbl">HIPERSALTO / FSD</span>
+              <span class="sim-deck-key">[J] · 2.0×</span>
+            </div>
+            <div class="sim-deck-btn">
+              <span class="sim-deck-ico">🛬</span>
+              <span class="sim-deck-lbl">TREN ATERRIZAJE</span>
+              <span class="sim-deck-key">[L]</span>
+            </div>
+            <div class="sim-deck-btn warn-confirm">
+              <span class="sim-deck-ico">⚠ 🔥</span>
+              <span class="sim-deck-lbl">MACRO EVASIÓN</span>
+              <span class="sim-deck-key">3 PASOS · DOBLE TOQUE</span>
+            </div>
+            <div class="sim-deck-btn">
+              <span class="sim-deck-ico">💡</span>
+              <span class="sim-deck-lbl">VISIÓN NOCTURNA</span>
+              <span class="sim-deck-key">[N]</span>
+            </div>
+            <div class="sim-deck-btn">
+              <span class="sim-deck-ico">📡</span>
+              <span class="sim-deck-lbl">ESCÁNER FSS</span>
+              <span class="sim-deck-key">[F5]</span>
+            </div>
+            <div class="sim-deck-btn cyan">
+              <span class="sim-deck-ico">📦</span>
+              <span class="sim-deck-lbl">RECOLECTOR</span>
+              <span class="sim-deck-key">[HOME]</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 4: COVAS AI Copilot & Cockpit Radio -->
+        <div class="mfd-screen" id="mfd-3">
+          <div class="covas-chat" style="margin-bottom:10px">
+            <div class="chat-line"><strong>[17:04] CMDR (🎤 Whisper Offline · 180ms):</strong> "¿Qué materiales G5 tengo al 100%?"</div>
+            <div class="chat-line covas">
+              <strong>[17:04] COVAS ⚡ (SSE · Piper Neural TTS):</strong><br/>
+              "Comandante, tienes Aislantes Farmacéuticos (100/100) y Blindaje Imperial (100/100) al máximo. Recomiendo intercambio en Jameson Memorial."
             </div>
           </div>
           <div class="mfd-box">
-            <div class="mfd-box-title"><span>GALAXY &amp; BGS LIVE STATUS</span><span>SERVER: OK (GREEN)</span></div>
-            <div style="font-size:0.77rem;color:#D5DCE6;line-height:1.5">
-              LAST BGS TICK: <strong>14:12 UTC (2h ago)</strong> · SYSTEM: <strong>SHINRARTA DEZHRA</strong> (Pilots' Federation · Boom) · CONTEXT MINI-HUD: <strong>ACTIVE 📌</strong>
+            <div class="mfd-box-title"><span>📻 COCKPIT RADIO · ACTIVIDAD</span><span style="color:var(--hud-ok)">▶ PLAYING</span></div>
+            <div class="sim-radio-row">
+              <span class="sim-radio-station">Hutton Orbital Radio</span>
+              <span class="sim-chip on">AUTO-DUCK 25%</span>
+              <div class="sim-eq"><i></i><i></i><i></i><i></i><i></i></div>
             </div>
           </div>
         </div>
 
-        <!-- Screen 2: COVAS AI & Piper TTS -->
-        <div class="mfd-screen" id="mfd-1">
-          <div class="covas-chat">
-            <div class="chat-line"><strong>[17:04:11] CMDR:</strong> "COVAS, Evasión máxima!"</div>
-            <div class="chat-line macro"><strong>[17:04:11] ⚡ ZERO-LLM VOICE MACRO (0 ms):</strong> Boost ➔ Chaff ➔ Heatsink ➔ Supercruise</div>
-            <div class="chat-line"><strong>[17:04:28] CMDR:</strong> "Which Grade 5 materials do I have at 100% capacity, and what ships are sold here?"</div>
-            <div class="chat-line covas">
-              <strong>[17:04:29] COVAS ⚡ (SSE Stream · 0.6s TTFT · Piper Neural TTS):</strong><br/>
-              "Commander, your Grade 5 Pharmaceutical Isolators (100/100) and Imperial Shielding (100/100) are full and ready for a Material Trader. At Jameson Memorial (EDSM Shipyard synced), 38 ships are in stock including Anaconda, Python Mk II, and Mandalay."
-            </div>
-          </div>
-        </div>
-
-        <!-- Screen 3: Navigation, Surface Compass & Carrier -->
-        <div class="mfd-screen" id="mfd-2">
-          <div class="compass-tape">
-            ◀◀  110°  |  125°  |  [ ▲ 142° SE · 640m TO LAST EXO SAMPLE ]  |  155°  |  170°
-          </div>
-          <div class="mfd-row">
-            <div class="mfd-box">
-              <div class="mfd-box-title"><span>EXOBIOLOGY &amp; DSS PREDICTOR</span><span>+95.0M CR</span></div>
-              <div style="font-size:0.76rem;line-height:1.55">
-                <div>• <strong>Colonia 3 A:</strong> Stratum Tectonicas (2/3 Samples · 800m diversity OK)</div>
-                <div>• <strong>Unmapped High-Value:</strong> Colonia 4 (Terraformable WW · 1,240 LS)</div>
-              </div>
-            </div>
-            <div class="mfd-box">
-              <div class="mfd-box-title"><span>FLEET CARRIER JUMP &amp; TRITIUM</span><span>T-02:58 🔒</span></div>
-              <div style="font-size:0.76rem;line-height:1.55">
-                <div>• <strong>Lockdown Active:</strong> Jumping to <em>hip 58832</em></div>
-                <div>• <strong>Tritium Route (2,500 LY):</strong> 412 t required · Upkeep Runway: 18.4 months</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Screen 4: Wishlist, Cargo & Web MFD -->
-        <div class="mfd-screen" id="mfd-3">
-          <table class="mini-table">
+        <!-- Panel 5: Operations, Engineering Wishlist & Fleet Carrier -->
+        <div class="mfd-screen" id="mfd-4">
+          <table class="mini-table" style="margin-bottom:10px">
             <thead>
-              <tr><th>BLUEPRINT / MODULE</th><th>STATUS / MISSING</th><th>ACTION</th></tr>
+              <tr><th>PLANO / MÓDULO</th><th>ESTADO MATERIALES</th><th>ACCIONES</th></tr>
             </thead>
             <tbody>
-              <tr><td>5A Frame Shift Drive (SCO) — G5 Increased Range</td><td style="color:var(--hud-warn)">Missing: 2x Datamined Wake Exceptions</td><td>Spansh Trader ↗</td></tr>
-              <tr><td>Class 4 Plasma Accelerator (Fixed) — G5 Efficient</td><td style="color:var(--hud-ok)">100% Ready (All Materials Owned)</td><td>Pinned ✔</td></tr>
-              <tr><td>Cargo Hold: 128t Gold + 64t Titanium</td><td style="color:var(--hud-ok)">Docked Profit: +6.4M CR · Colonisation Match</td><td>Market Sync ✔</td></tr>
+              <tr><td>5A Frame Shift Drive (SCO) G5</td><td style="color:var(--hud-warn)">Faltan: 2x Wake Exceptions</td><td>Spansh ↗</td></tr>
+              <tr><td>4A Plasma Accelerator G5</td><td style="color:var(--hud-ok)">100% Listo (En inventario)</td><td>Fijado ✔</td></tr>
+              <tr><td>Bodega: 128t Oro · 64t Titanio</td><td style="color:var(--hud-ok)">Beneficio: +6.4M CR</td><td>EDSY ↗</td></tr>
             </tbody>
           </table>
-          <div class="mfd-box" style="margin-top:12px">
-            <div class="mfd-box-title"><span>HTTPS WEB MFD &amp; .BINDS CONTROL DECK</span><span>LIVE SYNC ●</span></div>
-            <div style="font-size:0.76rem">Pair any tablet or phone via instant QR code over HTTPS with auto-context Ship / SRV / On-Foot / DSS / SLF control deck buttons.</div>
+          <div class="mfd-box">
+            <div class="mfd-box-title"><span>FLEET CARRIER · SALTO &amp; TRITIO</span><span>T-02:58 🔒</span></div>
+            <div style="font-size:0.74rem;color:#D5DCE6">
+              Destino: <strong>HIP 58832</strong> · Consumo ruta: 412t Tritio · Autonomía mantenimiento: <strong>18.4 meses</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-style Bottom Status Bar -->
+        <div class="app-sim-statusbar">
+          <span class="app-sim-status-msg" id="simStatusMsg">✓ Telemetría sincronizada · Web MFD HTTPS activo (PWA)</span>
+          <div class="app-sim-leds">
+            <span class="sim-led ok"><i></i>EDDN</span>
+            <span class="sim-led ok"><i></i>EDSM</span>
+            <span class="sim-led ok"><i></i>Inara</span>
+            <span class="sim-led ok"><i></i>cAPI</span>
           </div>
         </div>
       </div>
@@ -276,12 +371,7 @@
 
     <footer>
       <div>
-        <strong>HUDnopy</strong> · Copyright © 2026 AlonsoLP · Licensed under <a href="https://github.com/AlonsoLP/HUDnopy/blob/main/LICENSE" target="_blank" rel="noopener">GPL-3.0-only</a>
-      </div>
-      <div>
-        <a href="https://github.com/AlonsoLP/HUDnopy/releases" target="_blank" rel="noopener">Releases</a> ·
-        <a href="https://github.com/AlonsoLP/HUDnopy/wiki" target="_blank" rel="noopener">Documentation Wiki</a> ·
-        <a href="https://github.com/AlonsoLP/HUDnopy/issues" target="_blank" rel="noopener">Report Issue</a>
+        <strong>HUDnopy</strong> · Copyright © 2026 AlonsoLP
       </div>
     </footer>
   </div>

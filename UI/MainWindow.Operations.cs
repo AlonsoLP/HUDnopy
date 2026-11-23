@@ -48,30 +48,7 @@ public partial class MainWindow
 
     private void FilterBindingsDeck()
     {
-        string q = TxtSearchBinds.Text?.Trim() ?? "";
-        var list = _bindingsService.Bindings.Select(binding => DeckTranslations.Present(binding, _uiLanguage)).ToList();
-        if (!string.IsNullOrEmpty(_selectedBindingCategory))
-        {
-            list = list.Where(b => string.Equals(
-                b.CategoryId, _selectedBindingCategory, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-        if (ChkHideUnassignedBindings.IsChecked == true)
-        {
-            list = list.Where(b => b.IsAssigned).ToList();
-        }
-        if (!string.IsNullOrEmpty(q))
-        {
-            list = list.Where(b =>
-                b.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                b.Category.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                b.FormattedBind.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                b.SourceDisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                b.SourceCategory.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                b.SourceFormattedBind.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                b.ActionId.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-        ItemsControlDeck.ItemsSource = list;
-        ApplyDesktopFontScale(_desktopFontScale, ItemsControlDeck);
+        RenderResolvedDesktopDeck();
     }
 
     private async void ChkHideUnassignedBindings_Click(object sender, RoutedEventArgs e) =>
@@ -122,7 +99,7 @@ public partial class MainWindow
     }
 
     private void TxtShipLockerSearch_TextChanged(object sender, TextChangedEventArgs e) =>
-        UpdateShipLockerUi(_fileWatcher.State);
+        DebounceSearch(() => UpdateShipLockerUi(_fileWatcher.State));
 
     private void UpdateEngineersUi(ShipState s)
     {
@@ -881,6 +858,7 @@ public partial class MainWindow
         ["shipyard"] = "🚢",
         ["ai-copilot"] = "🤖",
         ["galnet"] = "📰",
+        ["cockpit-radio"] = "📻",
         ["exploration-milestones"] = "🏆",
         ["journal"] = "📖",
         ["commander-profile"] = "🪪",
@@ -959,6 +937,7 @@ public partial class MainWindow
             {
                 ("ai-copilot", (FrameworkElement)ActivityAiSection),
                 ("galnet", ActivityGalnetSection),
+                ("cockpit-radio", ActivityRadioSection),
                 ("exploration-milestones", ActivityMilestonesSection),
                 ("journal", ActivityJournalSection),
                 ("commander-profile", ActivityProfileSection)
@@ -972,6 +951,7 @@ public partial class MainWindow
                 ("ai-settings", ConfigAiSection),
                 ("voice-audio", ConfigVoiceSection),
                 ("alerts", ConfigAlertsSection),
+                ("deck-editor", ConfigDeckEditorSection),
                 ("diagnostics", ConfigDiagnosticsSection),
                 ("about", ConfigAboutSection),
             },
@@ -1020,21 +1000,17 @@ public partial class MainWindow
         SectionNavigationItems.Children.Clear();
         TxtActiveSectionTitle.Visibility = Visibility.Collapsed;
 
-        var categories = _bindingsService.Bindings
-            .Where(binding => ChkHideUnassignedBindings.IsChecked != true ||
-                binding.FormattedBind != "Sin asignar")
-            .Select(binding => binding.Category)
-            .Where(category => !string.IsNullOrWhiteSpace(category))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        bool hideUnassigned = ChkHideUnassignedBindings.IsChecked == true;
+        var resolvedTabs = DeckLayoutService.BuildResolvedTabs(
+            _configService.Current, _bindingsService, _fileWatcher.State, _uiLanguage, hideUnassigned);
 
-        SectionNavigationPanel.Visibility = categories.Count > 0
+        SectionNavigationPanel.Visibility = resolvedTabs.Count > 0
             ? Visibility.Visible
             : Visibility.Collapsed;
-        TxtActiveSectionTitle.Visibility = categories.Count > 0
+        TxtActiveSectionTitle.Visibility = resolvedTabs.Count > 0
             ? Visibility.Visible
             : Visibility.Collapsed;
-        if (categories.Count == 0)
+        if (resolvedTabs.Count == 0)
         {
             _selectedBindingCategory = null;
             FilterBindingsDeck();
@@ -1042,26 +1018,29 @@ public partial class MainWindow
         }
 
         if (_selectedBindingCategory == null ||
-            !categories.Contains(_selectedBindingCategory, StringComparer.OrdinalIgnoreCase))
-            _selectedBindingCategory = categories[0];
+            !resolvedTabs.Any(t => string.Equals(t.Id, _selectedBindingCategory, StringComparison.OrdinalIgnoreCase)))
+            _selectedBindingCategory = resolvedTabs[0].Id;
 
-        for (int i = 0; i < categories.Count; i++)
+        int nonFavNumber = 0;
+        for (int i = 0; i < resolvedTabs.Count; i++)
         {
-            string category = categories[i];
-            string categoryLabel = DeckTranslations.Category(category, _uiLanguage);
+            var tab = resolvedTabs[i];
+            string categoryLabel = tab.IsFavoritesTab ? $"★ {tab.Name}" : $"{tab.Icon} {tab.Name}";
             bool isSelected = string.Equals(
-                category, _selectedBindingCategory, StringComparison.OrdinalIgnoreCase);
+                tab.Id, _selectedBindingCategory, StringComparison.OrdinalIgnoreCase);
             if (isSelected)
                 TxtActiveSectionTitle.Text = categoryLabel.ToUpper(UiCulture);
 
+            string btnContent = tab.IsFavoritesTab ? "★" : (++nonFavNumber).ToString();
             var button = new System.Windows.Controls.Button
             {
-                Content = (i + 1).ToString(),
+                Content = btnContent,
                 ToolTip = categoryLabel,
                 Language = System.Windows.Markup.XmlLanguage.GetLanguage(_uiLanguage),
-                Tag = category,
+                Tag = tab.Id,
                 Style = (Style)FindResource("HudButtonStyle"),
-                MinWidth = 36,
+                MinWidth = 38,
+                MinHeight = 38,
                 Margin = new Thickness(2),
                 Padding = new Thickness(10, 5, 10, 5)
             };
@@ -1101,10 +1080,8 @@ public partial class MainWindow
         }
     }
 
-    private void TxtSearchBinds_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        FilterBindingsDeck();
-    }
+    private void TxtSearchBinds_TextChanged(object sender, TextChangedEventArgs e) =>
+        DebounceSearch(FilterBindingsDeck);
 
     private void BtnReloadFiles_Click(object sender, RoutedEventArgs e)
     {
@@ -1218,7 +1195,8 @@ public partial class MainWindow
         catch (Exception ex)
         {
             var text = SettingsTranslations.ForLanguage(_uiLanguage);
-            System.Windows.MessageBox.Show(string.Format(text["browserError"], ex.Message), text["error"], MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDiagnosticsLogger.Error("WebHUD", "Could not open Web HUD browser URL.", ex);
+            App.ShowExceptionDialog(ex, "WebHUD.OpenBrowser", _configService.Current, isFatal: false);
         }
     }
 
@@ -1389,39 +1367,64 @@ public partial class MainWindow
 
     private void TableFilter_Changed(object sender, EventArgs e)
     {
-        if (_materialFilterControlsReady && !_updatingTableFilters)
+        if (!_materialFilterControlsReady || _updatingTableFilters)
+            return;
+
+        if (ReferenceEquals(sender, TxtProfileSearch))
+            DebounceSearch(ApplyProfileFilter);
+        else if (ReferenceEquals(sender, CmbProfileCategory))
+            ApplyProfileFilter();
+        else if (ReferenceEquals(sender, TxtMarketSearch))
+            DebounceSearch(ApplyMarketFilter);
+        else if (ReferenceEquals(sender, CmbMarketCategory))
+            ApplyMarketFilter();
+        else
             ApplyTableFilters();
     }
 
     private void ApplyTableFilters()
     {
+        ApplyMarketFilter();
+        ApplyProfileFilter();
+    }
+
+    private void ApplyMarketFilter()
+    {
         if (!_materialFilterControlsReady || _updatingTableFilters)
             return;
+        if (GridMarket.ItemsSource is not IEnumerable<MarketCommodityItem> market)
+            return;
+
         static bool Contains(string? value, string search) =>
             (value ?? "").IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0;
         string format = OperationsTranslations.ForLanguage(_uiLanguage)["filterCount"];
-        var culture = UiCulture;
-        if (GridMarket.ItemsSource is IEnumerable<MarketCommodityItem> market)
-        {
-            string search = TxtMarketSearch.Text.Trim();
-            string category = CmbMarketCategory.SelectedValue as string ?? "";
-            var view = System.Windows.Data.CollectionViewSource.GetDefaultView(GridMarket.ItemsSource);
-            view.Filter = item => item is MarketCommodityItem commodity &&
-                (search.Length == 0 || Contains(commodity.DisplayName, search) || Contains(commodity.Name, search)) &&
-                (category.Length == 0 || MarketCategoryKey(commodity) == category);
-            TxtMarketFilterStatus.Text = string.Format(culture, format, GridMarket.Items.Count, market.Count());
-        }
-        if (GridCommanderProfile.ItemsSource is IEnumerable<ProfileValueView> profile)
-        {
-            string search = TxtProfileSearch.Text.Trim();
-            string category = CmbProfileCategory.SelectedValue as string ?? "";
-            var view = System.Windows.Data.CollectionViewSource.GetDefaultView(GridCommanderProfile.ItemsSource);
-            view.Filter = item => item is ProfileValueView row &&
-                (search.Length == 0 || Contains(row.Category, search) || Contains(row.Name, search) ||
-                 Contains(row.Value, search) || Contains(row.Item.Name, search)) &&
-                (category.Length == 0 || CategoryKey(row.CategoryId) == category);
-            TxtProfileFilterStatus.Text = string.Format(culture, format, GridCommanderProfile.Items.Count, profile.Count());
-        }
+        string search = TxtMarketSearch.Text.Trim();
+        string category = CmbMarketCategory.SelectedValue as string ?? "";
+        var view = System.Windows.Data.CollectionViewSource.GetDefaultView(GridMarket.ItemsSource);
+        view.Filter = item => item is MarketCommodityItem commodity &&
+            (search.Length == 0 || Contains(commodity.DisplayName, search) || Contains(commodity.Name, search)) &&
+            (category.Length == 0 || MarketCategoryKey(commodity) == category);
+        TxtMarketFilterStatus.Text = string.Format(UiCulture, format, GridMarket.Items.Count, market.Count());
+    }
+
+    private void ApplyProfileFilter()
+    {
+        if (!_materialFilterControlsReady || _updatingTableFilters)
+            return;
+        if (GridCommanderProfile.ItemsSource is not IEnumerable<ProfileValueView> profile)
+            return;
+
+        static bool Contains(string? value, string search) =>
+            (value ?? "").IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0;
+        string format = OperationsTranslations.ForLanguage(_uiLanguage)["filterCount"];
+        string search = TxtProfileSearch.Text.Trim();
+        string category = CmbProfileCategory.SelectedValue as string ?? "";
+        var view = System.Windows.Data.CollectionViewSource.GetDefaultView(GridCommanderProfile.ItemsSource);
+        view.Filter = item => item is ProfileValueView row &&
+            (search.Length == 0 || Contains(row.Category, search) || Contains(row.Name, search) ||
+             Contains(row.Value, search) || Contains(row.Item.Name, search)) &&
+            (category.Length == 0 || CategoryKey(row.CategoryId) == category);
+        TxtProfileFilterStatus.Text = string.Format(UiCulture, format, GridCommanderProfile.Items.Count, profile.Count());
     }
 
     private void ApplyMaterialFilters()
@@ -1595,6 +1598,118 @@ public partial class MainWindow
         string selectedHex = $"#{dialog.Color.R:X2}{dialog.Color.G:X2}{dialog.Color.B:X2}";
         TxtCustomSecondaryHex.Text = selectedHex;
         ApplyCustomAccentHex(TxtCustomAccentHex.Text, selectedHex);
+    }
+
+    private void BtnImportGameHudTheme_Click(object sender, RoutedEventArgs e)
+    {
+        bool ok = GameHudThemeImportService.TryImportGameTheme(out string primary, out string secondary, out string sourceLabel);
+        string message = ok
+            ? $"✓ Imported HUD theme ({primary} / {secondary}) from {sourceLabel}."
+            : $"⚠ {sourceLabel}";
+        SetStatusBarMessage(message);
+        if (!ok || string.IsNullOrWhiteSpace(primary))
+            return;
+
+        _suppressEvents = true;
+        TxtCustomAccentHex.Text = primary;
+        TxtCustomSecondaryHex.Text = secondary;
+        _suppressEvents = false;
+        ApplyCustomAccentHex(primary, secondary);
+    }
+
+    private void BtnToggleSystemMap_Click(object sender, RoutedEventArgs e)
+    {
+        if (SystemMapControl is null || BtnToggleSystemMap is null)
+            return;
+        bool visible = SystemMapControl.Visibility == Visibility.Visible;
+        SystemMapControl.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
+        BtnToggleSystemMap.Content = visible ? "🗺 2D SYSTEM MAP  ▾" : "🗺 2D SYSTEM MAP  ▴";
+    }
+
+    private void OnSystemMapBodySelected(ExplorationBodyItem body)
+    {
+        if (GridExplorationBodies?.ItemsSource is not IEnumerable<ExplorationBodyView> rows)
+            return;
+        var match = rows.FirstOrDefault(r =>
+            ReferenceEquals(r.Body, body) ||
+            (!string.IsNullOrEmpty(body.Id) && r.Body.Id == body.Id) ||
+            string.Equals(r.Body.BodyName, body.BodyName, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+        {
+            GridExplorationBodies.SelectedItem = match;
+            GridExplorationBodies.ScrollIntoView(match);
+        }
+    }
+
+    private void ChkEnableAutoUpdateCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents || _configService is null || ChkEnableAutoUpdateCheck is null)
+            return;
+        _configService.Current.EnableAutoUpdateCheck = ChkEnableAutoUpdateCheck.IsChecked == true;
+        _configService.Save();
+    }
+
+    private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Check Updates", () => CheckForUpdatesInBackgroundAsync(manualTrigger: true));
+
+    public async Task CheckForUpdatesInBackgroundAsync(bool manualTrigger = false)
+    {
+        if (BtnCheckUpdates is not null && manualTrigger)
+            BtnCheckUpdates.IsEnabled = false;
+        if (manualTrigger)
+            SetStatusBarMessage("🔄 Checking GitHub Releases...");
+
+        try
+        {
+            var result = await UpdateCheckService.CheckLatestReleaseAsync();
+            if (BtnOpenLatestRelease is not null)
+            {
+                if (result.UpdateAvailable && !string.IsNullOrWhiteSpace(result.ReleaseUrl))
+                {
+                    BtnOpenLatestRelease.Tag = result.ReleaseUrl;
+                    BtnOpenLatestRelease.Content = $"⬇ {result.LatestVersion}";
+                    BtnOpenLatestRelease.Visibility = Visibility.Visible;
+                    SetStatusBarMessage($"⬆ {result.Message}");
+                }
+                else
+                {
+                    BtnOpenLatestRelease.Visibility = Visibility.Collapsed;
+                    if (manualTrigger)
+                        SetStatusBarMessage(result.Success ? $"✓ {result.Message}" : $"⚠ {result.Message}");
+                }
+            }
+        }
+        finally
+        {
+            if (BtnCheckUpdates is not null && manualTrigger)
+                BtnCheckUpdates.IsEnabled = true;
+        }
+    }
+
+    private void BtnRunFirstRunWizard_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var wizard = new HUDnopy.UI.FirstRunWizardWindow(_configService, this, _webServer);
+            wizard.ShowDialog();
+            RefreshAfterWizard();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Error("Wizard", "Failed to open First-Run Wizard.", ex);
+            App.ShowExceptionDialog(ex, "HUDnopy.FirstRunWizard", _configService.Current, isFatal: false);
+        }
+    }
+
+    public void RefreshAfterWizard()
+    {
+        _configService.ApplyThemeToApplication();
+        _uiLanguage = _configService.Current.InterfaceLanguage;
+        LoadConfigToUi();
+        ApplyAllLocalizedLabels();
+        _bindingsService.ReloadBindings();
+        _fileWatcher.RefreshState();
+        _ = _webServer.BroadcastStateAsync();
     }
 
     private void TxtCustomThemeColor_TextChanged(object sender, TextChangedEventArgs e)
@@ -1867,7 +1982,7 @@ public partial class MainWindow
     }
 
     private void TxtUnhandledSearch_TextChanged(object sender, TextChangedEventArgs e) =>
-        RefreshUnhandledMessagesUi();
+        DebounceSearch(RefreshUnhandledMessagesUi);
 
     private void BtnScanUnhandledFiles_Click(object sender, RoutedEventArgs e)
     {

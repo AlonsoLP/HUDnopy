@@ -341,6 +341,14 @@ public class ShipState
     // Eventos recientes del Diario
     public List<JournalEntryItem> RecentEvents { get; set; } = new();
 
+    // Freshness timestamps for local Journal vs. external API reconciliation (v0.5.0)
+    [JsonIgnore]
+    public DateTimeOffset? LastStoredShipsJournalUtc { get; set; }
+    [JsonIgnore]
+    public DateTimeOffset? LastStoredModulesJournalUtc { get; set; }
+    [JsonIgnore]
+    public DateTimeOffset? LastCarrierJournalUtc { get; set; }
+
     // Tema actual para sincronizar con la Web
     public string ThemeAccentHex { get; set; } = "#FF7100";
     public string ThemeSecondaryHex { get; set; } = "#FFB300";

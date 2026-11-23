@@ -209,6 +209,7 @@ public class MarketSnapshot
 
     public DateTimeOffset? Timestamp { get; set; }
     public long? MarketId { get; set; }
+    public string DataSource { get; set; } = "Local";
     public string StationName { get; set; } = "";
     public string StarSystem { get; set; } = "";
     public List<MarketCommodityItem> Items { get; set; } = new();
@@ -282,6 +283,7 @@ public class OutfittingSnapshot
 
     public DateTimeOffset? Timestamp { get; set; }
     public long? MarketId { get; set; }
+    public string DataSource { get; set; } = "Local";
     public string StationName { get; set; } = "";
     public string StarSystem { get; set; } = "";
     public bool? Horizons { get; set; }
@@ -315,6 +317,7 @@ public class ShipyardSnapshot
 
     public DateTimeOffset? Timestamp { get; set; }
     public long? MarketId { get; set; }
+    public string DataSource { get; set; } = "Local";
     public string StationName { get; set; } = "";
     public string StarSystem { get; set; } = "";
     public bool? Horizons { get; set; }

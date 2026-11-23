@@ -47,6 +47,7 @@ public sealed class DiscordIntegrationService : IDisposable
     private bool _disposed;
 
     public string LastStatus { get; private set; } = "";
+    public bool IsIpcConnected => _ipcHandshaked && _ipcPipe is { IsConnected: true };
     public event Action? StatusChanged;
 
     public DiscordIntegrationService(

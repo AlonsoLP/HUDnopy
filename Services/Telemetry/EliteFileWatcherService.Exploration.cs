@@ -76,11 +76,34 @@ public partial class EliteFileWatcherService
         string id = $"{systemAddress}:{bodyId}";
         if (!_explorationBodies.TryGetValue(id, out var body))
         {
-            body = new ExplorationBodyItem { Id = id };
-            _explorationBodies[id] = body;
-            _explorationBodyOrder.Enqueue(id);
-            while (_explorationBodyOrder.Count > 2000)
-                _explorationBodies.Remove(_explorationBodyOrder.Dequeue());
+            // Check if a Spansh/EDSM pre-populated entry exists for the same body (by BodyName or primary star alias) and upgrade it in-place
+            var spanshMatch = _explorationBodies.FirstOrDefault(kv =>
+                string.Equals(kv.Value.SystemName, systemName, StringComparison.OrdinalIgnoreCase) &&
+                AreEquivalentBodyNames(systemName, kv.Value.BodyName, bodyName));
+            if (spanshMatch.Value is not null)
+            {
+                body = spanshMatch.Value;
+                if (!string.Equals(spanshMatch.Key, id, StringComparison.Ordinal))
+                {
+                    _explorationBodies.Remove(spanshMatch.Key);
+                    body.Id = id;
+                    _explorationBodies[id] = body;
+                    _explorationBodyOrder.Enqueue(id);
+                }
+                body.DataSource = "Local+Spansh";
+            }
+            else
+            {
+                body = new ExplorationBodyItem { Id = id, DataSource = "Local" };
+                _explorationBodies[id] = body;
+                _explorationBodyOrder.Enqueue(id);
+                while (_explorationBodyOrder.Count > 2000)
+                    _explorationBodies.Remove(_explorationBodyOrder.Dequeue());
+            }
+        }
+        else if (body.IsExternalOnly)
+        {
+            body.DataSource = body.IsSpanshOnly ? "Local+Spansh" : "Local";
         }
 
         body.SystemName = systemName;
@@ -93,7 +116,39 @@ public partial class EliteFileWatcherService
             if (!isHistoryRestore)
                 _sessionBodiesScanned++;
             if (data.TryGetProperty("Parents", out var parentsProp) && parentsProp.ValueKind == JsonValueKind.Array)
+            {
                 body.HierarchyDepth = parentsProp.GetArrayLength();
+                body.DirectParentBodyId = null;
+                body.DirectParentType = "";
+                body.BarycentreId = null;
+                body.HostStarBodyId = null;
+                body.ParentPlanetBodyId = null;
+
+                int pIdx = 0;
+                foreach (var pObj in parentsProp.EnumerateArray())
+                {
+                    if (pObj.ValueKind != JsonValueKind.Object)
+                        continue;
+                    foreach (var prop in pObj.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind != JsonValueKind.Number || !prop.Value.TryGetInt32(out int pId))
+                            continue;
+                        if (pIdx == 0)
+                        {
+                            body.DirectParentType = prop.Name;
+                            body.DirectParentBodyId = pId;
+                            if (prop.Name.Equals("Null", StringComparison.OrdinalIgnoreCase))
+                                body.BarycentreId = pId;
+                        }
+                        if (body.ParentPlanetBodyId is null && prop.Name.Equals("Planet", StringComparison.OrdinalIgnoreCase))
+                            body.ParentPlanetBodyId = pId;
+                        if (body.HostStarBodyId is null && prop.Name.Equals("Star", StringComparison.OrdinalIgnoreCase))
+                            body.HostStarBodyId = pId;
+                        break;
+                    }
+                    pIdx++;
+                }
+            }
             body.PlanetClass = GetJournalRawText(data, "PlanetClass") ?? body.PlanetClass;
             body.StarType = GetJournalRawText(data, "StarType") ?? body.StarType;
             body.TerraformState = GetJournalRawText(data, "TerraformState") ?? body.TerraformState;
@@ -215,7 +270,11 @@ public partial class EliteFileWatcherService
                     RequiredDistanceMeters = ExobiologyPredictor.GetRequiredDistanceMeters(!string.IsNullOrWhiteSpace(genusName) ? genusName : speciesDisplay),
                     CurrentDistanceMeters = 0,
                     LastSampleLatitude = _state.HasLatLong ? _state.Latitude : null,
-                    LastSampleLongitude = _state.HasLatLong ? _state.Longitude : null
+                    LastSampleLongitude = _state.HasLatLong ? _state.Longitude : null,
+                    PlayerHeadingDegrees = _state.Heading,
+                    SamplePoints = _state.HasLatLong && _state.PlanetRadius > 0
+                        ? ExobiologyTrackerState.ProjectSamplePoints(_activeExoSampleCoords, _state.Latitude, _state.Longitude, _state.Heading, _state.PlanetRadius)
+                        : new List<ExoSamplePoint>()
                 };
             }
             else if (scanType.Equals("Analyse", StringComparison.OrdinalIgnoreCase))
@@ -259,6 +318,263 @@ public partial class EliteFileWatcherService
             _state.UnsoldCartographyCredits = _unsoldCartographyByBody.Values.Sum();
         }
         _explorationBodiesChanged = true;
+    }
+
+    private void RebuildExplorationBodiesSnapshot()
+    {
+        var currentSystemBodies = _explorationBodies.Values
+            .Where(item =>
+                string.Equals(item.SystemName, _state.CurrentSystem, StringComparison.OrdinalIgnoreCase) &&
+                !IsNonCelestialBody(item.BodyName, item.BodyType))
+            .ToList();
+        _state.SystemScannedBodies = currentSystemBodies.Count(static item => !item.IsExternalOnly);
+        _state.ExplorationBodies = currentSystemBodies
+            .OrderBy(static item => item.BodyId ?? int.MaxValue)
+            .ThenBy(static item => item.BodyName, StringComparer.CurrentCultureIgnoreCase)
+            .Select(static item => item.Snapshot())
+            .ToList();
+        _explorationBodiesChanged = false;
+    }
+
+    /// <summary>
+    /// Filters out barycentres and asteroid belt clusters that are not stars, planets, or moons.
+    /// </summary>
+    private static bool IsNonCelestialBody(string? bodyName, string? bodyType)
+    {
+        string name = bodyName ?? "";
+        string type = bodyType ?? "";
+        if (type.Contains("Barycentre", StringComparison.OrdinalIgnoreCase) ||
+            type.Contains("Belt", StringComparison.OrdinalIgnoreCase) ||
+            type.Equals("Ring", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (name.Contains("Belt Cluster", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith(" Belt", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Extracts Frontier-style StarType codes (O, B, A, F, G, K, M, L, T, Y, D, N, H, W, C, TTS, AeBe)
+    /// from Spansh/EDSM descriptive strings such as "G (White-Yellow) Star" or "Neutron Star".
+    /// </summary>
+    private static string? ExtractStarCodeFromExternalType(string? externalType)
+    {
+        if (string.IsNullOrWhiteSpace(externalType))
+            return null;
+
+        string t = externalType.Trim();
+        if (t.Contains("Black Hole", StringComparison.OrdinalIgnoreCase)) return "H";
+        if (t.Contains("Neutron", StringComparison.OrdinalIgnoreCase)) return "N";
+        if (t.Contains("White Dwarf", StringComparison.OrdinalIgnoreCase)) return "D";
+        if (t.Contains("Wolf-Rayet", StringComparison.OrdinalIgnoreCase)) return "W";
+        if (t.Contains("T Tauri", StringComparison.OrdinalIgnoreCase)) return "TTS";
+        if (t.Contains("Herbig", StringComparison.OrdinalIgnoreCase)) return "AeBe";
+        if (t.Contains("Carbon", StringComparison.OrdinalIgnoreCase) || t.StartsWith("C-", StringComparison.OrdinalIgnoreCase)) return "C";
+
+        if (t.Contains("Star", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("dwarf", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("giant", StringComparison.OrdinalIgnoreCase) && !t.Contains("Gas giant", StringComparison.OrdinalIgnoreCase))
+        {
+            int spaceIdx = t.IndexOf(' ');
+            string firstToken = (spaceIdx > 0 ? t[..spaceIdx] : t).Trim().ToUpperInvariant();
+            if (firstToken is "O" or "B" or "A" or "F" or "G" or "K" or "M" or "L" or "T" or "Y" or "S" or "MS" or "CN" or "CJ")
+                return firstToken;
+            if (firstToken.Length == 2 && firstToken[0] is 'D' or 'W' or 'C')
+                return firstToken;
+            return "G";
+        }
+
+        return null;
+    }
+
+    private static bool AreEquivalentBodyNames(string systemName, string nameA, string nameB)
+    {
+        if (string.Equals(nameA, nameB, StringComparison.OrdinalIgnoreCase))
+            return true;
+        // Handle primary star naming mismatch: "SystemName" vs "SystemName A"
+        string sysWithA = $"{systemName} A";
+        return (string.Equals(nameA, systemName, StringComparison.OrdinalIgnoreCase) && string.Equals(nameB, sysWithA, StringComparison.OrdinalIgnoreCase)) ||
+               (string.Equals(nameB, systemName, StringComparison.OrdinalIgnoreCase) && string.Equals(nameA, sysWithA, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Merges EDSM system bodies into the canonical ExplorationBodies list as a fallback when Spansh
+    /// is disabled or missing a body, without ever duplicating or overwriting Local or Spansh rows.
+    /// </summary>
+    public void SyncEdsmSystemBodies(string systemName, string? systemAddress, IReadOnlyList<SpanshBodySummary> bodies)
+    {
+        if (string.IsNullOrWhiteSpace(systemName) || bodies.Count == 0)
+            return;
+
+        lock (_refreshLock)
+        {
+            if (!string.Equals(_state.CurrentSystem, systemName, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            string sysAddr = !string.IsNullOrWhiteSpace(systemAddress) ? systemAddress : (_state.SystemAddress ?? systemName);
+            bool addedAny = false;
+            foreach (var eb in bodies)
+            {
+                if (string.IsNullOrWhiteSpace(eb.Name) || IsNonCelestialBody(eb.Name, eb.Type))
+                    continue;
+
+                bool alreadyExists =
+                    (eb.BodyId.HasValue && _explorationBodies.ContainsKey($"{sysAddr}:{eb.BodyId.Value}")) ||
+                    _explorationBodies.Values.Any(b =>
+                        string.Equals(b.SystemName, systemName, StringComparison.OrdinalIgnoreCase) &&
+                        AreEquivalentBodyNames(systemName, b.BodyName, eb.Name));
+                if (alreadyExists)
+                    continue;
+
+                string? starCode = ExtractStarCodeFromExternalType(eb.Type);
+                string key = eb.BodyId.HasValue ? $"{sysAddr}:{eb.BodyId.Value}" : $"{sysAddr}:edsm:{eb.Name}";
+                _explorationBodies[key] = new ExplorationBodyItem
+                {
+                    Id = key,
+                    BodyId = eb.BodyId,
+                    DataSource = "EDSM",
+                    SystemName = systemName,
+                    BodyName = eb.Name,
+                    StarType = starCode ?? "",
+                    PlanetClass = starCode is null ? eb.Type : "",
+                    DistanceFromArrivalLs = eb.DistanceToArrival,
+                    Landable = eb.IsLandable,
+                    SurfaceGravity = eb.SurfaceGravity,
+                    SurfaceTemperatureKelvin = eb.SurfaceTemperature,
+                    AtmosphereType = eb.AtmosphereType ?? "",
+                    Rings = eb.HasRings ? new List<ExplorationRingItem> { new() { Name = "Ring" } } : new List<ExplorationRingItem>()
+                };
+                _explorationBodyOrder.Enqueue(key);
+                while (_explorationBodyOrder.Count > 2000)
+                    _explorationBodies.Remove(_explorationBodyOrder.Dequeue());
+                addedAny = true;
+            }
+
+            if (addedAny)
+            {
+                RebuildExplorationBodiesSnapshot();
+                _state.LastUpdated = DateTime.UtcNow;
+                PublishState();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Merges Spansh system dump bodies into the canonical ExplorationBodies list without duplicating
+    /// locally scanned bodies. Passing null (e.g. when Spansh is disabled) purges Spansh-only rows
+    /// while preserving all local Journal scans intact.
+    /// </summary>
+    public void SyncSpanshSystemBodies(SpanshSystemSnapshot? snapshot)
+    {
+        lock (_refreshLock)
+        {
+            // Purge all Spansh-only rows first so disabling Spansh or changing systems leaves no stale entries
+            var staleKeys = _explorationBodies
+                .Where(static kv => kv.Value.IsSpanshOnly)
+                .Select(static kv => kv.Key)
+                .ToList();
+            foreach (string key in staleKeys)
+                _explorationBodies.Remove(key);
+
+            if (snapshot is null)
+            {
+                foreach (var body in _explorationBodies.Values)
+                {
+                    if (string.Equals(body.DataSource, "Local+Spansh", StringComparison.OrdinalIgnoreCase))
+                        body.DataSource = "Local";
+                }
+                RebuildExplorationBodiesSnapshot();
+                _state.LastUpdated = DateTime.UtcNow;
+                PublishState();
+                return;
+            }
+
+            string sysAddr = snapshot.Id64.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string sysName = !string.IsNullOrWhiteSpace(snapshot.Name) ? snapshot.Name : _state.CurrentSystem;
+
+            // Ignore snapshots for a different system if the commander already jumped away
+            if (!string.IsNullOrWhiteSpace(_state.SystemAddress) &&
+                !string.Equals(_state.SystemAddress, sysAddr, StringComparison.Ordinal) &&
+                !string.Equals(_state.CurrentSystem, sysName, StringComparison.OrdinalIgnoreCase))
+            {
+                RebuildExplorationBodiesSnapshot();
+                return;
+            }
+
+            foreach (var sb in snapshot.Bodies)
+            {
+                if (string.IsNullOrWhiteSpace(sb.Name) || IsNonCelestialBody(sb.Name, sb.Type))
+                    continue;
+
+                // Match existing body by BodyId or equivalent BodyName within this system
+                ExplorationBodyItem? existing = null;
+                if (sb.BodyId.HasValue && _explorationBodies.TryGetValue($"{sysAddr}:{sb.BodyId.Value}", out var byId))
+                {
+                    existing = byId;
+                }
+                else
+                {
+                    existing = _explorationBodies.Values.FirstOrDefault(b =>
+                        string.Equals(b.SystemName, sysName, StringComparison.OrdinalIgnoreCase) &&
+                        AreEquivalentBodyNames(sysName, b.BodyName, sb.Name));
+                }
+
+                string? starCode = ExtractStarCodeFromExternalType(sb.Type);
+                if (existing is not null)
+                {
+                    // Local Journal always takes precedence; upgrade EDSM fallback to Spansh without falsely tagging Local
+                    if (!existing.IsExternalOnly)
+                        existing.DataSource = "Local+Spansh";
+                    else if (string.Equals(existing.DataSource, "EDSM", StringComparison.OrdinalIgnoreCase))
+                        existing.DataSource = "Spansh";
+
+                    existing.BodyId ??= sb.BodyId;
+                    if (string.IsNullOrWhiteSpace(existing.PlanetClass) && string.IsNullOrWhiteSpace(existing.StarType))
+                    {
+                        if (starCode is not null) existing.StarType = starCode;
+                        else existing.PlanetClass = sb.Type;
+                    }
+                    existing.DistanceFromArrivalLs ??= sb.DistanceToArrival;
+                    existing.Landable ??= sb.IsLandable;
+                    existing.SurfaceGravity ??= sb.SurfaceGravity;
+                    existing.SurfaceTemperatureKelvin ??= sb.SurfaceTemperature;
+                    if (string.IsNullOrWhiteSpace(existing.AtmosphereType) && !string.IsNullOrWhiteSpace(sb.AtmosphereType))
+                        existing.AtmosphereType = sb.AtmosphereType;
+                    if (sb.HasRings && existing.Rings.Count == 0)
+                        existing.Rings.Add(new ExplorationRingItem { Name = "Ring" });
+                }
+                else
+                {
+                    string key = sb.BodyId.HasValue ? $"{sysAddr}:{sb.BodyId.Value}" : $"{sysAddr}:spansh:{sb.Name}";
+                    var item = new ExplorationBodyItem
+                    {
+                        Id = key,
+                        BodyId = sb.BodyId,
+                        DataSource = "Spansh",
+                        SystemName = sysName,
+                        BodyName = sb.Name,
+                        StarType = starCode ?? "",
+                        PlanetClass = starCode is null ? sb.Type : "",
+                        DistanceFromArrivalLs = sb.DistanceToArrival,
+                        Landable = sb.IsLandable,
+                        SurfaceGravity = sb.SurfaceGravity,
+                        SurfaceTemperatureKelvin = sb.SurfaceTemperature,
+                        AtmosphereType = sb.AtmosphereType ?? "",
+                        Rings = sb.HasRings ? new List<ExplorationRingItem> { new() { Name = "Ring" } } : new List<ExplorationRingItem>()
+                    };
+                    _explorationBodies[key] = item;
+                    _explorationBodyOrder.Enqueue(key);
+                    while (_explorationBodyOrder.Count > 2000)
+                        _explorationBodies.Remove(_explorationBodyOrder.Dequeue());
+                }
+            }
+
+            RebuildExplorationBodiesSnapshot();
+            _state.LastUpdated = DateTime.UtcNow;
+            PublishState();
+        }
     }
 
     private void RestoreExplorationBodyHistory(string folder, string systemAddress)

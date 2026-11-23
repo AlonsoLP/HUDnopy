@@ -96,6 +96,8 @@ public static partial class AppDiagnosticsLogger
     /// <summary>
     /// Redacts API keys, Bearer tokens, passwords, Discord webhook secrets, and Windows username paths before writing logs to disk.
     /// </summary>
+    public static string SanitizeText(string? text) => RedactSecrets(text);
+
     internal static string RedactSecrets(string? text)
     {
         if (string.IsNullOrEmpty(text))
@@ -104,7 +106,47 @@ public static partial class AppDiagnosticsLogger
         redacted = BearerTokenRegex().Replace(redacted, "$1[REMOVED]");
         redacted = QueryOrKeyValueSecretRegex().Replace(redacted, "$1[REMOVED]");
         redacted = WindowsUserPathRegex().Replace(redacted, "$1[USER]");
+        if (!string.IsNullOrWhiteSpace(Environment.UserName) && Environment.UserName.Length >= 3)
+            redacted = redacted.Replace($"\\{Environment.UserName}\\", "\\[USER]\\", StringComparison.OrdinalIgnoreCase)
+                               .Replace($"/{Environment.UserName}/", "/[USER]/", StringComparison.OrdinalIgnoreCase);
         return redacted;
+    }
+
+    /// <summary>
+    /// Builds a privacy-safe Markdown crash report suitable for the Crash Dialog, Support ZIP, and GitHub Issues.
+    /// </summary>
+    public static string BuildSanitizedCrashReport(Exception ex, string source, AppConfig? cfg = null)
+    {
+        var sb = new StringBuilder(1024);
+        sb.AppendLine($"### HUDnopy Crash Report ({source})");
+        sb.AppendLine($"- **Version:** v{HttpClientHeaderDefaults.ProductVersion}");
+        sb.AppendLine($"- **Runtime:** {RuntimeInformation.FrameworkDescription}");
+        sb.AppendLine($"- **OS:** {Environment.OSVersion} ({RuntimeInformation.ProcessArchitecture})");
+        if (cfg is not null)
+            sb.AppendLine($"- **Language / Scale:** {cfg.InterfaceLanguage} / {cfg.DesktopFontScalePercent}%");
+        sb.AppendLine($"- **UTC:** {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
+        sb.AppendLine();
+        sb.AppendLine("```text");
+        sb.AppendLine(RedactSecrets(ex.ToString()));
+        sb.AppendLine("```");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds a pre-filled GitHub New Issue URL containing the sanitized crash report (safe for URL length limits).
+    /// </summary>
+    public static string BuildGitHubIssueUrl(Exception ex, string source, AppConfig? cfg = null)
+    {
+        string title = $"[Crash] {ex.GetType().Name}: {RedactSecrets(ex.Message)}";
+        if (title.Length > 120)
+            title = title[..117] + "...";
+
+        string report = BuildSanitizedCrashReport(ex, source, cfg);
+        string body = report + "\n> _Attach the exported `HUDnopy-Support-*.zip` file here if available._\n";
+        if (body.Length > 3500)
+            body = body[..3480] + "\n...```\n";
+
+        return $"https://github.com/AlonsoLP/HUDnopy/issues/new?labels=bug&title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
     }
 
     /// <summary>
@@ -119,7 +161,7 @@ public static partial class AppDiagnosticsLogger
     /// Exports a sanitized Support ZIP archive containing environment metadata, recent breadcrumbs,
     /// a redacted copy of AppConfig, and the last 3 days of rolling diagnostic logs.
     /// </summary>
-    public static string ExportSupportBundle(AppConfig cfg, string? outputZipPath = null)
+    public static string ExportSupportBundle(AppConfig cfg, string? outputZipPath = null, string? crashReportText = null)
     {
         string targetZip = string.IsNullOrWhiteSpace(outputZipPath)
             ? Path.Combine(LogsDirectory, $"HUDnopy-Support-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.zip")
@@ -152,6 +194,8 @@ public static partial class AppDiagnosticsLogger
             foreach (string c in crumbsSnapshot)
                 envSb.AppendLine(c);
         WriteZipTextEntry(archive, "environment.txt", envSb.ToString());
+        if (!string.IsNullOrWhiteSpace(crashReportText))
+            WriteZipTextEntry(archive, "crash-report.txt", RedactSecrets(crashReportText));
 
         // 2. Strict allowlist technical config snapshot (zero API keys, tokens, commander names, notes, memories, bookmarks, or personal paths)
         var technicalConfig = new

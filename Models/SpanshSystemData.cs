@@ -41,7 +41,12 @@ public sealed record SpanshBodySummary(
     string Name,
     string Type,
     double? DistanceToArrival,
-    bool? IsLandable);
+    bool? IsLandable,
+    int? BodyId = null,
+    double? SurfaceGravity = null,
+    double? SurfaceTemperature = null,
+    string? AtmosphereType = null,
+    bool HasRings = false);
 
 public sealed record SpanshStationSummary(
     string Name,

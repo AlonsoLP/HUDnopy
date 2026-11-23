@@ -346,9 +346,13 @@
         </Style>
 
         <Style TargetType="DataGrid">
+            <Setter Property="MaxHeight" Value="540" />
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
-            <Setter Property="ScrollViewer.CanContentScroll" Value="False" />
-            <Setter Property="EnableRowVirtualization" Value="False" />
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+            <Setter Property="EnableRowVirtualization" Value="True" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
         </Style>
 
         <Style x:Key="HudNavButtonStyle" TargetType="RadioButton">

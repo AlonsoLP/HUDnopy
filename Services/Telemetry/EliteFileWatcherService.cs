@@ -126,13 +126,114 @@ public partial class EliteFileWatcherService : IDisposable
 
     private void OnConfigChanged(AppConfig cfg)
     {
+        bool purged = false;
         lock (_refreshLock)
         {
             InitializeWatcher();
             if (_materialsInventory.Count > 0)
                 _materialsChanged = true;
+            purged = PurgeDisabledExternalDataLocked(cfg);
         }
-        RefreshState();
+        RefreshState(forcePublish: purged);
+    }
+
+    /// <summary>
+    /// Removes external API data from ShipState whenever its integration toggle is disabled,
+    /// while preserving 100% of local in-game Journal telemetry.
+    /// </summary>
+    internal bool PurgeDisabledExternalDataLocked(AppConfig cfg)
+    {
+        bool changed = false;
+
+        if (!cfg.EnableSpanshSystemData)
+        {
+            var spanshKeys = _explorationBodies.Where(static kv => kv.Value.IsSpanshOnly).Select(static kv => kv.Key).ToList();
+            foreach (string key in spanshKeys)
+            {
+                _explorationBodies.Remove(key);
+                changed = true;
+            }
+            foreach (var b in _explorationBodies.Values)
+            {
+                if (string.Equals(b.DataSource, "Local+Spansh", StringComparison.OrdinalIgnoreCase))
+                {
+                    b.DataSource = "Local";
+                    changed = true;
+                }
+            }
+            if (changed) RebuildExplorationBodiesSnapshot();
+        }
+
+        if (!cfg.EnableEdsmSync)
+        {
+            if (_state.EdsmDiscoveryIntel is not null) { _state.EdsmDiscoveryIntel = null; changed = true; }
+            var edsmBodyKeys = _explorationBodies
+                .Where(static kv => string.Equals(kv.Value.DataSource, "EDSM", StringComparison.OrdinalIgnoreCase))
+                .Select(static kv => kv.Key).ToList();
+            foreach (string key in edsmBodyKeys) { _explorationBodies.Remove(key); changed = true; }
+            if (edsmBodyKeys.Count > 0) RebuildExplorationBodiesSnapshot();
+            int removedFacs = _state.SystemFactions.RemoveAll(static f => string.Equals(f.DataSource, "EDSM", StringComparison.OrdinalIgnoreCase));
+            if (removedFacs > 0) changed = true;
+        }
+
+        if (!cfg.EnableEliteBgsWatchlist && _state.WatchedBgsFactions.Count > 0)
+        {
+            _state.WatchedBgsFactions = new List<EliteBgsFactionWatchItem>();
+            SyncWatchedFactionMarkersLocked();
+            changed = true;
+        }
+
+        if (!cfg.EnableInaraSync && _state.InaraProfile is not null)
+        {
+            _state.InaraProfile = null;
+            SyncInaraProfileRowsLocked();
+            changed = true;
+        }
+
+        if (!cfg.EnableEdastroDssa && _state.NearestDssaCarriers.Count > 0)
+        {
+            _state.NearestDssaCarriers = new List<DssaCarrierItem>();
+            changed = true;
+        }
+
+        if (!cfg.EnableArdentMarketApi && _state.ArdentMarketOffers.Count > 0)
+        {
+            _state.ArdentMarketOffers = new List<ArdentMarketOfferItem>();
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private void SyncWatchedFactionMarkersLocked()
+    {
+        var watchedNames = new HashSet<string>(
+            _state.WatchedBgsFactions.Select(static f => f.FactionName),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var fac in _state.SystemFactions)
+            fac.IsWatched = watchedNames.Contains(fac.Name);
+    }
+
+    private void SyncInaraProfileRowsLocked()
+    {
+        _state.CommanderProfile.RemoveAll(static p => string.Equals(p.Category, "Inara", StringComparison.OrdinalIgnoreCase));
+        if (_state.InaraProfile is { } ip && !string.IsNullOrWhiteSpace(ip.CommanderName))
+        {
+            if (!string.IsNullOrWhiteSpace(ip.SquadronName))
+                _state.CommanderProfile.Add(new ProfileValueItem
+                {
+                    Category = "Inara",
+                    Name = "Squadron",
+                    Value = string.IsNullOrWhiteSpace(ip.SquadronRank) ? ip.SquadronName : $"{ip.SquadronName} ({ip.SquadronRank})"
+                });
+            if (!string.IsNullOrWhiteSpace(ip.PreferredAllegiance))
+                _state.CommanderProfile.Add(new ProfileValueItem
+                {
+                    Category = "Inara",
+                    Name = "Allegiance",
+                    Value = ip.PreferredAllegiance
+                });
+        }
     }
 
     private void InitializeWatcher()
@@ -444,10 +545,92 @@ public partial class EliteFileWatcherService : IDisposable
         lock (_refreshLock)
         {
             mutator(_state);
+            SyncWatchedFactionMarkersLocked();
+            SyncInaraProfileRowsLocked();
             SyncMarketColonisationNeeds();
             _state.LastUpdated = DateTime.UtcNow;
             PublishState();
         }
+    }
+
+    /// <summary>
+    /// Merges Community Goals from an external source (Frontier cAPI or Inara) into ShipState
+    /// without duplicating goals or wiping authoritative PlayerContribution data.
+    /// </summary>
+    public void MergeCommunityGoals(IReadOnlyList<CommunityGoalItem> incoming, bool isAuthoritative)
+    {
+        lock (_refreshLock)
+        {
+            var existing = _state.CommunityGoals ?? new List<CommunityGoalItem>();
+            if (isAuthoritative)
+            {
+                // Authoritative cAPI snapshot defines active initiatives and official player contribution;
+                // preserve any non-empty metadata from existing entries when missing in cAPI.
+                var merged = new List<CommunityGoalItem>(incoming.Count);
+                foreach (var g in incoming)
+                {
+                    var prev = FindMatchingCommunityGoal(existing, g);
+                    merged.Add(new CommunityGoalItem
+                    {
+                        Id = g.Id > 0 ? g.Id : (prev?.Id ?? 0),
+                        Title = g.Title,
+                        StarSystem = !string.IsNullOrWhiteSpace(g.StarSystem) ? g.StarSystem : (prev?.StarSystem ?? ""),
+                        StationName = !string.IsNullOrWhiteSpace(g.StationName) ? g.StationName : (prev?.StationName ?? ""),
+                        ExpiryDisplay = !string.IsNullOrWhiteSpace(g.ExpiryDisplay) ? g.ExpiryDisplay : (prev?.ExpiryDisplay ?? ""),
+                        CurrentTotal = g.CurrentTotal > 0 ? g.CurrentTotal : (prev?.CurrentTotal ?? 0),
+                        PlayerContribution = g.PlayerContribution > 0 ? g.PlayerContribution : (prev?.PlayerContribution ?? 0)
+                    });
+                }
+                _state.CommunityGoals = merged;
+            }
+            else if (incoming.Count > 0)
+            {
+                // Non-authoritative community feed (Inara): add missing goals and fill empty fields
+                // without ever overwriting PlayerContribution or removing cAPI initiatives.
+                var merged = existing.Select(static g => new CommunityGoalItem
+                {
+                    Id = g.Id,
+                    Title = g.Title,
+                    StarSystem = g.StarSystem,
+                    StationName = g.StationName,
+                    ExpiryDisplay = g.ExpiryDisplay,
+                    CurrentTotal = g.CurrentTotal,
+                    PlayerContribution = g.PlayerContribution
+                }).ToList();
+
+                foreach (var g in incoming)
+                {
+                    var match = FindMatchingCommunityGoal(merged, g);
+                    if (match is not null)
+                    {
+                        if (match.Id == 0 && g.Id > 0) match.Id = g.Id;
+                        if (string.IsNullOrWhiteSpace(match.StarSystem)) match.StarSystem = g.StarSystem;
+                        if (string.IsNullOrWhiteSpace(match.StationName)) match.StationName = g.StationName;
+                        if (string.IsNullOrWhiteSpace(match.ExpiryDisplay)) match.ExpiryDisplay = g.ExpiryDisplay;
+                        if (match.CurrentTotal == 0 && g.CurrentTotal > 0) match.CurrentTotal = g.CurrentTotal;
+                    }
+                    else
+                    {
+                        merged.Add(g);
+                    }
+                }
+                _state.CommunityGoals = merged;
+            }
+
+            _state.LastUpdated = DateTime.UtcNow;
+            PublishState();
+        }
+    }
+
+    private static CommunityGoalItem? FindMatchingCommunityGoal(IReadOnlyList<CommunityGoalItem> list, CommunityGoalItem target)
+    {
+        if (target.Id > 0)
+        {
+            var byId = list.FirstOrDefault(g => g.Id == target.Id);
+            if (byId is not null)
+                return byId;
+        }
+        return list.FirstOrDefault(g => string.Equals(g.Title, target.Title, StringComparison.OrdinalIgnoreCase));
     }
 
 

@@ -55,6 +55,8 @@ public class ConfigService
                 var cfg = JsonSerializer.Deserialize(json, AppConfigJsonContext.Default.AppConfig);
                 if (cfg != null)
                 {
+                    if (!json.Contains("HasCompletedFirstRunWizard", StringComparison.OrdinalIgnoreCase))
+                        cfg.HasCompletedFirstRunWizard = true;
                     Current = cfg;
                     return cfg;
                 }

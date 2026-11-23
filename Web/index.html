@@ -12,6 +12,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/icon.svg" />
+<meta name="theme-color" id="pwaThemeColor" content="#FF7100" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>HUDnopy // MFD WEB HUD</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
@@ -57,6 +62,7 @@
         <div class="dashboard-overview">
           <div class="hud-card wide-card"><h3><span data-dashboard-key="sessionStatsTitle">Resumen financiero y estadístico de la sesión</span><button class="hud-mini-btn" type="button" onclick="resetWebSessionStats()" data-dashboard-tooltip-key="sessionReset" title="Reiniciar sesión">🔄</button></h3><div id="webSessionStatsSummary" style="color:var(--hud-secondary);font-weight:600;">---</div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;"><span id="webGalaxyStatusLine" style="color:var(--hud-muted);font-size:0.8rem;"></span><button class="hud-mini-btn" type="button" onclick="refreshWebGalaxyStatus()" title="Actualizar">🔄</button></div></div>
           <div class="hud-card wide-card" id="webCapiSummaryCard" hidden><h3>FRONTIER cAPI — FLEET &amp; COMMUNITY GOALS</h3><div id="webCapiSummary" style="color:var(--hud-text);font-size:0.88rem;"></div></div>
+          <div class="hud-card wide-card" id="webServiceHealthCard" hidden><h3>EXTERNAL SERVICES</h3><div id="webServiceHealthStrip" style="display:flex;flex-wrap:wrap;gap:6px;"></div></div>
           <div class="hud-card"><h3 data-dashboard-key="visualAlerts">Centro de alertas visuales</h3><div id="alertList" class="alert-list" style="color:var(--hud-muted);">Sin alertas visuales.</div></div>
           <div class="hud-card"><h3 data-dashboard-key="nextRoute">Siguiente etapa de ruta</h3><div id="dashRoute">No hay ruta activa</div></div>
           <div class="hud-card wide-card"><h3 data-dashboard-key="recentActivity">Actividad reciente</h3><div id="dashActivity">Esperando eventos del diario.</div></div>
@@ -260,12 +266,7 @@
                 <p id="spanshSummary" style="font-weight:700;"></p>
                 <p id="spanshUpdated" style="color:var(--hud-muted);"></p>
                 <p id="spanshSourceNote" style="color:var(--hud-muted);font-size:0.78rem;"></p>
-                <h4 id="spanshBodiesTitle"></h4>
-                <div class="table-scroll"><table class="hud-table spansh-table">
-                  <thead><tr><th data-spansh-key="body"></th><th data-spansh-key="type"></th><th data-spansh-key="arrival"></th><th data-spansh-key="landable"></th></tr></thead>
-                  <tbody id="spanshBodiesTableBody"></tbody>
-                </table></div>
-                <h4 id="spanshStationsTitle" style="margin-top:14px;"></h4>
+                <h4 id="spanshStationsTitle" style="margin-top:10px;"></h4>
                 <div class="table-scroll"><table class="hud-table spansh-table">
                   <thead><tr><th data-spansh-key="station"></th><th data-spansh-key="type"></th><th data-spansh-key="stationBody"></th><th data-spansh-key="arrival"></th><th data-spansh-key="controllingFaction"></th></tr></thead>
                   <tbody id="spanshStationsTableBody"></tbody>
@@ -328,14 +329,31 @@
           <p id="explorationBodiesStatus" style="color:var(--hud-muted);margin-bottom:10px;">Los cuerpos destacados aparecerán al escanearlos.</p>
           <p id="explorationPortfolio" style="color:var(--hud-secondary);font-weight:700;margin-bottom:10px;" hidden></p>
           <div id="exobiologyTracker" style="padding:10px;border:1px solid var(--hud-accent);background:var(--hud-panel-alt);margin-bottom:10px;" hidden>
-            <div style="display:flex;justify-content:space-between;gap:10px;font-weight:700;margin-bottom:6px;">
-              <span id="exoTrackerTitle" style="color:var(--hud-accent);"></span>
-              <span id="exoTrackerDist"></span>
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+              <div style="flex:1;min-width:220px;">
+                <div style="display:flex;justify-content:space-between;gap:10px;font-weight:700;margin-bottom:6px;">
+                  <span id="exoTrackerTitle" style="color:var(--hud-accent);"></span>
+                  <span id="exoTrackerDist"></span>
+                </div>
+                <div class="bar-track"><div class="bar-fill" id="exoTrackerBar" style="width:0%;background:var(--hud-ok);"></div></div>
+              </div>
+              <canvas id="webExoRadarCanvas" width="144" height="144" style="border-radius:50%;border:1px solid var(--hud-border);background:#070A0F;flex-shrink:0;"></canvas>
             </div>
-            <div class="bar-track"><div class="bar-fill" id="exoTrackerBar" style="width:0%;background:var(--hud-ok);"></div></div>
+          </div>
+          <div id="webSystemMapSection" style="padding:10px;border:1px solid var(--hud-border);background:#080B10;margin-bottom:10px;" hidden>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+              <button id="btnWebToggleSystemMap" type="button" class="deck-button" onclick="toggleWebSystemMap()" style="padding:6px 12px;min-height:38px;font-size:0.84em;font-weight:700;letter-spacing:0.05em;">🗺 2D SYSTEM MAP &nbsp;▴</button>
+              <span id="webSystemMapLegend" style="color:var(--hud-muted);font-size:0.78em;">ELW / WW / BIO / HIGH-G</span>
+            </div>
+            <div id="webSystemMapBody">
+              <div style="overflow-x:auto;overflow-y:auto;max-height:260px;">
+                <svg id="webSystemMapSvg" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto;"></svg>
+              </div>
+              <div id="webSystemMapDetail" style="margin-top:8px;padding:8px 10px;border:1px solid var(--hud-border);background:var(--hud-panel-alt);font-size:0.86em;" hidden></div>
+            </div>
           </div>
           <div class="table-scroll"><table class="hud-table">
-            <thead><tr><th data-translation-key="body">Cuerpo</th><th data-translation-key="type">Tipo</th><th data-translation-key="radius">Radio</th><th data-translation-key="surfaceGravity">Gravedad superficial</th><th data-translation-key="surfaceTemperature">Temperatura superficial</th><th data-translation-key="atmosphere">Atmósfera</th><th data-translation-key="materials">Materiales</th><th data-translation-key="composition">Composición</th><th data-translation-key="atmosphereComposition">Composición atmosférica</th><th data-translation-key="orbitalData">Datos orbitales</th><th data-translation-key="rings">Anillos</th><th data-translation-key="interest">Interés registrado</th><th data-translation-key="biologicalGenera">Géneros biológicos</th><th data-translation-key="analysedSpecies">Especies analizadas</th><th data-translation-key="discovered">Descubierto</th><th data-translation-key="mapped">Cartografiado</th><th data-translation-key="estimatedSale">Est. venta</th></tr></thead>
+            <thead><tr><th data-translation-key="body">Cuerpo</th><th data-translation-key="type">Tipo</th><th data-translation-key="radius">Radio</th><th data-translation-key="surfaceGravity">Gravedad superficial</th><th data-translation-key="surfaceTemperature">Temperatura superficial</th><th data-translation-key="atmosphere">Atmósfera</th><th data-translation-key="materials">Materiales</th><th data-translation-key="composition">Composición</th><th data-translation-key="atmosphereComposition">Composición atmosférica</th><th data-translation-key="orbitalData">Datos orbitales</th><th data-translation-key="rings">Anillos</th><th data-translation-key="interest">Interés registrado</th><th data-translation-key="biologicalGenera">Géneros biológicos</th><th data-translation-key="analysedSpecies">Especies analizadas</th><th data-translation-key="discovered">Descubierto</th><th data-translation-key="mapped">Cartografiado</th><th data-translation-key="estimatedSale">Est. venta</th><th data-translation-key="source">Origen</th></tr></thead>
             <tbody id="explorationBodiesTableBody"></tbody>
           </table></div>
         </div>
@@ -734,6 +752,19 @@
               <tbody id="webGalnetTableBody"></tbody>
             </table></div>
             <div id="webGalnetBody" style="background:#080A0E;border:1px solid var(--hud-border);padding:10px;white-space:pre-wrap;font-size:0.88rem;line-height:1.45;color:var(--hud-text);max-height:52vh;overflow-y:auto;"></div>
+          </div>
+        </div>
+        <div id="webCockpitRadioBar" class="hud-card module-section" data-section-title="Radio de cabina" data-section-key="cockpit-radio">
+          <h3><span>📻 Cockpit Radio</span></h3>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+            <select id="webRadioStation" onchange="changeWebRadioStation()" style="min-width:220px;min-height:42px;flex:1;max-width:340px;"></select>
+            <button id="btnWebRadioToggle" type="button" class="deck-button" onclick="toggleWebRadio()" style="min-height:42px;min-width:110px;padding:8px 16px;">▶ Play</button>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="display:inline-flex;align-items:center;gap:8px;font-size:0.88rem;color:var(--hud-muted);">
+              Vol <input id="webRadioVolume" type="range" min="0" max="100" value="45" onchange="setWebRadioVolume(this.value)" style="width:160px;" />
+            </label>
+            <span id="webRadioStatus" style="color:var(--hud-secondary);font-size:0.88rem;font-weight:600;">Standby</span>
           </div>
         </div>
       <div class="hud-card module-section active" data-section-title="Hitos de exploración" data-section-key="exploration-milestones">

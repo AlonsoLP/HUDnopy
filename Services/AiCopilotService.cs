@@ -87,6 +87,7 @@ public sealed partial class AiCopilotService : IDisposable
     public long LastResponseLatencyMs { get; private set; }
     public long LastFirstTokenLatencyMs { get; private set; }
     public bool LastThinkingUsed { get; private set; }
+    public WhisperSttService? OfflineWhisperStt { get; set; }
 
     public AiCopilotService(
         ConfigService configService,
@@ -947,6 +948,27 @@ public sealed partial class AiCopilotService : IDisposable
         string wakeWord = (cfg.AiWakeWord ?? "COVAS").Trim();
         bool inFollowUpWindow = DateTimeOffset.UtcNow <= _wakeWordFollowUpUntilUtc;
         bool requireWake = isHandsFree && cfg.AiRequireWakeWord && !string.IsNullOrWhiteSpace(wakeWord) && !inFollowUpWindow;
+
+        // 0. Offline Whisper.cpp STT when explicitly selected by the user (works with all LLM providers)
+        if (string.Equals(cfg.AiSttEngine, "whisper_local", StringComparison.OrdinalIgnoreCase) &&
+            OfflineWhisperStt is not null)
+        {
+            var (wOk, wTranscript) = await OfflineWhisperStt.TranscribeWavAsync(wavBytes, cfg.InterfaceLanguage, cfg.WhisperModelId);
+            if (!wOk || string.IsNullOrWhiteSpace(wTranscript))
+                return (false, "", string.IsNullOrWhiteSpace(wTranscript) ? "No se pudo transcribir el audio con Whisper." : wTranscript);
+            if (IsSilenceVoiceCommand(wTranscript))
+            {
+                _wakeWordFollowUpUntilUtc = DateTimeOffset.MinValue;
+                _speechService.StopSpeaking();
+                return (true, "🔇", "");
+            }
+            if (requireWake && !wTranscript.Contains(wakeWord, StringComparison.OrdinalIgnoreCase))
+                return (true, "", "");
+            var (wChatOk, wChatReply) = await AskAsync(wTranscript);
+            if (wChatOk && isHandsFree)
+                _wakeWordFollowUpUntilUtc = DateTimeOffset.UtcNow.AddSeconds(18);
+            return (wChatOk, wTranscript, wChatReply);
+        }
 
         // 1. Gemini: direct multimodal WAV audio with SSE sentence-by-sentence TTS streaming + multi-turn history
         if (cfg.AiActiveProvider == "gemini")

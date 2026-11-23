@@ -398,7 +398,9 @@ public partial class MainWindow
             _suppressEvents = true;
             selector.SelectedValue = previous;
             _suppressEvents = false;
-            TxtSoundDirectoryStatus.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundDirError"], ex.Message);
+            string err = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundDirError"], ex.Message);
+            TxtSoundDirectoryStatus.Text = err;
+            SetStatusBarMessage($"⚠ {err}");
         }
     }
 
@@ -412,7 +414,10 @@ public partial class MainWindow
         if (_alertSoundService.MigrationError is not null)
             messages.Add(string.Format(text["soundDirError"], _alertSoundService.MigrationError));
         messages.AddRange(_alertSoundService.DirectoryErrors.Select(error => string.Format(text["soundDirError"], error)));
+        string joined = string.Join(" · ", messages);
         TxtSoundDirectoryStatus.Text = string.Join(Environment.NewLine, messages);
+        if (!string.IsNullOrWhiteSpace(joined))
+            SetStatusBarMessage(joined);
     }
 
     private void BtnAddSoundDirectory_Click(object sender, RoutedEventArgs e)
@@ -425,6 +430,7 @@ public partial class MainWindow
         if (_configService.Current.AlertSoundDirectories.Contains(directory, StringComparer.OrdinalIgnoreCase))
         {
             TxtSoundDirectoryStatus.Text = text["soundDirDuplicate"];
+            SetStatusBarMessage($"⚠ {text["soundDirDuplicate"]}");
             return;
         }
         SaveSoundDirectories(_configService.Current.AlertSoundDirectories.Append(directory));
@@ -434,7 +440,9 @@ public partial class MainWindow
     {
         if (LstSoundDirectories.SelectedItem is not string directory)
         {
-            TxtSoundDirectoryStatus.Text = SettingsTranslations.ForLanguage(_uiLanguage)["soundDirSelect"];
+            string msg = SettingsTranslations.ForLanguage(_uiLanguage)["soundDirSelect"];
+            TxtSoundDirectoryStatus.Text = msg;
+            SetStatusBarMessage($"⚠ {msg}");
             return;
         }
         SaveSoundDirectories(_configService.Current.AlertSoundDirectories
@@ -450,7 +458,9 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException or NotSupportedException)
         {
-            TxtSoundDirectoryStatus.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundDirError"], ex.Message);
+            string err = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundDirError"], ex.Message);
+            TxtSoundDirectoryStatus.Text = err;
+            SetStatusBarMessage($"⚠ {err}");
         }
     }
 
@@ -730,11 +740,11 @@ public partial class MainWindow
 
     private void ResponsiveGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (sender is UniformGrid grid && e.NewSize.Width > 0 &&
+        if (sender is UniformGrid grid && e.NewSize.Width > 0 && double.IsFinite(e.NewSize.Width) &&
             double.TryParse(grid.Tag?.ToString(), out double minimum) && minimum > 0)
         {
             double scaledMin = minimum * Math.Max(1.0, _desktopFontScale);
-            grid.Columns = Math.Max(1, (int)(e.NewSize.Width / scaledMin));
+            grid.Columns = Math.Clamp((int)(e.NewSize.Width / scaledMin), 1, 8);
         }
     }
 
@@ -1009,7 +1019,13 @@ public partial class MainWindow
         await _webServer.BroadcastStateAsync();
     }
 
-    private void MaterialFilter_Changed(object sender, EventArgs e) => ApplyMaterialFilters();
+    private void MaterialFilter_Changed(object sender, EventArgs e)
+    {
+        if (ReferenceEquals(sender, TxtMaterialSearch))
+            DebounceSearch(ApplyMaterialFilters);
+        else
+            ApplyMaterialFilters();
+    }
 
 
     // =========================================================================
@@ -1028,11 +1044,15 @@ public partial class MainWindow
             if (string.Equals(engine, "piper", StringComparison.OrdinalIgnoreCase) && !_piperTts.IsEngineInstalled())
             {
                 SetPiperButtonsEnabled(false);
-                var progress = new Progress<string>(msg => TxtPiperStatus.Text = msg);
+                var progress = new Progress<string>(msg =>
+                {
+                    TxtPiperStatus.Text = msg;
+                    SetStatusBarMessage(msg);
+                });
                 var (_, msg) = await _piperTts.EnsureEngineInstalledAsync(progress);
                 RefreshPiperVoicesUi();
                 TxtPiperStatus.Text = msg;
-                TxtStatusBarLeft.Text = msg;
+                SetStatusBarMessage(msg);
                 SetPiperButtonsEnabled(true);
             }
         }
@@ -1108,23 +1128,31 @@ public partial class MainWindow
     private async void BtnDownloadPiperVoice_Click(object sender, RoutedEventArgs e)
     {
         SetPiperButtonsEnabled(false);
-        var progress = new Progress<string>(msg => TxtPiperStatus.Text = msg);
+        var progress = new Progress<string>(msg =>
+        {
+            TxtPiperStatus.Text = msg;
+            SetStatusBarMessage(msg);
+        });
         string voiceId = CmbPiperVoice.SelectedValue as string ?? "auto";
         var (_, msg) = await _piperTts.DownloadVoiceAsync(voiceId, _uiLanguage, progress);
         RefreshPiperVoicesUi();
         TxtPiperStatus.Text = msg;
-        TxtStatusBarLeft.Text = msg;
+        SetStatusBarMessage(msg);
         SetPiperButtonsEnabled(true);
     }
 
     private async void BtnDownloadPiperPack_Click(object sender, RoutedEventArgs e)
     {
         SetPiperButtonsEnabled(false);
-        var progress = new Progress<string>(msg => TxtPiperStatus.Text = msg);
+        var progress = new Progress<string>(msg =>
+        {
+            TxtPiperStatus.Text = msg;
+            SetStatusBarMessage(msg);
+        });
         var (_, msg) = await _piperTts.DownloadAllSixLanguagesPackAsync(progress);
         RefreshPiperVoicesUi();
         TxtPiperStatus.Text = msg;
-        TxtStatusBarLeft.Text = msg;
+        SetStatusBarMessage(msg);
         SetPiperButtonsEnabled(true);
     }
 
@@ -1134,18 +1162,24 @@ public partial class MainWindow
         var resolved = _piperTts.ResolveVoice(voiceId, _uiLanguage);
         if (!_piperTts.IsEngineInstalled())
         {
-            TxtPiperStatus.Text = "⚠ Motor Piper no instalado. Pulsa «Descargar voz» o «Pack 6 idiomas».";
+            const string missingEngine = "⚠ Motor Piper no instalado. Pulsa «Descargar voz» o «Pack 6 idiomas».";
+            TxtPiperStatus.Text = missingEngine;
+            SetStatusBarMessage(missingEngine);
             return;
         }
         if (resolved is null || !_piperTts.IsVoiceInstalled(resolved.Id))
         {
-            TxtPiperStatus.Text = $"⚠ La voz seleccionada ({resolved?.DisplayName ?? voiceId}) no está descargada. Pulsa «Descargar voz».";
+            string missingVoice = $"⚠ La voz seleccionada ({resolved?.DisplayName ?? voiceId}) no está descargada. Pulsa «Descargar voz».";
+            TxtPiperStatus.Text = missingVoice;
+            SetStatusBarMessage(missingVoice);
             return;
         }
 
         SetPiperButtonsEnabled(false);
         BtnTestPiperVoice.IsEnabled = false;
-        TxtPiperStatus.Text = $"Probando voz Piper ({resolved.DisplayName})...";
+        string testingVoice = $"Probando voz Piper ({resolved.DisplayName})...";
+        TxtPiperStatus.Text = testingVoice;
+        SetStatusBarMessage(testingVoice);
 
         try
         {
@@ -1166,11 +1200,13 @@ public partial class MainWindow
                     ? "Piper no generó audio."
                     : _piperTts.LastError;
                 TxtPiperStatus.Text = $"⚠ {err}";
-                TxtStatusBarLeft.Text = err;
+                SetStatusBarMessage($"⚠ {err}");
                 return;
             }
 
-            TxtPiperStatus.Text = $"▶ Reproduciendo Piper ({resolved.DisplayName})...";
+            string playingMsg = $"▶ Reproduciendo Piper ({resolved.DisplayName})...";
+            TxtPiperStatus.Text = playingMsg;
+            SetStatusBarMessage(playingMsg);
             await Task.Run(() =>
             {
                 using var ms = new MemoryStream(wav);
@@ -1183,10 +1219,13 @@ public partial class MainWindow
                 done.Wait(TimeSpan.FromSeconds(15));
             });
             UpdatePiperStatusText();
+            SetStatusBarMessage($"✓ Piper ({resolved.DisplayName})");
         }
         catch (Exception ex)
         {
-            TxtPiperStatus.Text = $"⚠ Error al reproducir Piper: {ex.Message}";
+            string playErr = $"⚠ Error al reproducir Piper: {ex.Message}";
+            TxtPiperStatus.Text = playErr;
+            SetStatusBarMessage(playErr);
         }
         finally
         {

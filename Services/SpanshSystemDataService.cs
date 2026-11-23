@@ -135,7 +135,11 @@ public sealed class SpanshSystemDataService : IDisposable
 
         requestToCancel?.Cancel();
         if (changedState is not null)
+        {
+            if (changedState.Status is SpanshSystemDataStatus.Disabled or SpanshSystemDataStatus.WaitingForSystem)
+                _fileWatcher.SyncSpanshSystemBodies(null);
             StateChanged?.Invoke(changedState);
+        }
         if (requestToStart is not null)
             _ = LoadSystemAsync(id64, requestToStart);
     }
@@ -224,6 +228,7 @@ public sealed class SpanshSystemDataService : IDisposable
             _state = state;
         }
 
+        _fileWatcher.SyncSpanshSystemBodies(state.Snapshot);
         StateChanged?.Invoke(state);
         return true;
     }
@@ -308,7 +313,12 @@ public sealed class SpanshSystemDataService : IDisposable
                     body.Name ?? "",
                     body.SubType ?? body.Type ?? "",
                     body.DistanceToArrival,
-                    body.IsLandable))
+                    body.IsLandable,
+                    body.BodyId,
+                    body.Gravity.HasValue ? body.Gravity.Value * 9.80665 : null,
+                    body.SurfaceTemperature,
+                    body.AtmosphereType,
+                    HasRings: body.Rings is { Count: > 0 }))
                 .ToList(),
             Stations = sourceBodies
                 .SelectMany(body => (body.Stations ?? new()).Select(station => (Body: body.Name ?? "", Station: station)))
@@ -363,6 +373,8 @@ public sealed class SpanshSystemDataService : IDisposable
 
     private sealed class SpanshApiBody
     {
+        [JsonPropertyName("bodyId")]
+        public int? BodyId { get; set; }
         [JsonPropertyName("name")]
         public string? Name { get; set; }
         [JsonPropertyName("type")]
@@ -373,6 +385,14 @@ public sealed class SpanshSystemDataService : IDisposable
         public double? DistanceToArrival { get; set; }
         [JsonPropertyName("isLandable")]
         public bool? IsLandable { get; set; }
+        [JsonPropertyName("gravity")]
+        public double? Gravity { get; set; }
+        [JsonPropertyName("surfaceTemperature")]
+        public double? SurfaceTemperature { get; set; }
+        [JsonPropertyName("atmosphereType")]
+        public string? AtmosphereType { get; set; }
+        [JsonPropertyName("rings")]
+        public List<JsonElement>? Rings { get; set; }
         [JsonPropertyName("stations")]
         public List<SpanshApiStation>? Stations { get; set; }
     }

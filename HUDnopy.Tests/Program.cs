@@ -42,6 +42,7 @@ internal static partial class Program
 
     private static async Task<int> Main(string[] args)
     {
+        try { System.Windows.Application.ResourceAssembly = typeof(HUDnopy.App).Assembly; } catch { }
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i].Equals("--filter", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
@@ -85,6 +86,10 @@ internal static partial class Program
         await RunTestAsync("28. Concurrency & Thread-Safety: 8-thread EventHub & 5-client WS broadcast stress", TestConcurrencyAndThreadSafetyAsync);
         await RunTestAsync("29. EDDN Privacy & Deduplication: Personal-key strip, Lat/Lon & SHA-256 dedup", TestEddnSanitizationAndDeduplicationAsync);
         await RunTestAsync("30. Web LAN Security & Auth: 302/401/429 rate-limit, Secure cookies & CSP headers", TestWebLanSecurityAndAuthAsync);
+        RunTest("31. External Data Unification: Spansh/Local bodies merge, toggle-off purge & CG precedence", TestExternalDataUnificationAndToggleResilience);
+        RunTest("32. Crash Sanitization, Support ZIP & WPF MainWindow Layout Smoke-Test", TestCrashSanitizationAndWpfLayoutSmoke);
+        RunTest("33. v0.5.0 Visual & Immersion: HUD/EDHM import, Exo radar math, 2D System Map & Update semver", TestVisualImmersionV050);
+        RunTest("34. v0.5.0 Overlay, PWA, Deck Editor, Whisper Offline STT & Cockpit Radio", TestV050OverlayPwaDeckWhisperRadio);
 
         totalSw.Stop();
         if (!string.IsNullOrWhiteSpace(_junitPath))
@@ -676,5 +681,345 @@ internal static partial class Program
         // 6. Inara deep-link URL builder
         string inaraUrl = CommunitySyncService.BuildInaraDeepLink("system", "Shinrarta Dezhra");
         Assert(inaraUrl == "https://inara.cz/elite/starsystem/?search=Shinrarta%20Dezhra", $"Unexpected Inara URL: {inaraUrl}");
+    }
+
+    private static void TestExternalDataUnificationAndToggleResilience()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"hudnopy_unify_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cfg = new ConfigService();
+            cfg.Current.JournalFolderPath = tempDir;
+            var bindings = new BindingsService(cfg);
+            var inputSim = new InputSimulatorService(bindings, cfg);
+            var hub = new GameEventHub();
+
+            // Write synthetic Journal with 1 local Earth-like body scan in system 123456
+            string journalPath = Path.Combine(tempDir, "Journal.2026-11-22T230000.01.log");
+            File.WriteAllLines(journalPath, new[]
+            {
+                """{"timestamp":"2026-11-22T23:00:01Z","event":"Location","StarSystem":"TestUnifySys","SystemAddress":123456}""",
+                """{"timestamp":"2026-11-22T23:00:05Z","event":"Scan","StarSystem":"TestUnifySys","SystemAddress":123456,"BodyName":"TestUnifySys 1","BodyID":1,"PlanetClass":"Earth-like body","WasDiscovered":false,"WasMapped":false,"DistanceFromArrivalLS":420.0}"""
+            });
+
+            using var watcher = new EliteFileWatcherService(cfg, inputSim, hub);
+            watcher.RefreshStateForTest();
+
+            Assert(watcher.State.ExplorationBodies.Count == 1, $"Expected 1 local body, got {watcher.State.ExplorationBodies.Count}");
+            Assert(watcher.State.ExplorationBodies[0].DataSource == "Local", "Local scan must start with DataSource='Local'");
+            Assert(watcher.State.SystemScannedBodies == 1, "SystemScannedBodies should be 1");
+
+            // Merge Spansh snapshot containing the same body (BodyID 1) + 1 unscanned body (BodyID 2)
+            var spanshSnap = new SpanshSystemSnapshot
+            {
+                Id64 = 123456,
+                Name = "TestUnifySys",
+                BodyCount = 2,
+                StationCount = 0,
+                FetchedAtUtc = DateTimeOffset.UtcNow,
+                Bodies = new List<SpanshBodySummary>
+                {
+                    new("TestUnifySys 1", "Earth-like world", 425.0, false, BodyId: 1, SurfaceGravity: 9.81, SurfaceTemperature: 288),
+                    new("TestUnifySys 2", "High metal content world", 850.0, true, BodyId: 2, SurfaceGravity: 19.61, SurfaceTemperature: 310)
+                }
+            };
+            watcher.SyncSpanshSystemBodies(spanshSnap);
+
+            Assert(watcher.State.ExplorationBodies.Count == 2, $"Expected 2 unified bodies (no duplicates), got {watcher.State.ExplorationBodies.Count}");
+            Assert(watcher.State.SystemScannedBodies == 1, $"Spansh-only bodies must NOT inflate SystemScannedBodies (got {watcher.State.SystemScannedBodies})");
+            var body1 = watcher.State.ExplorationBodies.First(b => b.BodyName == "TestUnifySys 1");
+            var body2 = watcher.State.ExplorationBodies.First(b => b.BodyName == "TestUnifySys 2");
+            Assert(body1.DataSource == "Local+Spansh", $"Expected Local+Spansh on merged body, got {body1.DataSource}");
+            Assert(body1.PlanetClass == "Earth-like body" && body1.WasDiscovered == false, "Local Journal fields must take precedence over Spansh");
+            Assert(body1.SurfaceGravity is > 9.0, "Missing local fields (gravity) should be enriched from Spansh");
+            Assert(body2.DataSource == "Spansh" && body2.IsSpanshOnly, "Unscanned Spansh body must be tagged Spansh");
+
+            // Disable Spansh (SyncSpanshSystemBodies(null)): Spansh-only body purged, Local body preserved!
+            watcher.SyncSpanshSystemBodies(null);
+            Assert(watcher.State.ExplorationBodies.Count == 1, $"Expected 1 body after Spansh disable, got {watcher.State.ExplorationBodies.Count}");
+            Assert(watcher.State.ExplorationBodies[0].DataSource == "Local", "Local body must revert to DataSource='Local' when Spansh disabled");
+
+            // Community Goals merge: cAPI authoritative + Inara non-authoritative preserves PlayerContribution
+            watcher.MergeCommunityGoals(new[]
+            {
+                new CommunityGoalItem { Id = 777, Title = "Protect Trade", StarSystem = "Sol", CurrentTotal = 50000, PlayerContribution = 1200 }
+            }, isAuthoritative: true);
+            watcher.MergeCommunityGoals(new[]
+            {
+                new CommunityGoalItem { Id = 777, Title = "Protect Trade", StarSystem = "Sol", StationName = "Galileo", CurrentTotal = 49000, PlayerContribution = 0 },
+                new CommunityGoalItem { Id = 888, Title = "Extra Inara CG", StarSystem = "Lave", CurrentTotal = 10000, PlayerContribution = 0 }
+            }, isAuthoritative: false);
+
+            Assert(watcher.State.CommunityGoals.Count == 2, $"Expected 2 merged CGs, got {watcher.State.CommunityGoals.Count}");
+            var cg777 = watcher.State.CommunityGoals.First(g => g.Id == 777);
+            Assert(cg777.PlayerContribution == 1200, $"Inara must never overwrite cAPI PlayerContribution (got {cg777.PlayerContribution})");
+            Assert(cg777.StationName == "Galileo", "Inara should fill missing StationName metadata");
+
+            // EDSM bodies fallback when Spansh is off: adds missing body 3 without duplicating body 1
+            watcher.SyncEdsmSystemBodies("TestUnifySys", "123456", new[]
+            {
+                new SpanshBodySummary("TestUnifySys 1", "Earth-like world", 420.0, false, BodyId: 1),
+                new SpanshBodySummary("TestUnifySys 3", "Water world", 1200.0, false, BodyId: 3)
+            });
+            Assert(watcher.State.ExplorationBodies.Count == 2, $"Expected 2 bodies (Local + EDSM fallback), got {watcher.State.ExplorationBodies.Count}");
+            Assert(watcher.State.ExplorationBodies.Any(b => b.BodyName == "TestUnifySys 3" && b.DataSource == "EDSM"), "EDSM fallback body must be tagged EDSM");
+
+            // Watched BGS faction marker & Inara profile merge + centralized toggle-off purge
+            watcher.ApplyCapiEnrichment(st =>
+            {
+                st.SystemFactions = new List<SystemFactionItem> { new() { Name = "The Dark Wheel", InfluencePercent = 25.0, DataSource = "EDSM" } };
+                st.WatchedBgsFactions = new List<EliteBgsFactionWatchItem> { new() { FactionName = "The Dark Wheel", SystemName = "TestUnifySys" } };
+                st.InaraProfile = new InaraCommanderProfile { CommanderName = "TestCMDR", SquadronName = "TestWing", SquadronRank = "Leader", PreferredAllegiance = "Independent" };
+                st.EdsmDiscoveryIntel = new EdsmSystemDiscoveryIntel { SystemName = "TestUnifySys", IsKnownInEdsm = true };
+            });
+            Assert(watcher.State.SystemFactions[0].IsWatched && watcher.State.SystemFactions[0].DisplayName.StartsWith("★"), "Watched faction must show ★ marker");
+            Assert(watcher.State.CommanderProfile.Any(p => p.Category == "Inara" && p.Value.Contains("TestWing")), "Inara profile must merge into CommanderProfile");
+
+            // Turning OFF EDSM, EliteBGS, and Inara purges their exclusive data while keeping Local body intact
+            cfg.Current.EnableEdsmSync = false;
+            cfg.Current.EnableEliteBgsWatchlist = false;
+            cfg.Current.EnableInaraSync = false;
+            cfg.Save();
+            Assert(watcher.State.EdsmDiscoveryIntel is null, "EDSM intel must be purged when EDSM disabled");
+            Assert(watcher.State.WatchedBgsFactions.Count == 0, "Watched BGS factions must be purged when EliteBGS disabled");
+            Assert(watcher.State.InaraProfile is null && !watcher.State.CommanderProfile.Any(p => p.Category == "Inara"), "Inara rows must be purged when Inara disabled");
+            Assert(watcher.State.ExplorationBodies.Count == 1 && watcher.State.ExplorationBodies[0].DataSource == "Local", "Only Local body must remain after disabling EDSM & Spansh");
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    private static void TestCrashSanitizationAndWpfLayoutSmoke()
+    {
+        // 1. Verify crash report sanitization and Support ZIP bundling
+        var fakeEx = new InvalidOperationException(@"Failed at C:\Users\alons\secret.txt with api_key=SUPERSECRET123 and Bearer tok_xyz999");
+        var cfg = new AppConfig();
+        string report = AppDiagnosticsLogger.BuildSanitizedCrashReport(fakeEx, "Test.Source", cfg);
+        Assert(!report.Contains("alons", StringComparison.OrdinalIgnoreCase), $"Username leaked in crash report: {report}");
+        Assert(!report.Contains("SUPERSECRET123", StringComparison.Ordinal), "API key leaked in crash report.");
+        Assert(!report.Contains("tok_xyz999", StringComparison.Ordinal), "Bearer token leaked in crash report.");
+        Assert(report.Contains("[USER]", StringComparison.Ordinal) && report.Contains("[REMOVED]", StringComparison.Ordinal), "Redaction markers missing.");
+
+        string issueUrl = AppDiagnosticsLogger.BuildGitHubIssueUrl(fakeEx, "Test.Source", cfg);
+        Assert(issueUrl.StartsWith("https://github.com/AlonsoLP/HUDnopy/issues/new?", StringComparison.Ordinal), "Invalid GitHub Issue URL.");
+        Assert(!issueUrl.Contains("SUPERSECRET123", StringComparison.Ordinal), "Secret leaked in GitHub Issue URL.");
+
+        string tempZip = Path.Combine(Path.GetTempPath(), $"hudnopy_crash_test_{Guid.NewGuid():N}.zip");
+        try
+        {
+            AppDiagnosticsLogger.ExportSupportBundle(cfg, tempZip, crashReportText: report);
+            Assert(File.Exists(tempZip), "Support ZIP was not created.");
+            using var zip = System.IO.Compression.ZipFile.OpenRead(tempZip);
+            var crashEntry = zip.GetEntry("crash-report.txt");
+            Assert(crashEntry is not null, "crash-report.txt missing from Support ZIP.");
+            using var sr = new StreamReader(crashEntry!.Open());
+            string zipCrashText = sr.ReadToEnd();
+            Assert(!zipCrashText.Contains("SUPERSECRET123", StringComparison.Ordinal) && !zipCrashText.Contains("alons", StringComparison.OrdinalIgnoreCase),
+                "Personal data leaked inside crash-report.txt in Support ZIP.");
+        }
+        finally
+        {
+            try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+        }
+
+        // 2. Real WPF STA layout smoke-test: instantiate MainWindow and run Measure/Arrange
+        Exception? wpfError = null;
+        var staThread = new Thread(() =>
+        {
+            try
+            {
+                if (System.Windows.Application.Current is null)
+                {
+                    var app = new HUDnopy.App();
+                    app.InitializeComponent();
+                }
+                var services = new ApplicationServices();
+                var win = new HUDnopy.MainWindow(services);
+                win.Measure(new System.Windows.Size(1280, 720));
+                win.Arrange(new System.Windows.Rect(0, 0, 1280, 720));
+                win.UpdateLayout();
+                win.Close();
+            }
+            catch (Exception ex)
+            {
+                wpfError = ex;
+            }
+        });
+        staThread.SetApartmentState(ApartmentState.STA);
+        staThread.Start();
+        Assert(staThread.Join(TimeSpan.FromSeconds(15)), "WPF STA smoke-test timed out.");
+        if (wpfError is not null)
+            throw new InvalidOperationException($"WPF MainWindow layout smoke-test failed: {wpfError.GetType().Name}: {wpfError.Message}\n{wpfError.StackTrace}", wpfError);
+    }
+
+    private static void TestVisualImmersionV050()
+    {
+        // 1. Block A (#19): GraphicsConfigurationOverride.xml & EDHM JSON theme parsing
+        const string identityXml = """
+            <GraphicsConfig>
+              <GUIColour>
+                <Default>
+                  <LocalisationName>Standard</LocalisationName>
+                  <MatrixRed>1, 0, 0</MatrixRed>
+                  <MatrixGreen>0, 1, 0</MatrixGreen>
+                  <MatrixBlue>0, 0, 1</MatrixBlue>
+                </Default>
+              </GUIColour>
+            </GraphicsConfig>
+            """;
+        Assert(GameHudThemeImportService.TryParseGraphicsOverrideXml(identityXml, out string p1, out string s1),
+            "Failed to parse identity GraphicsConfigurationOverride.xml.");
+        Assert(string.Equals(p1, "#FF7100", StringComparison.OrdinalIgnoreCase), $"Expected #FF7100, got {p1}");
+        Assert(string.Equals(s1, "#FFB300", StringComparison.OrdinalIgnoreCase), $"Expected #FFB300, got {s1}");
+
+        const string cyanXml = """
+            <GraphicsConfig>
+              <GUIColour>
+                <Default>
+                  <MatrixRed>0, 0.5, 1</MatrixRed>
+                  <MatrixGreen>0, 1, 0.5</MatrixGreen>
+                  <MatrixBlue>1, 0, 0</MatrixBlue>
+                </Default>
+              </GUIColour>
+            </GraphicsConfig>
+            """;
+        Assert(GameHudThemeImportService.TryParseGraphicsOverrideXml(cyanXml, out string p2, out string s2),
+            "Failed to parse cyan GraphicsConfigurationOverride.xml.");
+        Assert(!string.Equals(p2, "#FF7100", StringComparison.OrdinalIgnoreCase) && p2.StartsWith('#') && p2.Length == 7,
+            $"Unexpected shifted primary HEX: {p2}");
+        Assert(s2.StartsWith('#') && s2.Length == 7, $"Unexpected shifted secondary HEX: {s2}");
+
+        const string edhmJson = """{"theme_name":"TestEDHM","ui_accent":"#00E5FF","secondary_color":"#FF4081"}""";
+        Assert(GameHudThemeImportService.TryParseEdhmThemeJson(edhmJson, out string ep, out string es),
+            "Failed to parse EDHM JSON theme.");
+        Assert(ep == "#00E5FF" && es == "#FF4081", $"Unexpected EDHM result: {ep}/{es}");
+
+        // 2. Block B (#7): Heading-up Exobiology 2D projection
+        var samples = new List<(double Lat, double Lon)> { (0.001, 0.0) }; // Due North of player at (0,0)
+        var projectedNorth = ExobiologyTrackerState.ProjectSamplePoints(samples, 0.0, 0.0, 0.0, 1_000_000.0);
+        Assert(projectedNorth.Count == 1, "Expected 1 projected sample point.");
+        Assert(projectedNorth[0].RelativeY > 10 && Math.Abs(projectedNorth[0].RelativeX) < 1.0,
+            $"Heading 0° North sample should be ahead: Y={projectedNorth[0].RelativeY}, X={projectedNorth[0].RelativeX}");
+
+        var projectedEast = ExobiologyTrackerState.ProjectSamplePoints(samples, 0.0, 0.0, 90.0, 1_000_000.0);
+        Assert(projectedEast[0].RelativeX < -10 && Math.Abs(projectedEast[0].RelativeY) < 1.0,
+            $"Heading 90° East should place North sample to the left: Y={projectedEast[0].RelativeY}, X={projectedEast[0].RelativeX}");
+
+        // 3. Block C (#1): 2D System Map orbital tree (Exphiay-like binary pairs, orbiting Y brown dwarf, moons & L-indented sub-moons)
+        var bodies = new List<ExplorationBodyItem>
+        {
+            new() { BodyId = 0, BodyName = "Exphiay", SystemName = "Exphiay", StarType = "G", HierarchyDepth = 0, DataSource = "Local", Rings = new List<ExplorationRingItem> { new() { Name = "Exphiay A Belt" } } },
+            new() { BodyId = 3, BodyName = "Exphiay 3", SystemName = "Exphiay", PlanetClass = "High metal content body", HierarchyDepth = 1, DirectParentType = "Star", DirectParentBodyId = 0, HostStarBodyId = 0, DataSource = "Local" },
+            new() { BodyId = 4, BodyName = "Exphiay 4", SystemName = "Exphiay", PlanetClass = "High metal content body", HierarchyDepth = 2, DirectParentType = "Null", DirectParentBodyId = 100, BarycentreId = 100, HostStarBodyId = 0, DataSource = "Local" },
+            new() { BodyId = 5, BodyName = "Exphiay 5", SystemName = "Exphiay", PlanetClass = "Earthlike body", HierarchyDepth = 2, DirectParentType = "Null", DirectParentBodyId = 100, BarycentreId = 100, HostStarBodyId = 0, BiologicalSignalCount = 4, DataSource = "Local" },
+            new() { BodyId = 7, BodyName = "Exphiay 7", SystemName = "Exphiay", StarType = "Y", HierarchyDepth = 1, DirectParentType = "Star", DirectParentBodyId = 0, HostStarBodyId = 0, DataSource = "Local" },
+            new() { BodyId = 8, BodyName = "Exphiay 7 e", SystemName = "Exphiay", PlanetClass = "Rocky body", HierarchyDepth = 2, DirectParentType = "Star", DirectParentBodyId = 7, HostStarBodyId = 7, SurfaceGravity = 19.62, Landable = true, DataSource = "Spansh" },
+            new() { BodyId = 9, BodyName = "Exphiay 7 e a", SystemName = "Exphiay", PlanetClass = "Icy body", HierarchyDepth = 3, DirectParentType = "Planet", DirectParentBodyId = 8, ParentPlanetBodyId = 8, HostStarBodyId = 7, Landable = true, DataSource = "Local" },
+            new() { BodyId = 10, BodyName = "Exphiay 8", SystemName = "Exphiay", PlanetClass = "High metal content body", HierarchyDepth = 1, DirectParentType = "Star", DirectParentBodyId = 0, HostStarBodyId = 0, DataSource = "Local" }
+        };
+        var layout = SystemMapLayoutBuilder.Build(bodies, "Exphiay");
+        var nodes = layout.Nodes;
+        Assert(nodes.Count == 8, $"Expected 8 map nodes, got {nodes.Count}");
+        Assert(layout.Brackets.Count == 1, $"Expected 1 binary pair bracket (4-5), got {layout.Brackets.Count}");
+        var starG = nodes.First(n => n.Body.BodyName == "Exphiay");
+        var p3 = nodes.First(n => n.Body.BodyName == "Exphiay 3");
+        var p4 = nodes.First(n => n.Body.BodyName == "Exphiay 4");
+        var p5 = nodes.First(n => n.Body.BodyName == "Exphiay 5");
+        var starY = nodes.First(n => n.Body.BodyName == "Exphiay 7");
+        var m7e = nodes.First(n => n.Body.BodyName == "Exphiay 7 e");
+        var sm7ea = nodes.First(n => n.Body.BodyName == "Exphiay 7 e a");
+        var p8 = nodes.First(n => n.Body.BodyName == "Exphiay 8");
+        Assert(starG.IsRootStar && !starG.HasRings, "Root Star G must be root star and never render asteroid belts as rings.");
+        Assert(Math.Abs(p4.Y - starG.Y) < 0.1 && Math.Abs(p5.Y - starG.Y) < 0.1 && p4.X > p3.X && p5.X > p4.X,
+            "Binary planets 4 and 5 must stay on main horizontal axis (NOT stacked vertically under 3).");
+        Assert(starY.IsStar && !starY.IsRootStar && Math.Abs(starY.Y - starG.Y) < 0.1 && starY.X > p5.X,
+            "Orbiting Y-class brown dwarf Exphiay 7 must stay on main horizontal axis.");
+        Assert(Math.Abs(m7e.X - starY.X) < 0.1 && m7e.Y > starY.Y && m7e.IsHighGravity && m7e.IsSpanshOnly,
+            "Moon 7 e must hang vertically below Exphiay 7.");
+        Assert(sm7ea.X > m7e.X && sm7ea.Y > m7e.Y && sm7ea.IndentLevel == 2,
+            "Sub-moon 7 e a must be indented in L-shape to the right of moon 7 e.");
+        Assert(Math.Abs(p8.Y - starG.Y) < 0.1 && p8.X > sm7ea.X,
+            "Independent planet 8 must sit on main horizontal axis to the right of Exphiay 7's sub-moon column.");
+
+        // 4. Block D (#6): Update semver comparison & opt-in default
+        Assert(UpdateCheckService.IsNewerVersion("0.4.0", "v0.5.0"), "Expected v0.5.0 > 0.4.0");
+        Assert(!UpdateCheckService.IsNewerVersion("0.5.0", "v0.5.0"), "Expected v0.5.0 == 0.5.0");
+        Assert(!UpdateCheckService.IsNewerVersion("0.5.0", "v0.4.9"), "Expected v0.4.9 < 0.5.0");
+        Assert(!new AppConfig().EnableAutoUpdateCheck, "EnableAutoUpdateCheck MUST default to false (strict opt-in).");
+    }
+
+    private static void TestV050OverlayPwaDeckWhisperRadio()
+    {
+        // 1. PWA assets integrity (manifest.json, sw.js, icon.svg)
+        string webRoot = Path.Combine(FindRepoRoot(), "Web");
+        string manifestPath = Path.Combine(webRoot, "manifest.json");
+        string swPath = Path.Combine(webRoot, "sw.js");
+        string iconPath = Path.Combine(webRoot, "icon.svg");
+        Assert(File.Exists(manifestPath) && File.Exists(swPath) && File.Exists(iconPath),
+            "PWA assets (manifest.json, sw.js, icon.svg) must exist in Web/.");
+        using (var doc = JsonDocument.Parse(File.ReadAllText(manifestPath)))
+        {
+            Assert(doc.RootElement.GetProperty("display").GetString() == "standalone", "PWA manifest must set display=standalone.");
+            Assert(doc.RootElement.GetProperty("icons").GetArrayLength() >= 1, "PWA manifest must define at least one icon.");
+        }
+        string swText = File.ReadAllText(swPath);
+        Assert(swText.Contains("/ws", StringComparison.Ordinal) && swText.Contains("/api/", StringComparison.Ordinal),
+            "PWA service worker must bypass live /ws and /api/ endpoints.");
+
+        // 2. AppConfig v0.6.0 defaults & CustomDeckButtonItem round-trip
+        var cfg = new AppConfig();
+        Assert(cfg.OverlayClickThrough && cfg.OverlayOpacity is > 0.25 and <= 1.0, "Invalid default overlay config.");
+        Assert(cfg.AiSttEngine == "auto" && cfg.WhisperModelId == "tiny", "Whisper STT must default to opt-in 'auto' mode.");
+        Assert(cfg.RadioAutoDuckEnabled && cfg.RadioVolumePercent is >= 0 and <= 100, "Invalid default radio config.");
+        cfg.CustomDeckButtons.Add(new CustomDeckButtonItem { Label = "Landing Gear", Icon = "🛬", ActionId = "LandingGearToggle", Order = 1, IsVisible = true });
+        cfg.CustomDeckButtons.Add(new CustomDeckButtonItem { Label = "Cargo Scoop", Icon = "📦", ActionId = "ToggleCargoScoop", Order = 0, IsVisible = true });
+        string cfgJson = JsonSerializer.Serialize(cfg, AppConfigJsonContext.Default.AppConfig);
+        var roundTrip = JsonSerializer.Deserialize(cfgJson, AppConfigJsonContext.Default.AppConfig);
+        Assert(roundTrip is not null && roundTrip.CustomDeckButtons.Count == 2, "CustomDeckButtons failed JSON round-trip.");
+        Assert(roundTrip!.CustomDeckButtons.OrderBy(b => b.Order).First().ActionId == "ToggleCargoScoop", "CustomDeckButtons ordering failed.");
+
+        // 2b. DeckLayoutService: ★ FAVORITES tab first, 0.5x-4.0x scale clamping, live active state, auto-context & JSON export/import
+        var sampleTabs = new List<DeckTabDefinition>
+        {
+            new()
+            {
+                Id = "flight", Name = "Vuelo", Icon = "🚀", AutoContext = "landing", Order = 0, IsVisible = true,
+                Buttons = new List<CustomDeckButtonItem>
+                {
+                    new() { Id = "b1", Label = "Tren", Icon = "🛬", ActionId = "LandingGearToggle", IsFavorite = true, RequireConfirmation = false, SizeScale = 2.5, Order = 0 },
+                    new() { Id = "b2", Label = "Eject", Icon = "💣", ActionId = "EjectAllCargo", IsFavorite = false, RequireConfirmation = true, SizeScale = 9.0, Order = 1 }
+                }
+            }
+        };
+        string exportedDeck = DeckLayoutService.ExportTabsJson(sampleTabs);
+        Assert(DeckLayoutService.TryImportTabsJson(exportedDeck, out var importedTabs, out string importErr), $"Deck import failed: {importErr}");
+        Assert(importedTabs.Count == 1 && Math.Abs(importedTabs[0].Buttons[1].SizeScale - 4.0) < 0.01, "SizeScale must clamp to max 4.0x on import.");
+        var fakeShip = new ShipState { RawFlags = (uint)EliteStatusFlags.LandingGearDown };
+        Assert(DeckLayoutService.EvaluateLiveActiveState("LandingGearToggle", fakeShip), "Expected LandingGearToggle active when LandingGearDown.");
+        var cfgDeck = new AppConfig { UseCustomDeckLayout = true, DeckTabs = importedTabs, InterfaceLanguage = "es-ES" };
+        var bindingsSvc = new BindingsService(new ConfigService());
+        var resolved = DeckLayoutService.BuildResolvedTabs(cfgDeck, bindingsSvc, fakeShip, "es-ES", hideUnassigned: false);
+        Assert(resolved.Count == 2 && resolved[0].IsFavoritesTab && resolved[0].Name == "FAVORITOS",
+            $"Expected ★ FAVORITOS tab first, got {resolved.FirstOrDefault()?.Name}");
+        Assert(DeckLayoutService.ResolveAutoContextTabId(resolved, fakeShip) == "flight", "Auto-context landing tab resolution failed.");
+
+        // 3. Offline Whisper STT helpers (zero network calls)
+        Assert(WhisperSttService.NormalizeWhisperLanguage("es-ES") == "es", "Expected 'es' for es-ES.");
+        Assert(WhisperSttService.NormalizeWhisperLanguage("en-GB") == "en", "Expected 'en' for en-GB.");
+        Assert(WhisperSttService.SanitizeTranscript(" [BLANK_AUDIO]  Deploy landing gear (music) \n ") == "Deploy landing gear",
+            "Whisper transcript sanitizer failed to strip bracketed noise.");
+        Assert(WhisperSttService.Catalog.Count >= 2, "Expected tiny and base Whisper models in catalog.");
+
+        // 4. Cockpit Radio stations, URL validation & COVAS auto-ducking math
+        Assert(CockpitRadioService.BuiltInStations.Count >= 3, "Expected >= 3 built-in Elite Dangerous radio stations.");
+        Assert(CockpitRadioService.IsValidStreamUrl("https://stream.laveradio.com/laveradio.mp3"), "Valid HTTPS stream rejected.");
+        Assert(!CockpitRadioService.IsValidStreamUrl("file:///C:/secret.mp3"), "Non-HTTP(S) radio stream URL must be rejected.");
+        float normalGain = CockpitRadioService.ComputeEffectiveGain(80, isDucked: false);
+        float duckedGain = CockpitRadioService.ComputeEffectiveGain(80, isDucked: true);
+        Assert(Math.Abs(normalGain - 0.8f) < 0.001f && Math.Abs(duckedGain - 0.2f) < 0.001f,
+            $"Auto-ducking gain mismatch: normal={normalGain}, ducked={duckedGain}");
     }
 }

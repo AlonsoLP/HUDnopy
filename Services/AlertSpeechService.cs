@@ -69,6 +69,7 @@ public sealed class AlertSpeechService
     }
 
     public event Action<string>? SpeechFailed;
+    public event Action<bool>? SpeakingStateChanged;
 
     public bool IsSpeaking
     {
@@ -326,6 +327,7 @@ public sealed class AlertSpeechService
 
     private async Task ProcessQueueAsync()
     {
+        SpeakingStateChanged?.Invoke(true);
         try
         {
             while (true)
@@ -393,6 +395,8 @@ public sealed class AlertSpeechService
 
             if (restart)
                 _ = Task.Run(ProcessQueueAsync);
+            else
+                SpeakingStateChanged?.Invoke(false);
         }
     }
 

@@ -40,6 +40,9 @@ public sealed class SystemFactionItem
     public string Allegiance { get; set; } = "";
     public double? MyReputation { get; set; }
     public string ReputationDisplay => MyReputation.HasValue ? $"{MyReputation.Value:0}%" : "—";
+    public string DataSource { get; set; } = "Local";
+    public bool IsWatched { get; set; }
+    public string DisplayName => IsWatched ? $"★ {Name}" : Name;
 
     internal SystemFactionItem Snapshot() => (SystemFactionItem)MemberwiseClone();
 }

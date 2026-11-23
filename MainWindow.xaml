@@ -4,10 +4,11 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:HUDnopy"
+        xmlns:controls="clr-namespace:HUDnopy.UI.Controls"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         mc:Ignorable="d"
         Title="HUDnopy // SHIP CONTROL SYSTEM"
-        Icon="pack://application:,,,/HUDnopy.ico"
+        Icon="pack://application:,,,/HUDnopy;component/HUDnopy.ico"
         Height="820" Width="1340"
         MinHeight="600" MinWidth="900"
         Background="{StaticResource HudBgBrush}"
@@ -62,6 +63,7 @@
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="BtnOpenWebHeader" Content="🌐" ToolTip="Abrir Web" AutomationProperties.Name="Abrir Web" Style="{StaticResource HudButtonStyle}" MinWidth="42" MinHeight="38" Padding="0" Click="BtnOpenWeb_Click" />
                     <Button x:Name="BtnToggleMiniHud" Content="📌" ToolTip="Modo Mini-HUD siempre encima" AutomationProperties.Name="Mini-HUD" Style="{StaticResource HudButtonStyle}" MinWidth="42" MinHeight="38" Padding="0" Margin="8,0,0,0" Click="BtnToggleMiniHud_Click" />
+                    <Button x:Name="BtnToggleOverlay" Content="🪟" ToolTip="Overlay Click-Through sobre el juego (Ctrl+Alt+O bloquear/mover)" AutomationProperties.Name="Overlay Click-Through" Style="{StaticResource HudButtonStyle}" MinWidth="42" MinHeight="38" Padding="0" Margin="8,0,0,0" Click="BtnToggleOverlay_Click" />
                     <Button x:Name="BtnToggleFullscreen" Content="⛶" ToolTip="Activar pantalla completa [F11]" AutomationProperties.Name="Pantalla completa" Style="{StaticResource HudButtonStyle}" MinWidth="42" MinHeight="38" Padding="0" Margin="8,0,0,0" Click="BtnToggleFullscreen_Click" />
                     <Button x:Name="BtnExitHeader" Content="⏻" ToolTip="Salir de la aplicación" AutomationProperties.Name="Salir" Style="{StaticResource HudButtonStyle}" MinWidth="42" MinHeight="38" Padding="0" Margin="8,0,0,0" BorderBrush="{StaticResource HudDangerBrush}" Foreground="{StaticResource HudDangerBrush}" Click="BtnExitApp_Click" />
                 </StackPanel>
@@ -163,7 +165,7 @@
                     </DockPanel>
                 </Border>
 
-                <ScrollViewer x:Name="ViewDashboard" Grid.Row="1" Visibility="Visible" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Hidden">
+                <ScrollViewer x:Name="ViewDashboard" Grid.Row="1" Visibility="Visible" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
                         <Border x:Name="MiniHudContextBanner" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudSecondaryBrush}" BorderThickness="1" Padding="10,6" Margin="0,0,0,8">
                             <TextBlock x:Name="TxtMiniHudContext" Foreground="{DynamicResource HudSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="12" TextWrapping="Wrap" />
@@ -179,7 +181,7 @@
                             <Border Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16" Margin="0,0,8,0">
                                 <StackPanel>
                                     <TextBlock x:Name="LblDashboardCommander" Text="COMANDANTE Y NAVE" Foreground="{StaticResource HudMutedBrush}" FontSize="10" />
-                                    <TextBlock x:Name="TxtDashboardCommander" Text="CMDR DESCONOCIDO" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="16" Margin="0,5,0,2" />
+                                    <TextBlock x:Name="TxtDashboardCommander" Text="CMDR DESCONOCIDO" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="16" Margin="0,5,0,2" TextWrapping="Wrap" />
                                     <TextBlock x:Name="TxtDashboardShip" Text="---" Foreground="{StaticResource HudTextBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
@@ -194,7 +196,7 @@
                                 <StackPanel>
                                     <TextBlock x:Name="LblDashboardResources" Text="RECURSOS DE VUELO" Foreground="{StaticResource HudMutedBrush}" FontSize="10" />
                                     <TextBlock x:Name="TxtDashboardResources" Text="Casco --- · Combustible ---" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="14" Margin="0,5,0,2" TextWrapping="Wrap" />
-                                    <TextBlock x:Name="TxtDashboardCargo" Text="Bodega ---" Foreground="{StaticResource HudTextBrush}" />
+                                    <TextBlock x:Name="TxtDashboardCargo" Text="Bodega ---" Foreground="{StaticResource HudTextBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
                         </UniformGrid>
@@ -566,7 +568,7 @@
                                                   AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                                   ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                             <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Facción" local:TableHeader.Key="faction" Binding="{Binding Name}" Width="2*" MinWidth="130" />
+                                                <DataGridTextColumn Header="Facción" local:TableHeader.Key="faction" Binding="{Binding DisplayName}" Width="2*" MinWidth="130" />
                                                 <DataGridTextColumn Header="Influencia" local:TableHeader.Key="influence" Binding="{Binding InfluenceDisplay}" Width="85" MinWidth="75" />
                                                 <DataGridTextColumn Header="Estado" local:TableHeader.Key="status" Binding="{Binding FactionState}" Width="110" MinWidth="95" />
                                                 <DataGridTextColumn Header="Gobierno" local:TableHeader.Key="government" Binding="{Binding Government}" Width="110" MinWidth="95" />
@@ -582,21 +584,7 @@
                                         <TextBlock x:Name="TxtSpanshSummary" Foreground="{StaticResource HudTextBrush}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0" />
                                         <TextBlock x:Name="TxtSpanshUpdated" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,3,0,0" />
                                         <TextBlock x:Name="TxtSpanshSourceNote" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,10" />
-                                        <TextBlock x:Name="TxtSpanshBodiesTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" Margin="0,0,0,5" />
-                                        <TextBlock x:Name="TxtSpanshBodiesEmpty" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" />
-                                        <DataGrid x:Name="GridSpanshBodies" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="200"
-                                                  Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
-                                                  AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
-                                                  ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}"
-                                                  Visibility="Collapsed">
-                                            <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Cuerpo" Binding="{Binding Name}" Width="2*" MinWidth="120" />
-                                                <DataGridTextColumn Header="Tipo" Binding="{Binding Type}" Width="2*" MinWidth="120" />
-                                                <DataGridTextColumn Header="Distancia (LS)" Binding="{Binding ArrivalDistance}" Width="*" MinWidth="100" />
-                                                <DataGridTextColumn Header="Aterrizable" Binding="{Binding Landable}" Width="*" MinWidth="90" />
-                                            </DataGrid.Columns>
-                                        </DataGrid>
-                                        <TextBlock x:Name="TxtSpanshStationsTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" Margin="0,10,0,5" />
+                                        <TextBlock x:Name="TxtSpanshStationsTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" Margin="0,6,0,5" />
                                         <TextBlock x:Name="TxtSpanshStationsEmpty" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" />
                                         <DataGrid x:Name="GridSpanshStations" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="200"
                                                   Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
@@ -904,14 +892,25 @@
                                 <TextBlock x:Name="TxtExplorationBodiesStatus" Text="Los cuerpos destacados aparecerán al escanearlos." Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,5,0,0" />
                                 <TextBlock x:Name="TxtExplorationPortfolio" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0" Visibility="Collapsed" />
                                 <Border x:Name="ExobiologyTrackerCard" Visibility="Collapsed" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudAccentBrush}" BorderThickness="1" Padding="10" Margin="0,8,0,0">
-                                    <StackPanel>
-                                        <DockPanel Margin="0,0,0,4">
-                                            <TextBlock x:Name="TxtExobiologyTrackerTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" TextWrapping="Wrap" />
-                                            <TextBlock x:Name="TxtExobiologyTrackerDistance" DockPanel.Dock="Right" Foreground="{StaticResource HudTextBrush}" FontWeight="Bold" Margin="10,0,0,0" />
-                                        </DockPanel>
-                                        <ProgressBar x:Name="BarExobiologyDistance" Height="10" Minimum="0" Maximum="100" Foreground="{DynamicResource HudOkBrush}" Background="#05070A" BorderBrush="#33FFFFFF" />
-                                    </StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <DockPanel Margin="0,0,0,4">
+                                                <TextBlock x:Name="TxtExobiologyTrackerTitle" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="TxtExobiologyTrackerDistance" DockPanel.Dock="Right" Foreground="{StaticResource HudTextBrush}" FontWeight="Bold" Margin="10,0,0,0" />
+                                            </DockPanel>
+                                            <ProgressBar x:Name="BarExobiologyDistance" Height="10" Minimum="0" Maximum="100" Foreground="{DynamicResource HudOkBrush}" Background="#05070A" BorderBrush="#33FFFFFF" />
+                                        </StackPanel>
+                                        <controls:ExobiologyRadarControl x:Name="ExoRadarControl" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                    </Grid>
                                 </Border>
+                                <StackPanel x:Name="SystemMapSection" Margin="0,10,0,0" Visibility="Collapsed">
+                                    <Button x:Name="BtnToggleSystemMap" Content="🗺 2D SYSTEM MAP  ▴" Style="{StaticResource HudButtonStyle}" HorizontalAlignment="Left" MinHeight="38" Padding="12,6" Margin="0,0,0,6" FontWeight="Bold" FontSize="12" Click="BtnToggleSystemMap_Click" />
+                                    <controls:SystemMap2DControl x:Name="SystemMapControl" />
+                                </StackPanel>
                             </StackPanel>
                             <DataGrid x:Name="GridExplorationBodies"
                                       AutoGenerateColumns="False"
@@ -995,6 +994,7 @@
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="Est. venta" local:TableHeader.Key="estimatedSale" Binding="{Binding Estimate}" Width="120" MinWidth="120" />
+                                    <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Body.DataSource}" Width="115" MinWidth="95" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>
@@ -1136,28 +1136,17 @@
                                             <DataGridTextColumn Header="Materiales" local:TableHeader.Key="materials" Binding="{Binding MaterialsSummary}" Width="2*" MinWidth="140" />
                                         </DataGrid.Columns>
                                     </DataGrid>
-                                    <DataGrid x:Name="GridSpanshCarriersSearch" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed" MaxHeight="220" Margin="0,0,0,8"
+                                    <DataGrid x:Name="GridSupportCarriers" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed" MaxHeight="240"
                                               Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
                                               AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
                                               ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Callsign" local:TableHeader.Key="callsign" Binding="{Binding Callsign}" Width="120" />
-                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="140" />
+                                            <DataGridTextColumn Header="Callsign" local:TableHeader.Key="callsign" Binding="{Binding Callsign}" Width="100" />
+                                            <DataGridTextColumn Header="Nombre" local:TableHeader.Key="shipName" Binding="{Binding Name}" Width="2*" MinWidth="130" />
+                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="130" />
                                             <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="90" />
-                                            <DataGridTextColumn Header="Servicios" local:TableHeader.Key="services" Binding="{Binding ServicesSummary}" Width="2*" MinWidth="150" />
-                                            <DataGridTextColumn Header="Actualizado" local:TableHeader.Key="updated" Binding="{Binding UpdatedDisplay}" Width="110" />
-                                        </DataGrid.Columns>
-                                    </DataGrid>
-                                    <DataGrid x:Name="GridNearestDssa" AutoGenerateColumns="False" IsReadOnly="True" Visibility="Collapsed" MaxHeight="220"
-                                              Background="#090C10" Foreground="{StaticResource HudTextBrush}" RowBackground="#0E131A"
-                                              AlternatingRowBackground="#131922" BorderBrush="#22FFFFFF" HeadersVisibility="Column"
-                                              ColumnHeaderStyle="{StaticResource HudDataGridHeaderStyle}" CellStyle="{StaticResource HudDataGridCellStyle}">
-                                        <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Callsign" local:TableHeader.Key="callsign" Binding="{Binding Callsign}" Width="95" />
-                                            <DataGridTextColumn Header="Nombre" local:TableHeader.Key="shipName" Binding="{Binding Name}" Width="2*" MinWidth="140" />
-                                            <DataGridTextColumn Header="Sistema" local:TableHeader.Key="system" Binding="{Binding SystemName}" Width="2*" MinWidth="140" />
-                                            <DataGridTextColumn Header="Región" local:TableHeader.Key="region" Binding="{Binding Region}" Width="*" MinWidth="110" />
-                                            <DataGridTextColumn Header="Distancia" local:TableHeader.Key="distance" Binding="{Binding DistanceDisplay}" Width="95" />
+                                            <DataGridTextColumn Header="Detalles" local:TableHeader.Key="details" Binding="{Binding Details}" Width="2*" MinWidth="150" />
+                                            <DataGridTextColumn Header="Origen" local:TableHeader.Key="source" Binding="{Binding Source}" Width="85" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -1170,7 +1159,7 @@
                 <!-- VISTA 2: CONTROLES Y BOTONERA (.BINDS) -->
                 <Border x:Name="ViewControls" Grid.Row="1" Visibility="Collapsed" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16">
                     <DockPanel>
-                        <Grid DockPanel.Dock="Top" Margin="0,0,0,14">
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -1178,30 +1167,14 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="PANEL DE CONTROLES Y BOTONERA ASOCIADA AL JUEGO (.BINDS)" local:UiText.Key="title" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             <CheckBox x:Name="ChkAutoContextDeck" Grid.Column="1" Content="Cambio contextual automático" local:UiText.Key="autoContext" Foreground="{StaticResource HudTextBrush}" VerticalAlignment="Center" Margin="10,0" Click="ChkAutoContextDeck_Click" />
-                            <TextBox x:Name="TxtSearchBinds" Grid.Column="2" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" Padding="8,4" Margin="10,0,0,0" TextChanged="TxtSearchBinds_TextChanged" ToolTip="Buscar control por nombre o tecla..." local:UiText.TooltipKey="search" />
+                            <TextBox x:Name="TxtSearchBinds" Grid.Column="2" MinHeight="38" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" Padding="8,5" Margin="6,0,0,0" TextChanged="TxtSearchBinds_TextChanged" ToolTip="Buscar control por nombre o tecla..." local:UiText.TooltipKey="search" />
                         </Grid>
 
-                        <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
-                            <ItemsControl x:Name="ItemsControlDeck" HorizontalAlignment="Stretch" Tag="1" SizeChanged="Deck_SizeChanged">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <UniformGrid Columns="{Binding Tag, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button MinHeight="96" Margin="6" Style="{StaticResource HudButtonStyle}" Click="BtnAction_Click" Tag="{Binding ActionId}">
-                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding IconGlyph}" FontSize="20" HorizontalAlignment="Center" Loaded="ScaledTemplateText_Loaded" />
-                                                <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap" Margin="0,4" Loaded="ScaledTemplateText_Loaded" />
-                                                <Border Background="#07090C" BorderBrush="#33FFFFFF" BorderThickness="1" Padding="6,2" HorizontalAlignment="Center">
-                                                    <TextBlock Text="{Binding FormattedBind}" Foreground="{DynamicResource HudAccentBrush}" FontFamily="Consolas" FontSize="10.5" TextWrapping="Wrap" TextAlignment="Center" Loaded="ScaledTemplateText_Loaded" />
-                                                </Border>
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <WrapPanel x:Name="DeckButtonsWrapPanel" Orientation="Horizontal" />
+                                <ItemsControl x:Name="ItemsControlDeck" Visibility="Collapsed" HorizontalAlignment="Stretch" Tag="1" SizeChanged="Deck_SizeChanged" />
+                            </StackPanel>
                         </ScrollViewer>
                     </DockPanel>
                 </Border>
@@ -1982,6 +1955,25 @@
                             </Grid>
                         </StackPanel>
                     </Border>
+                    <Border x:Name="ActivityRadioSection" Visibility="Collapsed" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="16">
+                        <StackPanel>
+                            <TextBlock Text="📻 COCKPIT RADIO · EMISORAS DE LA GALAXIA" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,10" />
+                            <Border x:Name="CockpitRadioBar" Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="14,12">
+                                <StackPanel>
+                                    <WrapPanel VerticalAlignment="Center" Margin="0,0,0,12">
+                                        <ComboBox x:Name="CmbRadioStation" MinWidth="260" MinHeight="42" SelectedValuePath="Tag" Margin="0,0,10,8" SelectionChanged="CmbRadioStation_SelectionChanged" />
+                                        <Button x:Name="BtnRadioPlayStop" Content="▶ Play" Style="{StaticResource HudButtonStyle}" MinWidth="112" MinHeight="42" Padding="16,8" Margin="0,0,12,8" Click="BtnRadioPlayStop_Click" />
+                                        <CheckBox x:Name="ChkRadioAutoDuck" Content="Auto-Duck COVAS" Foreground="{StaticResource HudTextBrush}" VerticalAlignment="Center" Margin="0,0,10,8" Click="ChkRadioAutoDuck_Click" />
+                                    </WrapPanel>
+                                    <DockPanel LastChildFill="True">
+                                        <TextBlock DockPanel.Dock="Left" Text="Vol:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <Slider x:Name="SldRadioVolume" DockPanel.Dock="Left" Width="180" Minimum="0" Maximum="100" Value="45" VerticalAlignment="Center" Margin="0,0,16,0" ValueChanged="SldRadioVolume_ValueChanged" />
+                                        <TextBlock x:Name="TxtRadioStatus" Text="Standby" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -2165,6 +2157,7 @@
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
                                             <TextBlock x:Name="LblThemeProfile" Grid.Row="0" Grid.Column="0" Text="Perfil:" local:UiText.Key="themeProfile" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,12,8" />
                                             <ComboBox x:Name="CmbThemePresets" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left" MinHeight="38" Margin="0,0,0,8" AutomationProperties.LabeledBy="{Binding ElementName=LblThemeProfile}" SelectionChanged="CmbThemePresets_SelectionChanged" Padding="8,6">
@@ -2179,11 +2172,14 @@
                                                 <TextBox x:Name="TxtCustomAccentHex" AutomationProperties.LabeledBy="{Binding ElementName=LblPrimaryColor}" Width="105" MinHeight="38" MaxLength="7" local:InputConstraint.Mode="HexColor" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" Padding="8,5" TextChanged="TxtCustomThemeColor_TextChanged" />
                                                 <Button x:Name="BtnPickCustomColor" Content="🎨" local:UiText.TooltipKey="pickColor" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="6,5" Margin="6,0,0,0" Click="BtnPickCustomColor_Click" />
                                             </WrapPanel>
-                                            <TextBlock x:Name="LblSecondaryColor" Grid.Row="2" Grid.Column="0" Text="Color Secundario HEX:" local:UiText.Key="secondaryColor" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                            <WrapPanel Grid.Row="2" Grid.Column="1">
+                                            <TextBlock x:Name="LblSecondaryColor" Grid.Row="2" Grid.Column="0" Text="Color Secundario HEX:" local:UiText.Key="secondaryColor" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,12,8" />
+                                            <WrapPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,8">
                                                 <TextBox x:Name="TxtCustomSecondaryHex" AutomationProperties.LabeledBy="{Binding ElementName=LblSecondaryColor}" Width="105" MinHeight="38" MaxLength="7" local:InputConstraint.Mode="HexColor" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" Padding="8,5" TextChanged="TxtCustomThemeColor_TextChanged" />
                                                 <Button x:Name="BtnPickSecondaryColor" Content="🎨" local:UiText.TooltipKey="pickColor" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="6,5" Margin="6,0,0,0" Click="BtnPickSecondaryColor_Click" />
                                             </WrapPanel>
+                                            <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,2,0,0">
+                                                <Button x:Name="BtnImportGameHudTheme" Content="🎨 Import HUD / EDHM Theme" Style="{StaticResource HudButtonStyle}" HorizontalAlignment="Left" MinHeight="38" Padding="12,6" Click="BtnImportGameHudTheme_Click" />
+                                            </StackPanel>
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -2309,6 +2305,9 @@
                                             <Button x:Name="BtnRestartWebServer" Content="🔄" local:UiText.TooltipKey="restart" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="40" Padding="6,4" Margin="0,0,8,0" Click="BtnRestartWebServer_Click" />
                                             <Button x:Name="BtnWebServerInfo" Content="ⓘ" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="40" Padding="6,4" Click="BtnWebServerInfo_Click" />
                                         </WrapPanel>
+                                        <StackPanel Margin="0,8,0,0">
+                                            <Button x:Name="BtnTrustWebCertificate" Content="🔒 Trust HTTPS Cert (PWA)" Style="{StaticResource HudButtonStyle}" HorizontalAlignment="Left" MinHeight="38" Padding="12,6" Click="BtnTrustWebCertificate_Click" />
+                                        </StackPanel>
                                         <StackPanel x:Name="WebServerInfoPanel" Visibility="Collapsed" Margin="0,8,0,0">
                                             <TextBlock x:Name="TxtWebServerStatus" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,5" />
                                             <TextBox x:Name="TxtWebCertificateFingerprint" Foreground="{StaticResource HudMutedBrush}" Background="Transparent" BorderThickness="0" Padding="0" IsReadOnly="True" TextWrapping="Wrap" />
@@ -2373,7 +2372,7 @@
                                                             <Button x:Name="BtnFrontierSyncNow" Content="🔄" local:UiText.TooltipKey="frontierSyncBtn" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,6,4" Click="BtnFrontierSyncNow_Click" />
                                                             <Button x:Name="BtnFrontierDisconnect" Content="🔌" local:UiText.TooltipKey="frontierDisconnectBtn" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,0,4" Click="BtnFrontierDisconnect_Click" />
                                                         </WrapPanel>
-                                                        <TextBlock x:Name="TxtFrontierCapiStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
+                                                        <TextBlock x:Name="TxtFrontierCapiStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6" />
                                                         <Expander Header="Opciones avanzadas (Client ID / puerto callback)" Foreground="{StaticResource HudMutedBrush}" FontSize="11" IsExpanded="False">
                                                             <Grid Margin="0,6,0,0">
                                                                 <Grid.ColumnDefinitions>
@@ -2386,11 +2385,11 @@
                                                                     <RowDefinition Height="Auto" />
                                                                 </Grid.RowDefinitions>
                                                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Client ID:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                                <TextBox x:Name="TxtFrontierClientId" Grid.Row="0" Grid.Column="1" MinHeight="36" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                                <TextBox x:Name="TxtFrontierClientId" Grid.Row="0" Grid.Column="1" MinHeight="38" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Puerto:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                                <TextBox x:Name="TxtFrontierCallbackPort" Grid.Row="1" Grid.Column="1" Width="80" HorizontalAlignment="Left" MinHeight="36" MaxLength="5" local:InputConstraint.Mode="Int" local:InputConstraint.Min="1024" local:InputConstraint.Max="65535" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" TextChanged="TxtFrontierCallbackPort_TextChanged" />
+                                                                <TextBox x:Name="TxtFrontierCallbackPort" Grid.Row="1" Grid.Column="1" Width="80" HorizontalAlignment="Left" MinHeight="38" MaxLength="5" local:InputConstraint.Mode="Int" local:InputConstraint.Min="1024" local:InputConstraint.Max="65535" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" TextChanged="TxtFrontierCallbackPort_TextChanged" />
                                                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Redirect URI:" local:UiText.Key="frontierRedirectHelp" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,4" FontSize="11" />
-                                                                <TextBox x:Name="TxtFrontierRedirectUri" Grid.Row="2" Grid.Column="1" MinHeight="36" VerticalContentAlignment="Center" IsReadOnly="True" Padding="5,3" Background="#080A0E" Foreground="{DynamicResource HudSecondaryBrush}" BorderBrush="#33FFFFFF" FontFamily="Consolas" FontSize="11" Margin="0,0,0,4" />
+                                                                <TextBox x:Name="TxtFrontierRedirectUri" Grid.Row="2" Grid.Column="1" MinHeight="38" VerticalContentAlignment="Center" IsReadOnly="True" Padding="5,3" Background="#080A0E" Foreground="{DynamicResource HudSecondaryBrush}" BorderBrush="#33FFFFFF" FontFamily="Consolas" FontSize="11" Margin="0,0,0,4" />
                                                             </Grid>
                                                         </Expander>
                                                     </StackPanel>
@@ -2418,9 +2417,9 @@
                                                                     <RowDefinition Height="Auto" />
                                                                 </Grid.RowDefinitions>
                                                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="CMDR:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                                <TextBox x:Name="TxtEdsmCommander" Grid.Row="0" Grid.Column="1" MinHeight="36" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                                <TextBox x:Name="TxtEdsmCommander" Grid.Row="0" Grid.Column="1" MinHeight="38" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="API Key:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                                <TextBox x:Name="TxtEdsmApiKey" Grid.Row="1" Grid.Column="1" MinHeight="36" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                                <TextBox x:Name="TxtEdsmApiKey" Grid.Row="1" Grid.Column="1" MinHeight="38" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                                             </Grid>
                                                             <CheckBox x:Name="ChkEdsmAnnounceFirstDiscovery" Foreground="{StaticResource HudTextBrush}" Click="ChkEdsmAnnounceFirstDiscovery_Click">
                                                                 <TextBlock Text="Anunciar por voz (COVAS/TTS) al entrar en un sistema virgen en EDSM" local:UiText.Key="edsmAnnounceFirstDiscoveryToggle" TextWrapping="Wrap" />
@@ -2451,14 +2450,14 @@
                                                                     <RowDefinition Height="Auto" />
                                                                 </Grid.RowDefinitions>
                                                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="CMDR:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                                <TextBox x:Name="TxtInaraCommander" Grid.Row="0" Grid.Column="1" MinHeight="36" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                                <TextBox x:Name="TxtInaraCommander" Grid.Row="0" Grid.Column="1" MinHeight="38" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="API Key:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                                <TextBox x:Name="TxtInaraApiKey" Grid.Row="1" Grid.Column="1" MinHeight="36" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                                <TextBox x:Name="TxtInaraApiKey" Grid.Row="1" Grid.Column="1" MinHeight="38" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                                             </Grid>
                                                             <WrapPanel>
                                                                 <Button x:Name="BtnFetchInaraProfile" Content="👤" ToolTip="Cargar Perfil Inara" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,6,4" Click="BtnFetchInaraProfile_Click" />
                                                                 <Button x:Name="BtnFetchInaraCgs" Content="🎯" ToolTip="Cargar CGs desde Inara" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,8,4" Click="BtnFetchInaraCgs_Click" />
-                                                                <TextBlock x:Name="TxtInaraReadStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                                <TextBlock x:Name="TxtInaraReadStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" />
                                                             </WrapPanel>
                                                         </StackPanel>
                                                     </Expander>
@@ -2481,7 +2480,7 @@
                                                         <Button x:Name="BtnSaveCommunitySync" Content="💾" local:UiText.TooltipKey="saveCommunitySync" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="0,0,6,0" Click="BtnSaveCommunitySync_Click" />
                                                         <Button x:Name="BtnTestCommunitySync" Content="☁" local:UiText.TooltipKey="testCommunitySync" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Click="BtnTestCommunitySync_Click" />
                                                     </WrapPanel>
-                                                    <TextBlock x:Name="TxtCommunitySyncStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="TxtCommunitySyncStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
@@ -2517,9 +2516,9 @@
                                                             <DockPanel Margin="0,0,0,4">
                                                                 <Button x:Name="BtnSaveEliteBgs" DockPanel.Dock="Right" Content="💾" ToolTip="Guardar y consultar" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="6,0,0,0" Click="BtnSaveEliteBgs_Click" />
                                                                 <TextBlock DockPanel.Dock="Left" Text="Facciones:" local:UiText.Key="eliteBgsFactionsLabel" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                                <TextBox x:Name="TxtEliteBgsFactions" MinHeight="36" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                                <TextBox x:Name="TxtEliteBgsFactions" MinHeight="38" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                                             </DockPanel>
-                                                            <TextBlock x:Name="TxtEliteBgsSettingsStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+                                                            <TextBlock x:Name="TxtEliteBgsSettingsStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Expander>
                                                 </Border>
@@ -2540,14 +2539,14 @@
                                                                 <Button x:Name="BtnTestDiscordWebhook" DockPanel.Dock="Right" Content="📨" ToolTip="Probar" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="6,0,0,0" Click="BtnTestDiscordWebhook_Click" />
                                                                 <Button x:Name="BtnSaveDiscordWebhook" DockPanel.Dock="Right" Content="💾" ToolTip="Guardar" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="8,4" Margin="6,0,0,0" Click="BtnSaveDiscordWebhook_Click" />
                                                                 <TextBlock DockPanel.Dock="Left" Text="Webhook URL:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                                <TextBox x:Name="TxtDiscordWebhookUrl" MinHeight="36" local:InputConstraint.Mode="Url" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
+                                                                <TextBox x:Name="TxtDiscordWebhookUrl" MinHeight="38" local:InputConstraint.Mode="Url" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" />
                                                             </DockPanel>
                                                             <WrapPanel Margin="0,0,0,4">
                                                                 <CheckBox x:Name="ChkDiscordWebhookElw" Content="ELW" Foreground="{StaticResource HudTextBrush}" Margin="0,0,12,4" Click="ChkDiscordWebhookEvents_Click" />
                                                                 <CheckBox x:Name="ChkDiscordWebhookCarrier" Content="Fleet Carrier" Foreground="{StaticResource HudTextBrush}" Margin="0,0,12,4" Click="ChkDiscordWebhookEvents_Click" />
                                                                 <CheckBox x:Name="ChkDiscordWebhookBgs" Content="EliteBGS" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,4" Click="ChkDiscordWebhookEvents_Click" />
                                                             </WrapPanel>
-                                                            <TextBlock x:Name="TxtDiscordStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+                                                            <TextBlock x:Name="TxtDiscordStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Expander>
                                                 </Border>
@@ -2645,9 +2644,9 @@
                                                     <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
                                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="URL Local:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                <TextBox x:Name="TxtAiOllamaEndpoint" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" MinHeight="36" local:InputConstraint.Mode="Url" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" LostFocus="AiField_AutoSave" />
+                                                <TextBox x:Name="TxtAiOllamaEndpoint" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" MinHeight="38" local:InputConstraint.Mode="Url" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" LostFocus="AiField_AutoSave" />
                                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Modelo:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                <ComboBox x:Name="CmbAiOllamaModel" Grid.Row="1" Grid.Column="1" MinHeight="36" Margin="0,0,6,0" SelectionChanged="AiField_AutoSave" />
+                                                <ComboBox x:Name="CmbAiOllamaModel" Grid.Row="1" Grid.Column="1" MinHeight="38" Margin="0,0,6,0" SelectionChanged="AiField_AutoSave" />
                                                 <Button x:Name="BtnFetchAiOllamaModels" Grid.Row="1" Grid.Column="2" Content="🔄" Tag="ollama" local:UiText.TooltipKey="aiFetchModelsTip" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="5,4" Click="BtnFetchAiModels_Click" />
                                             </Grid>
                                         </Border>
@@ -2664,9 +2663,9 @@
                                                     <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
                                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Gemini API Key:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                <TextBox x:Name="TxtAiGeminiApiKey" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" MinHeight="36" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" LostFocus="AiField_AutoSave" />
+                                                <TextBox x:Name="TxtAiGeminiApiKey" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" MinHeight="38" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" LostFocus="AiField_AutoSave" />
                                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Modelo:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                <ComboBox x:Name="CmbAiGeminiModel" Grid.Row="1" Grid.Column="1" MinHeight="36" Margin="0,0,6,0" SelectionChanged="AiField_AutoSave" />
+                                                <ComboBox x:Name="CmbAiGeminiModel" Grid.Row="1" Grid.Column="1" MinHeight="38" Margin="0,0,6,0" SelectionChanged="AiField_AutoSave" />
                                                 <Button x:Name="BtnFetchAiGeminiModels" Grid.Row="1" Grid.Column="2" Content="🔄" Tag="gemini" local:UiText.TooltipKey="aiFetchModelsTip" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="5,4" Click="BtnFetchAiModels_Click" />
                                             </Grid>
                                         </Border>
@@ -2684,11 +2683,11 @@
                                                     <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
                                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Endpoint:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                <TextBox x:Name="TxtAiOpenAiEndpoint" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" MinHeight="36" local:InputConstraint.Mode="Url" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" LostFocus="AiField_AutoSave" />
+                                                <TextBox x:Name="TxtAiOpenAiEndpoint" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" MinHeight="38" local:InputConstraint.Mode="Url" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" LostFocus="AiField_AutoSave" />
                                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="API Key:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                <TextBox x:Name="TxtAiOpenAiApiKey" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" MinHeight="36" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" LostFocus="AiField_AutoSave" />
+                                                <TextBox x:Name="TxtAiOpenAiApiKey" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" MinHeight="38" local:InputConstraint.Mode="NoWhitespace" VerticalContentAlignment="Center" Margin="0,0,0,6" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" LostFocus="AiField_AutoSave" />
                                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Modelo:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                <ComboBox x:Name="CmbAiOpenAiModel" Grid.Row="2" Grid.Column="1" MinHeight="36" Margin="0,0,6,0" SelectionChanged="AiField_AutoSave" />
+                                                <ComboBox x:Name="CmbAiOpenAiModel" Grid.Row="2" Grid.Column="1" MinHeight="38" Margin="0,0,6,0" SelectionChanged="AiField_AutoSave" />
                                                 <Button x:Name="BtnFetchAiOpenAiModels" Grid.Row="2" Grid.Column="2" Content="🔄" Tag="openai" local:UiText.TooltipKey="aiFetchModelsTip" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="5,4" Click="BtnFetchAiModels_Click" />
                                             </Grid>
                                         </Border>
@@ -2714,7 +2713,7 @@
                                             <TextBlock Text="Briefing exprés al llegar a sistema (nota personal, portanaves, anarquía)" local:UiText.Key="aiArrivalBriefingToggle" TextWrapping="Wrap" />
                                         </CheckBox>
                                         <TextBlock x:Name="TxtAiMemoryPreview" Foreground="{StaticResource HudSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4" />
-                                        <TextBlock x:Name="TxtAiConfigStatus" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="TxtAiConfigStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" FontSize="11" TextWrapping="Wrap" />
                                     </StackPanel>
 
                                     <StackPanel Grid.Column="2" Grid.Row="0">
@@ -2753,11 +2752,11 @@
                                                     </Grid.RowDefinitions>
                                                     <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,6">
                                                         <TextBlock Text="Frase(s) activación:" local:UiText.Key="macroTriggerLabel" Foreground="{StaticResource HudMutedBrush}" FontSize="10" Margin="0,0,0,2" />
-                                                        <TextBox x:Name="TxtVoiceMacroTrigger" MinHeight="36" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" ToolTip="Frase(s) separadas por coma" />
+                                                        <TextBox x:Name="TxtVoiceMacroTrigger" MinHeight="38" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" ToolTip="Frase(s) separadas por coma" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,6">
                                                         <TextBlock Text="Confirmación (opc.):" local:UiText.Key="macroConfirmLabel" Foreground="{StaticResource HudMutedBrush}" FontSize="10" Margin="0,0,0,2" />
-                                                        <TextBox x:Name="TxtVoiceMacroConfirm" MinHeight="36" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" ToolTip="Confirmación de voz opcional" />
+                                                        <TextBox x:Name="TxtVoiceMacroConfirm" MinHeight="38" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" ToolTip="Confirmación de voz opcional" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3">
                                                         <TextBlock Text="Acciones:" local:UiText.Key="macroStepsLabel" Foreground="{StaticResource HudMutedBrush}" FontSize="10" Margin="0,0,0,2" />
@@ -2767,7 +2766,7 @@
                                                                 <Button x:Name="BtnRemoveVoiceMacro" Content="🗑" local:UiText.TooltipKey="aiVoiceMacroRemove" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="7,3" Margin="0,0,6,0" Click="BtnRemoveVoiceMacro_Click" />
                                                                 <Button x:Name="BtnResetVoiceMacros" Content="↺" local:UiText.TooltipKey="aiVoiceMacroReset" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="7,3" Click="BtnResetVoiceMacros_Click" />
                                                             </StackPanel>
-                                                            <TextBox x:Name="TxtVoiceMacroSteps" MinHeight="36" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" ToolTip="Acciones separadas por coma (ej: LandingGearToggle, DELAY:150, ShipSpotLightToggle)" />
+                                                            <TextBox x:Name="TxtVoiceMacroSteps" MinHeight="38" VerticalContentAlignment="Center" Padding="6,4" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" ToolTip="Acciones separadas por coma (ej: LandingGearToggle, DELAY:150, ShipSpotLightToggle)" />
                                                         </DockPanel>
                                                     </StackPanel>
                                                 </Grid>
@@ -2791,6 +2790,22 @@
                                             </CheckBox>
                                             <TextBox x:Name="TxtAiWakeWord" Width="120" MinHeight="38" VerticalContentAlignment="Center" Padding="6,3" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Margin="0,0,0,4" LostFocus="AiField_AutoSave" />
                                         </WrapPanel>
+                                        <Border Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="8" Margin="0,4,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="🎤 VOICE RECOGNITION (STT — OFFLINE WHISPER)" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+                                                <WrapPanel>
+                                                    <ComboBox x:Name="CmbAiSttEngine" Width="205" MinHeight="38" SelectedValuePath="Tag" Margin="0,0,8,4" SelectionChanged="CmbAiSttEngine_SelectionChanged">
+                                                        <ComboBoxItem Content="Auto (Cloud / Windows)" Tag="auto" />
+                                                        <ComboBoxItem Content="Whisper Offline (Local)" Tag="whisper_local" />
+                                                    </ComboBox>
+                                                    <ComboBox x:Name="CmbWhisperModel" Width="155" MinHeight="38" SelectedValuePath="Tag" Margin="0,0,8,4" SelectionChanged="CmbWhisperModel_SelectionChanged">
+                                                        <ComboBoxItem Content="Tiny (~75 MB)" Tag="tiny" />
+                                                        <ComboBoxItem Content="Base (~142 MB)" Tag="base" />
+                                                    </ComboBox>
+                                                    <Button x:Name="BtnInstallWhisper" Content="⬇ Install Whisper" Style="{StaticResource HudButtonStyle}" MinHeight="38" Padding="12,6" Margin="0,0,0,4" Click="BtnInstallWhisper_Click" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -2828,7 +2843,7 @@
                                                         <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
                                                     </ComboBox>
                                                 </DockPanel>
-                                                <TextBlock x:Name="TxtPiperStatus" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="11" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="TxtPiperStatus" Visibility="Collapsed" Foreground="{DynamicResource HudSecondaryBrush}" FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </Border>
                                         <WrapPanel x:Name="SapiVoiceRow" Margin="0,0,0,4">
@@ -2909,7 +2924,7 @@
                                         </DockPanel>
                                         <TextBlock Text="Vincula carpetas para seleccionar sonidos propios." local:UiText.Key="soundDirsHelp" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,6" />
                                         <ListBox x:Name="LstSoundDirectories" MinHeight="76" MaxHeight="160" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VirtualizingPanel.IsVirtualizing="False" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                                        <TextBlock x:Name="TxtSoundDirectoryStatus" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                        <TextBlock x:Name="TxtSoundDirectoryStatus" Visibility="Collapsed" Foreground="{StaticResource HudMutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -2938,13 +2953,13 @@
                                                     <TextBlock Text="Combustible:" local:UiText.Key="fuelThreshold" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,4" />
                                                     <WrapPanel>
                                                         <TextBlock Text="Aviso %" local:UiText.Key="thresholdWarnPct" Foreground="{StaticResource HudMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                        <Button Content="−" Tag="TxtFuelLowThreshold|-1|2|100" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
-                                                        <TextBox x:Name="TxtFuelLowThreshold" Width="42" MinHeight="34" MaxLength="3" local:InputConstraint.Mode="Int" local:InputConstraint.Min="2" local:InputConstraint.Max="100" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="20" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
-                                                        <Button Content="+" Tag="TxtFuelLowThreshold|1|2|100" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="2,0,10,0" Click="BtnStepNumberBox_Click" />
+                                                        <Button Content="−" Tag="TxtFuelLowThreshold|-1|2|100" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
+                                                        <TextBox x:Name="TxtFuelLowThreshold" Width="42" MinHeight="38" MaxLength="3" local:InputConstraint.Mode="Int" local:InputConstraint.Min="2" local:InputConstraint.Max="100" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="20" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
+                                                        <Button Content="+" Tag="TxtFuelLowThreshold|1|2|100" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="2,0,10,0" Click="BtnStepNumberBox_Click" />
                                                         <TextBlock Text="Crítico %" local:UiText.Key="thresholdCritPct" Foreground="{StaticResource HudMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                        <Button Content="−" Tag="TxtFuelCriticalThreshold|-1|1|99" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
-                                                        <TextBox x:Name="TxtFuelCriticalThreshold" Width="42" MinHeight="34" MaxLength="2" local:InputConstraint.Mode="Int" local:InputConstraint.Min="1" local:InputConstraint.Max="99" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="10" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
-                                                        <Button Content="+" Tag="TxtFuelCriticalThreshold|1|1|99" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="2,0,0,0" Click="BtnStepNumberBox_Click" />
+                                                        <Button Content="−" Tag="TxtFuelCriticalThreshold|-1|1|99" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
+                                                        <TextBox x:Name="TxtFuelCriticalThreshold" Width="42" MinHeight="38" MaxLength="2" local:InputConstraint.Mode="Int" local:InputConstraint.Min="1" local:InputConstraint.Max="99" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="10" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
+                                                        <Button Content="+" Tag="TxtFuelCriticalThreshold|1|1|99" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="2,0,0,0" Click="BtnStepNumberBox_Click" />
                                                     </WrapPanel>
                                                 </StackPanel>
                                             </Border>
@@ -2953,9 +2968,9 @@
                                                     <TextBlock Text="Casco:" local:UiText.Key="hullThreshold" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,4" />
                                                     <WrapPanel>
                                                         <TextBlock Text="Crítico %" local:UiText.Key="thresholdCritPct" Foreground="{StaticResource HudMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                        <Button Content="−" Tag="TxtHullCriticalThreshold|-5|1|99" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
-                                                        <TextBox x:Name="TxtHullCriticalThreshold" Width="42" MinHeight="34" MaxLength="2" local:InputConstraint.Mode="Int" local:InputConstraint.Min="1" local:InputConstraint.Max="99" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="50" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
-                                                        <Button Content="+" Tag="TxtHullCriticalThreshold|5|1|99" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="2,0,0,0" Click="BtnStepNumberBox_Click" />
+                                                        <Button Content="−" Tag="TxtHullCriticalThreshold|-5|1|99" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
+                                                        <TextBox x:Name="TxtHullCriticalThreshold" Width="42" MinHeight="38" MaxLength="2" local:InputConstraint.Mode="Int" local:InputConstraint.Min="1" local:InputConstraint.Max="99" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="50" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
+                                                        <Button Content="+" Tag="TxtHullCriticalThreshold|5|1|99" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="2,0,0,0" Click="BtnStepNumberBox_Click" />
                                                     </WrapPanel>
                                                 </StackPanel>
                                             </Border>
@@ -2964,13 +2979,13 @@
                                                     <TextBlock Text="Misiones:" local:UiText.Key="missionThreshold" Foreground="{DynamicResource HudSecondaryBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,4" />
                                                     <WrapPanel>
                                                         <TextBlock Text="Aviso h" local:UiText.Key="thresholdWarnHrs" Foreground="{StaticResource HudMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                        <Button Content="−" Tag="TxtMissionExpiryWarningHours|-1|2|720" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
-                                                        <TextBox x:Name="TxtMissionExpiryWarningHours" Width="42" MinHeight="34" MaxLength="3" local:InputConstraint.Mode="Int" local:InputConstraint.Min="2" local:InputConstraint.Max="720" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="24" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
-                                                        <Button Content="+" Tag="TxtMissionExpiryWarningHours|1|2|720" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="2,0,10,0" Click="BtnStepNumberBox_Click" />
+                                                        <Button Content="−" Tag="TxtMissionExpiryWarningHours|-1|2|720" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
+                                                        <TextBox x:Name="TxtMissionExpiryWarningHours" Width="42" MinHeight="38" MaxLength="3" local:InputConstraint.Mode="Int" local:InputConstraint.Min="2" local:InputConstraint.Max="720" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="24" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
+                                                        <Button Content="+" Tag="TxtMissionExpiryWarningHours|1|2|720" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="2,0,10,0" Click="BtnStepNumberBox_Click" />
                                                         <TextBlock Text="Crítico h" local:UiText.Key="thresholdCritHrs" Foreground="{StaticResource HudMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                        <Button Content="−" Tag="TxtMissionExpiryCriticalHours|-1|1|719" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
-                                                        <TextBox x:Name="TxtMissionExpiryCriticalHours" Width="42" MinHeight="34" MaxLength="3" local:InputConstraint.Mode="Int" local:InputConstraint.Min="1" local:InputConstraint.Max="719" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="1" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
-                                                        <Button Content="+" Tag="TxtMissionExpiryCriticalHours|1|1|719" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="34" Margin="2,0,0,0" Click="BtnStepNumberBox_Click" />
+                                                        <Button Content="−" Tag="TxtMissionExpiryCriticalHours|-1|1|719" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="0,0,2,0" Click="BtnStepNumberBox_Click" />
+                                                        <TextBox x:Name="TxtMissionExpiryCriticalHours" Width="42" MinHeight="38" MaxLength="3" local:InputConstraint.Mode="Int" local:InputConstraint.Min="1" local:InputConstraint.Max="719" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" Text="1" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Padding="2" TextChanged="AlertThreshold_TextChanged" />
+                                                        <Button Content="+" Tag="TxtMissionExpiryCriticalHours|1|1|719" Style="{StaticResource HudTouchStepButtonStyle}" MinWidth="32" MinHeight="38" Margin="2,0,0,0" Click="BtnStepNumberBox_Click" />
                                                     </WrapPanel>
                                                 </StackPanel>
                                             </Border>
@@ -2985,6 +3000,157 @@
                                 </Border>
                             </Grid>
                         </Border>
+
+                        <Grid x:Name="ConfigDeckEditorSection" Visibility="Collapsed" Tag="480" SizeChanged="ResponsiveSplit_SizeChanged" Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="1.35*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Left Column: Deck Tabs Management (Touch-Optimized) -->
+                            <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="14" VerticalAlignment="Top">
+                                <StackPanel>
+                                    <TextBlock Text="🎛 PESTAÑAS DE BOTONERA (DESKTOP + WEB)" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,6" />
+                                    <TextBlock Text="Toca una pestaña para editarla. ★ FAVORITOS aparece automáticamente al inicio cuando marques botones con ★." Foreground="{StaticResource HudMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,10" />
+                                    <ListBox x:Name="LstDeckEditorTabs" MinHeight="220" MaxHeight="320" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Margin="0,0,0,10" SelectionChanged="LstDeckEditorTabs_SelectionChanged">
+                                        <ListBox.ItemContainerStyle>
+                                            <Style TargetType="ListBoxItem">
+                                                <Setter Property="MinHeight" Value="44" />
+                                                <Setter Property="Padding" Value="10,8" />
+                                                <Setter Property="VerticalContentAlignment" Value="Center" />
+                                            </Style>
+                                        </ListBox.ItemContainerStyle>
+                                    </ListBox>
+                                    <WrapPanel Margin="0,0,0,10">
+                                        <Button x:Name="BtnDeckTabAdd" Content="+ Nueva" Style="{StaticResource HudButtonStyle}" MinHeight="42" Padding="14,6" Margin="0,0,8,8" Click="BtnDeckTabAdd_Click" />
+                                        <Button x:Name="BtnDeckTabUp" Content="▲" Style="{StaticResource HudButtonStyle}" MinWidth="44" MinHeight="42" Padding="8,6" Margin="0,0,8,8" Click="BtnDeckTabUp_Click" />
+                                        <Button x:Name="BtnDeckTabDown" Content="▼" Style="{StaticResource HudButtonStyle}" MinWidth="44" MinHeight="42" Padding="8,6" Margin="0,0,8,8" Click="BtnDeckTabDown_Click" />
+                                        <Button x:Name="BtnDeckTabToggleVis" Content="👁" ToolTip="Mostrar / ocultar pestaña" Style="{StaticResource HudButtonStyle}" MinWidth="44" MinHeight="42" Padding="8,6" Margin="0,0,8,8" Click="BtnDeckTabToggleVis_Click" />
+                                        <Button x:Name="BtnDeckTabDelete" Content="🗑" ToolTip="Eliminar pestaña" Style="{StaticResource HudButtonStyle}" MinWidth="44" MinHeight="42" Padding="8,6" Margin="0,0,0,8" Click="BtnDeckTabDelete_Click" />
+                                    </WrapPanel>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="68" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBox x:Name="TxtDeckTabIcon" Grid.Row="0" Grid.Column="0" MinHeight="42" Margin="0,0,8,8" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontSize="16" Padding="6,4" ToolTip="Icono de pestaña" />
+                                        <TextBox x:Name="TxtDeckTabName" Grid.Row="0" Grid.Column="1" MinHeight="42" Margin="0,0,0,8" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" Padding="10,6" ToolTip="Nombre de pestaña" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Contexto:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" FontSize="11.5" />
+                                        <ComboBox x:Name="CmbDeckTabAutoContext" Grid.Row="1" Grid.Column="1" MinHeight="42" SelectedValuePath="Tag">
+                                            <ComboBoxItem Content="Ninguno (Manual)" Tag="" />
+                                            <ComboBoxItem Content="⚔ Combate" Tag="combat" />
+                                            <ComboBoxItem Content="🚙 SRV" Tag="srv" />
+                                            <ComboBoxItem Content="🥾 A pie (Odyssey)" Tag="onfoot" />
+                                            <ComboBoxItem Content="🛬 Aterrizaje / Atracado" Tag="landing" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <Button x:Name="BtnDeckTabSave" Content="💾 Guardar cambios de pestaña" Style="{StaticResource HudButtonStyle}" MinHeight="42" HorizontalAlignment="Left" Padding="14,6" Margin="0,0,0,12" Click="BtnDeckTabSave_Click" />
+                                    <WrapPanel>
+                                        <Button x:Name="BtnDeckExportJson" Content="📤 Exportar JSON" Style="{StaticResource HudButtonStyle}" MinHeight="42" Padding="12,6" Margin="0,0,8,8" Click="BtnDeckExportJson_Click" />
+                                        <Button x:Name="BtnDeckImportJson" Content="📥 Importar JSON" Style="{StaticResource HudButtonStyle}" MinHeight="42" Padding="12,6" Margin="0,0,8,8" Click="BtnDeckImportJson_Click" />
+                                        <Button x:Name="BtnDeckResetDefaults" Content="↺ Restaurar por defecto" Style="{StaticResource HudButtonStyle}" MinHeight="42" Padding="12,6" Margin="0,0,0,8" Click="BtnDeckResetDefaults_Click" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Right Column: Buttons inside selected tab (Touch-Optimized) -->
+                            <Border Grid.Row="0" Grid.Column="2" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="14" VerticalAlignment="Top">
+                                <StackPanel>
+                                    <TextBlock Text="⚡ BOTONES DE LA PESTAÑA SELECCIONADA" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="13" Margin="0,0,0,8" />
+                                    <ListBox x:Name="LstDeckEditorButtons" MinHeight="190" MaxHeight="270" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" Margin="0,0,0,10" SelectionChanged="LstDeckEditorButtons_SelectionChanged">
+                                        <ListBox.ItemContainerStyle>
+                                            <Style TargetType="ListBoxItem">
+                                                <Setter Property="MinHeight" Value="44" />
+                                                <Setter Property="Padding" Value="10,8" />
+                                                <Setter Property="VerticalContentAlignment" Value="Center" />
+                                            </Style>
+                                        </ListBox.ItemContainerStyle>
+                                    </ListBox>
+                                    <WrapPanel Margin="0,0,0,12">
+                                        <Button x:Name="BtnDeckBtnUp" Content="▲" Style="{StaticResource HudButtonStyle}" MinWidth="44" MinHeight="42" Padding="8,6" Margin="0,0,8,8" Click="BtnDeckBtnUp_Click" />
+                                        <Button x:Name="BtnDeckBtnDown" Content="▼" Style="{StaticResource HudButtonStyle}" MinWidth="44" MinHeight="42" Padding="8,6" Margin="0,0,8,8" Click="BtnDeckBtnDown_Click" />
+                                        <Button x:Name="BtnDeckBtnToggleFav" Content="★ Favorito" Style="{StaticResource HudButtonStyle}" MinHeight="42" Padding="14,6" Margin="0,0,8,8" Click="BtnDeckBtnToggleFav_Click" />
+                                        <Button x:Name="BtnDeckBtnDelete" Content="🗑 Quitar" Style="{StaticResource HudButtonStyle}" MinHeight="42" Padding="14,6" Margin="0,0,0,8" Click="BtnDeckBtnDelete_Click" />
+                                    </WrapPanel>
+
+                                    <Border Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="12">
+                                        <StackPanel>
+                                            <TextBlock Text="AÑADIR / EDITAR BOTÓN" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="11.5" Margin="0,0,0,8" />
+                                            <ComboBox x:Name="CmbDeckBtnAction" MinHeight="42" Margin="0,0,0,8" SelectionChanged="CmbDeckBtnAction_SelectionChanged" />
+                                            <TextBox x:Name="TxtDeckBtnMacroSeq" MinHeight="40" Margin="0,0,0,8" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" Padding="10,5" ToolTip="Opcional: Macro multi-paso (ej: LandingGearToggle, DELAY:150, ShipSpotLightToggle)" />
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="68" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="TxtDeckBtnIcon" Grid.Column="0" MinHeight="42" Margin="0,0,8,0" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontSize="17" Padding="6,4" ToolTip="Icono" TextChanged="DeckEditorPreviewField_Changed" />
+                                                <TextBox x:Name="TxtDeckBtnLabel" Grid.Column="1" MinHeight="42" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" Padding="10,5" ToolTip="Etiqueta visible del botón" TextChanged="DeckEditorPreviewField_Changed" />
+                                            </Grid>
+                                            <!-- Touch quick icons (1 tap) -->
+                                            <WrapPanel Margin="0,0,0,8">
+                                                <Button Content="⚡" Tag="⚡" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="⚔" Tag="⚔" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="🛡" Tag="🛡" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="🚀" Tag="🚀" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="🛬" Tag="🛬" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="💡" Tag="💡" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="📦" Tag="📦" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="🔭" Tag="🔭" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="🚙" Tag="🚙" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="🥾" Tag="🥾" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="🔥" Tag="🔥" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,5,5" Click="BtnDeckQuickIcon_Click" />
+                                                <Button Content="★" Tag="★" Style="{StaticResource HudButtonStyle}" MinWidth="40" MinHeight="38" Padding="4" Margin="0,0,0,5" Click="BtnDeckQuickIcon_Click" />
+                                            </WrapPanel>
+
+                                            <!-- Touch Size Stepper (0.5x - 4.0x) + Direct Color Swatches -->
+                                            <WrapPanel VerticalAlignment="Center" Margin="0,0,0,10">
+                                                <TextBlock Text="Tamaño:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                <Button x:Name="BtnDeckSizeMinus" Content="−" Style="{StaticResource HudTouchStepButtonStyle}" Margin="0,0,6,6" Click="BtnDeckSizeStep_Click" Tag="-1" />
+                                                <TextBlock x:Name="TxtDeckBtnSizeDisplay" Text="1.0×" Foreground="{DynamicResource HudAccentBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="14" MinWidth="48" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                <Button x:Name="BtnDeckSizePlus" Content="+" Style="{StaticResource HudTouchStepButtonStyle}" Margin="0,0,14,6" Click="BtnDeckSizeStep_Click" Tag="1" />
+
+                                                <TextBlock Text="Color:" Foreground="{StaticResource HudMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,6" />
+                                                <Button Content="HUD" Tag="" Style="{StaticResource HudButtonStyle}" MinWidth="44" MinHeight="38" Padding="6,4" Margin="0,0,5,6" Click="BtnDeckQuickColor_Click" />
+                                                <Button Content="●" Tag="#EF4444" Foreground="#EF4444" BorderBrush="#EF4444" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="4" Margin="0,0,5,6" ToolTip="Rojo Combate" Click="BtnDeckQuickColor_Click" />
+                                                <Button Content="●" Tag="#22C55E" Foreground="#22C55E" BorderBrush="#22C55E" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="4" Margin="0,0,5,6" ToolTip="Verde Seguridad" Click="BtnDeckQuickColor_Click" />
+                                                <Button Content="●" Tag="#06B6D4" Foreground="#06B6D4" BorderBrush="#06B6D4" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="4" Margin="0,0,5,6" ToolTip="Cian Exploración" Click="BtnDeckQuickColor_Click" />
+                                                <Button Content="●" Tag="#F59E0B" Foreground="#F59E0B" BorderBrush="#F59E0B" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="4" Margin="0,0,5,6" ToolTip="Ámbar Alerta" Click="BtnDeckQuickColor_Click" />
+                                                <Button Content="●" Tag="#A855F7" Foreground="#A855F7" BorderBrush="#A855F7" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="4" Margin="0,0,6,6" ToolTip="Violeta Especial" Click="BtnDeckQuickColor_Click" />
+                                                <TextBox x:Name="TxtDeckBtnAccentHex" Width="88" MinHeight="38" MaxLength="7" Background="#080A0E" Foreground="{StaticResource HudTextBrush}" BorderBrush="{DynamicResource HudBorderBrush}" VerticalContentAlignment="Center" Padding="6,4" Margin="0,0,0,6" ToolTip="Color HEX personalizado (ej. #00E5FF)" TextChanged="DeckEditorPreviewField_Changed" />
+                                            </WrapPanel>
+
+                                            <WrapPanel Margin="0,0,0,10">
+                                                <CheckBox x:Name="ChkDeckBtnFavorite" Content="★ Mostrar en FAVORITOS" Foreground="{StaticResource HudTextBrush}" VerticalAlignment="Center" Margin="0,0,16,6" Click="DeckEditorPreviewCheck_Click" />
+                                                <CheckBox x:Name="ChkDeckBtnConfirm" Content="⚠ Confirmar doble toque" Foreground="{StaticResource HudTextBrush}" VerticalAlignment="Center" Margin="0,0,0,6" Click="DeckEditorPreviewCheck_Click" />
+                                            </WrapPanel>
+
+                                            <!-- Live Touch Button Preview -->
+                                            <Border x:Name="DeckButtonPreviewBorder" Background="#0B0F16" BorderBrush="{DynamicResource HudAccentBrush}" BorderThickness="1.8" Padding="12,8" Margin="0,0,0,10" HorizontalAlignment="Left" MinWidth="168" MinHeight="72">
+                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <TextBlock x:Name="TxtDeckPreviewIcon" Text="⚡" FontSize="19" HorizontalAlignment="Center" />
+                                                    <TextBlock x:Name="TxtDeckPreviewLabel" Text="Vista previa" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" Margin="0,2" />
+                                                    <TextBlock x:Name="TxtDeckPreviewMeta" Text="1.0×" Foreground="{DynamicResource HudMutedBrush}" FontFamily="Consolas" FontSize="10.5" HorizontalAlignment="Center" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <WrapPanel>
+                                                <Button x:Name="BtnDeckBtnAdd" Content="+ Añadir a pestaña" Style="{StaticResource HudButtonStyle}" MinHeight="42" Padding="14,6" Margin="0,0,10,4" Click="BtnDeckBtnAdd_Click" />
+                                                <Button x:Name="BtnDeckBtnUpdate" Content="💾 Actualizar seleccionado" Style="{StaticResource HudButtonStyle}" MinHeight="42" Padding="14,6" Margin="0,0,0,4" Click="BtnDeckBtnUpdate_Click" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
 
                         <Border x:Name="ConfigDiagnosticsSection" Visibility="Collapsed" Background="{StaticResource HudPanelBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1,2,1,1" Padding="14">
                             <StackPanel>
@@ -3068,6 +3234,16 @@
                                         <Button x:Name="BtnAboutReleases" Content="📦 Releases" Style="{StaticResource HudButtonStyle}" MinHeight="38" Padding="12,6" Margin="0,0,8,8" Click="BtnOpenExternalUrl_Click" />
                                         <Button x:Name="BtnAboutIssues" Content="🐛 Issues" Style="{StaticResource HudButtonStyle}" MinHeight="38" Padding="12,6" Margin="0,0,0,8" Click="BtnOpenExternalUrl_Click" />
                                     </WrapPanel>
+                                    <Border Background="{StaticResource HudPanelAltBrush}" BorderBrush="{DynamicResource HudBorderBrush}" BorderThickness="1" Padding="10" Margin="0,8,0,0">
+                                        <StackPanel>
+                                            <CheckBox x:Name="ChkEnableAutoUpdateCheck" Content="Check GitHub Releases on startup (opt-in)" Foreground="{StaticResource HudTextBrush}" Margin="0,0,0,8" Click="ChkEnableAutoUpdateCheck_Click" />
+                                            <WrapPanel>
+                                                <Button x:Name="BtnCheckUpdates" Content="🔄 Check Updates" Style="{StaticResource HudButtonStyle}" MinHeight="38" Padding="12,6" Margin="0,0,8,6" Click="BtnCheckUpdates_Click" />
+                                                <Button x:Name="BtnOpenLatestRelease" Content="⬇ Download Release" Style="{StaticResource HudButtonStyle}" MinHeight="38" Padding="12,6" Margin="0,0,8,6" Visibility="Collapsed" Click="BtnOpenExternalUrl_Click" />
+                                                <Button x:Name="BtnRunFirstRunWizard" Content="🧭 Setup Wizard" Style="{StaticResource HudButtonStyle}" MinHeight="38" Padding="12,6" Margin="0,0,0,6" Click="BtnRunFirstRunWizard_Click" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </Border>
 
@@ -3098,10 +3274,25 @@
 
         <!-- BARRA DE ESTADO INFERIOR -->
         <Border x:Name="BottomStatusBar" Grid.Row="3" Background="#05070A" BorderBrush="#22FFFFFF" BorderThickness="0,1,0,0" Padding="16,6">
-            <DockPanel>
-                <TextBlock x:Name="TxtStatusBarLeft" Text="Sistema listo. Monitorizando archivos de Elite Dangerous..." Foreground="{StaticResource HudMutedBrush}" FontSize="11" />
-                <TextBlock x:Name="TxtStatusBarRight" Text="Al cerrar con [X] continúa activo en la bandeja del sistema" Foreground="{DynamicResource HudAccentBrush}" FontSize="11" HorizontalAlignment="Right" />
+            <DockPanel LastChildFill="True">
+                <StackPanel x:Name="ServiceHealthStrip" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="14,0,0,0" Cursor="Hand" ToolTip="Estado en vivo de integraciones externas (clic para detalles)" MouseLeftButtonUp="ServiceHealthStrip_Click" />
+                <TextBlock x:Name="TxtStatusBarLeft" Text="Sistema listo. Monitorizando archivos de Elite Dangerous..." Foreground="{StaticResource HudMutedBrush}" FontSize="11.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
+        </Border>
+
+        <!-- PANEL DESPLEGABLE DE SALUD DE SERVICIOS EXTERNOS -->
+        <Border x:Name="ServiceHealthOverlay" Grid.Row="2" Panel.ZIndex="11" Visibility="Collapsed"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom" MaxWidth="760" MinWidth="460"
+                Margin="16,0,16,10" Padding="14" Background="{StaticResource HudPanelAltBrush}"
+                BorderBrush="{DynamicResource HudAccentBrush}" BorderThickness="1.5">
+            <StackPanel>
+                <DockPanel Margin="0,0,0,10">
+                    <Button DockPanel.Dock="Right" Content="×" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="0" Margin="6,0,0,0" Click="CloseServiceHealthOverlay_Click" />
+                    <Button DockPanel.Dock="Right" Content="🔄" ToolTip="Sincronizar servicios activos" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="4,0" Click="BtnRefreshServicesHealth_Click" />
+                    <TextBlock Text="ESTADO DE SERVICIOS EXTERNOS" Foreground="{DynamicResource HudAccentBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                </DockPanel>
+                <WrapPanel x:Name="ServiceHealthCardsGrid" />
+            </StackPanel>
         </Border>
 
         <Border x:Name="AlertToast" Grid.Row="2" Grid.RowSpan="2" Panel.ZIndex="10" Visibility="Collapsed"
@@ -3117,7 +3308,7 @@
                     <TextBlock x:Name="TxtAlertToastTitle" Foreground="{DynamicResource HudDangerBrush}" FontWeight="Black" FontSize="18" />
                     <TextBlock x:Name="TxtAlertToastMessage" Foreground="{StaticResource HudTextBrush}" TextWrapping="Wrap" FontSize="14" Margin="0,6,0,0" />
                 </StackPanel>
-                <Button Grid.Column="1" Content="×" Style="{StaticResource HudButtonStyle}" MinWidth="28" MinHeight="28" Padding="0" Margin="12,0,0,0" Click="DismissAlertToast_Click" />
+                <Button Grid.Column="1" Content="×" Style="{StaticResource HudButtonStyle}" MinWidth="38" MinHeight="38" Padding="0" Margin="12,0,0,0" Click="DismissAlertToast_Click" />
             </Grid>
         </Border>
     </Grid>

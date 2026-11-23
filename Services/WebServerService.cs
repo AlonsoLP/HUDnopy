@@ -56,6 +56,7 @@ public class WebServerService : IDisposable
     private readonly EdastroCanonnService? _edastroCanonn;
     private readonly CommunitySyncService? _communitySync;
     private readonly AlertSpeechService? _alertSpeech;
+    public CockpitRadioService? CockpitRadio { get; set; }
 
     private sealed class WebSocketClient(WebSocket socket)
     {
@@ -129,6 +130,27 @@ public class WebServerService : IDisposable
     public string StatusMessage { get; private set; } = "Detenido";
     public string? SessionCode => _accessControl?.Code;
     public string? CertificateFingerprint => _certificate is null ? null : Convert.ToHexString(_certificate.GetCertHash(HashAlgorithmName.SHA256));
+    public bool IsCertificateTrusted => WebHttpsCertificate.IsTrustedInCurrentUserRoot(_certificate);
+
+    public bool TryTrustCertificate(out string message)
+    {
+        if (_certificate is null)
+        {
+            message = "Start the Web HUD server first to generate the HTTPS certificate.";
+            return false;
+        }
+        return WebHttpsCertificate.TrustInCurrentUserRoot(_certificate, out message);
+    }
+
+    public bool TryUntrustCertificate(out string message)
+    {
+        if (_certificate is null)
+        {
+            message = "No active HTTPS certificate.";
+            return false;
+        }
+        return WebHttpsCertificate.UntrustFromCurrentUserRoot(_certificate, out message);
+    }
 
     public event Action? ServerStatusChanged;
 
@@ -298,6 +320,7 @@ public class WebServerService : IDisposable
                     }
                 }
                 if (access is not null && context.Request.Path != "/login" && context.Request.Path != "/favicon.ico" &&
+                    context.Request.Path != "/manifest.json" && context.Request.Path != "/sw.js" && context.Request.Path != "/icon.svg" &&
                     access.GetExpiry(context.Request.Cookies["hudnopy-session"]) is null)
                 {
                     if (HttpMethods.IsGet(context.Request.Method) && context.Request.Path == "/")
@@ -379,6 +402,90 @@ public class WebServerService : IDisposable
             app.MapGet("/styles.css", context => webUiCss.WriteAsync(context));
 
             app.MapGet("/app.js", context => webUiJs.WriteAsync(context));
+
+            string webDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Web");
+            app.MapGet("/manifest.json", async context =>
+            {
+                string path = Path.Combine(webDir, "manifest.json");
+                if (!File.Exists(path)) { context.Response.StatusCode = 404; return; }
+                context.Response.ContentType = "application/manifest+json; charset=utf-8";
+                string text = await File.ReadAllTextAsync(path, context.RequestAborted);
+                text = text.Replace("#FF7100", _configService.Current.ThemeAccentHex ?? "#FF7100", StringComparison.OrdinalIgnoreCase);
+                await context.Response.WriteAsync(text, context.RequestAborted);
+            });
+            app.MapGet("/sw.js", async context =>
+            {
+                string path = Path.Combine(webDir, "sw.js");
+                if (!File.Exists(path)) { context.Response.StatusCode = 404; return; }
+                context.Response.ContentType = "application/javascript; charset=utf-8";
+                context.Response.Headers["Service-Worker-Allowed"] = "/";
+                await context.Response.SendFileAsync(path, context.RequestAborted);
+            });
+            app.MapGet("/icon.svg", async context =>
+            {
+                string path = Path.Combine(webDir, "icon.svg");
+                if (!File.Exists(path)) { context.Response.StatusCode = 404; return; }
+                context.Response.ContentType = "image/svg+xml; charset=utf-8";
+                await context.Response.SendFileAsync(path, context.RequestAborted);
+            });
+
+            app.MapPost("/api/radio", async (HttpContext context) =>
+            {
+                if (CockpitRadio is null)
+                {
+                    await WriteJsonAsync(context, new { success = false, message = "Cockpit Radio unavailable." });
+                    return;
+                }
+                string action = "stop";
+                string stationId = "";
+                int? volume = null;
+                string customName = "";
+                string customUrl = "";
+                using (var doc = await TryReadJsonBodyAsync(context))
+                {
+                    if (doc is not null)
+                    {
+                        action = (JsonElementExtensions.GetStr(doc.RootElement, "action") ?? "stop").Trim().ToLowerInvariant();
+                        stationId = (JsonElementExtensions.GetStr(doc.RootElement, "stationId") ?? "").Trim();
+                        volume = JsonElementExtensions.GetInt(doc.RootElement, "volume");
+                        customName = (JsonElementExtensions.GetStr(doc.RootElement, "name") ?? "").Trim();
+                        customUrl = (JsonElementExtensions.GetStr(doc.RootElement, "url") ?? "").Trim();
+                    }
+                }
+                if (action == "play")
+                {
+                    var (ok, msg) = await CockpitRadio.PlayAsync(stationId);
+                    await BroadcastStateAsync();
+                    await WriteJsonAsync(context, new { success = ok, message = msg, status = CockpitRadio.GetStatus() }, camelCase: true);
+                }
+                else if (action == "volume" && volume.HasValue)
+                {
+                    CockpitRadio.SetVolumePercent(volume.Value);
+                    _configService.Save();
+                    await BroadcastStateAsync();
+                    await WriteJsonAsync(context, new { success = true, status = CockpitRadio.GetStatus() }, camelCase: true);
+                }
+                else if (action == "add" && !string.IsNullOrWhiteSpace(customName) && CockpitRadioService.IsValidStreamUrl(customUrl))
+                {
+                    _configService.Current.CustomRadioStations ??= new List<RadioStationItem>();
+                    _configService.Current.CustomRadioStations.Add(new RadioStationItem
+                    {
+                        Id = $"custom_{Guid.NewGuid():N}"[..14],
+                        Name = customName,
+                        StreamUrl = customUrl,
+                        Genre = "Custom"
+                    });
+                    _configService.Save();
+                    await BroadcastStateAsync();
+                    await WriteJsonAsync(context, new { success = true, stations = CockpitRadio.GetAllStations() }, camelCase: true);
+                }
+                else
+                {
+                    CockpitRadio.Stop();
+                    await BroadcastStateAsync();
+                    await WriteJsonAsync(context, new { success = true, status = CockpitRadio.GetStatus() }, camelCase: true);
+                }
+            });
 
             app.MapGet("/api/state", async context =>
             {
@@ -1176,6 +1283,14 @@ public class WebServerService : IDisposable
                 canonnUpload = _configService.Current.EnableCanonnUpload,
                 discord = _configService.Current.EnableDiscord
             },
+            serviceHealth = ExternalServiceHealthEvaluator.Build(
+                _configService.Current,
+                state,
+                _spanshSystemDataService,
+                _communitySync,
+                eliteBgs: _eliteBgsWatchlist,
+                ardent: _ardentMarket,
+                edastroCanonn: _edastroCanonn),
             inaraSystemUrl = _configService.Current.EnableInaraSync && !string.IsNullOrWhiteSpace(state.CurrentSystem) && state.CurrentSystem != "---"
                 ? CommunitySyncService.BuildInaraDeepLink("system", state.CurrentSystem)
                 : "",
@@ -1183,6 +1298,9 @@ public class WebServerService : IDisposable
             miningTargets = _configService.Current.MiningTargetMinerals ?? "",
             miningMinPercent = _configService.Current.MiningMinPercent,
             autoContextDeck = _configService.Current.AutoContextDeck,
+            deckTabs = DeckLayoutService.BuildResolvedTabs(_configService.Current, _bindingsService, state, language, _configService.Current.HideUnassignedBindings),
+            radioStatus = CockpitRadio?.GetStatus(),
+            radioStations = CockpitRadio?.GetAllStations(),
             engineeringCatalog = EngineeringWishlistService.Catalog.Select(static b => new { b.Id, b.DisplayName }).ToArray(),
             engineeringWishlistBlueprints = _configService.Current.EngineeringWishlistBlueprints ?? new List<string>(),
             carrierView = GetCarrierView(state.Carrier, language),
@@ -1194,6 +1312,7 @@ public class WebServerService : IDisposable
             landingPad = state.AssignedLandingPad is int pad && pad > 0
                 ? BuildLandingPadWebView(pad, state.AssignedLandingStation, state.AssignedLandingStationType, state.CurrentSystem, language)
                 : null,
+            systemMap = BuildSystemMapWebView(state.ExplorationBodies, state.CurrentSystem),
             loadoutLinks = string.IsNullOrWhiteSpace(state.LastLoadoutJson)
                 ? null
                 : new
@@ -1221,6 +1340,57 @@ public class WebServerService : IDisposable
             station = string.IsNullOrWhiteSpace(station) ? currentSystem : station,
             guidance = info.FormatGuidance(language),
             bayIndicator = info.BuildBayIndicator()
+        };
+    }
+
+    private static object? BuildSystemMapWebView(IReadOnlyList<ExplorationBodyItem> bodies, string currentSystem)
+    {
+        if (bodies is null || bodies.Count == 0)
+            return null;
+
+        var layout = SystemMapLayoutBuilder.Build(bodies, currentSystem);
+        return new
+        {
+            width = layout.CanvasWidth,
+            height = layout.CanvasHeight,
+            brackets = layout.Brackets.Select(static b => new
+            {
+                x1 = b.X1,
+                x2 = b.X2,
+                topY = b.TopY,
+                anchorY1 = b.AnchorY1,
+                anchorY2 = b.AnchorY2
+            }).ToArray(),
+            nodes = layout.Nodes.Select(static n => new
+            {
+                x = n.X,
+                y = n.Y,
+                radiusPx = n.RadiusPx,
+                fillHex = n.FillHex,
+                strokeHex = n.StrokeHex,
+                atmosphereHaloHex = n.AtmosphereHaloHex,
+                isEarthLike = n.IsEarthLike,
+                isStar = n.IsStar,
+                isRootStar = n.IsRootStar,
+                hasRings = n.HasRings,
+                hasBioHalo = n.HasBioHalo,
+                isHighGravity = n.IsHighGravity,
+                isLandable = n.IsLandable,
+                isSpanshOnly = n.IsSpanshOnly,
+                shortLabel = n.ShortLabel,
+                badgeText = n.BadgeText,
+                parentIndex = n.ParentIndex,
+                starBandIndex = n.StarBandIndex,
+                indentLevel = n.IndentLevel,
+                bodyName = n.Body.BodyName,
+                bodyType = n.Body.BodyType,
+                distanceLs = n.Body.DistanceFromArrivalLs,
+                gravityG = n.Body.SurfaceGravity.HasValue ? Math.Round(n.Body.SurfaceGravity.Value / 9.80665, 2) : (double?)null,
+                bioSignals = n.Body.BiologicalSignalCount,
+                geoSignals = n.Body.GeologicalSignalCount,
+                estimatedValue = n.Body.EstimatedCredits ?? 0,
+                dataSource = n.Body.DataSource
+            }).ToArray()
         };
     }
 

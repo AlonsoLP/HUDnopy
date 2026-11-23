@@ -56,15 +56,6 @@ public partial class MainWindow
         TxtSpanshUpdated.Text = display.Updated;
         TxtSpanshUpdated.Visibility = string.IsNullOrEmpty(display.Updated) ? Visibility.Collapsed : Visibility.Visible;
         TxtSpanshSourceNote.Text = display.SourceNote;
-        TxtSpanshBodiesTitle.Text = display.BodiesTitle;
-        TxtSpanshBodiesEmpty.Text = display.EmptyBodies;
-        TxtSpanshBodiesEmpty.Visibility = display.Bodies.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        GridSpanshBodies.Columns[0].Header = display.BodyHeader;
-        GridSpanshBodies.Columns[1].Header = display.TypeHeader;
-        GridSpanshBodies.Columns[2].Header = display.ArrivalHeader;
-        GridSpanshBodies.Columns[3].Header = display.LandableHeader;
-        GridSpanshBodies.ItemsSource = display.Bodies;
-        GridSpanshBodies.Visibility = display.Bodies.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         TxtSpanshStationsTitle.Text = display.StationsTitle;
         TxtSpanshStationsEmpty.Text = display.EmptyStations;
         TxtSpanshStationsEmpty.Visibility = display.Stations.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -75,6 +66,7 @@ public partial class MainWindow
         GridSpanshStations.Columns[4].Header = display.FactionHeader;
         GridSpanshStations.ItemsSource = display.Stations;
         GridSpanshStations.Visibility = display.Stations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RefreshServiceHealthUi();
     }
 
     private void UpdateCarrierUi(ShipState state)
@@ -127,6 +119,7 @@ public partial class MainWindow
         TxtShipTitle.Text = $"{shipName} [{s.ShipIdent}]";
         TxtShipSubHeader.Text = s.ShipType;
         TxtDashboardCommander.Text = hasSessionData ? s.CommanderName : text["unknownCommander"];
+        RefreshServiceHealthUi();
         TxtDashboardShip.Text = $"{shipName} [{s.ShipIdent}] · {s.ShipType}";
         TxtDashboardSystem.Text = s.CurrentSystem;
         TxtDashboardLocation.Text = !string.IsNullOrEmpty(s.DestinationName)
@@ -842,6 +835,10 @@ public partial class MainWindow
     /// </summary>
     private void UpdateMiniHudContextUi(ShipState s)
     {
+        if (_overlayWindow is not null && _overlayWindow.IsVisible)
+            _overlayWindow.UpdateTelemetry(s, _uiLanguage);
+        RefreshDesktopDeckLiveStatesIfVisible(s);
+
         if (MiniHudContextBanner is null || TxtMiniHudContext is null)
             return;
 

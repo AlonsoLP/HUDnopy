@@ -16,6 +16,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Speech.Recognition;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -25,6 +26,24 @@ namespace HUDnopy.Services;
 
 public sealed partial class AiCopilotService
 {
+    internal readonly record struct PromptAuditSnapshot(
+        bool IsInstant,
+        string InstantReply,
+        string CompactJson,
+        string PreInjected,
+        int ThinkingBudget,
+        int SystemPromptLength);
+
+    internal PromptAuditSnapshot InspectPromptPipeline(AppConfig cfg, ShipState s, string userPrompt)
+    {
+        var (instantOk, instantReply) = TryAnswerInstantTelemetryQuery(cfg, userPrompt);
+        string compact = BuildCompactTelemetryJson(cfg, s, userPrompt);
+        string pre = BuildPreInjectedAnalytics(s, userPrompt);
+        int thinking = ResolveThinkingBudget(cfg, userPrompt);
+        string full = BuildSystemPrompt(cfg, s, userPrompt);
+        return new PromptAuditSnapshot(instantOk, instantReply, compact, pre, thinking, full.Length);
+    }
+
     /// <summary>
     /// Builds a prefix-cache-friendly system prompt: static rules, query/action schemas, and memory go FIRST
     /// (enabling automatic Ollama KV cache and Gemini/OpenAI implicit prefix caching), followed by compact
@@ -136,6 +155,11 @@ public sealed partial class AiCopilotService
         return sb.ToString();
     }
 
+    private static readonly JsonSerializerOptions CompactTelemetryJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     /// <summary>
     /// Serializes only non-empty, contextually relevant ShipState fields into minified JSON
     /// to cut prompt token usage by 60-70% without losing precision.
@@ -147,12 +171,17 @@ public sealed partial class AiCopilotService
         bool general = !string.IsNullOrWhiteSpace(p) &&
             ContainsAny(p, "estado", "resumen", "status", "report", "informe", "chequeo", "pre-vuelo", "preflight", "sesión", "sesion", "todo");
 
+        bool mentionsCarrierName = !string.IsNullOrWhiteSpace(s.Carrier?.Name) &&
+            s.Carrier.Name.Length >= 3 &&
+            p.Contains(s.Carrier.Name, StringComparison.OrdinalIgnoreCase);
+
         bool wantGalnet = ContainsAny(p, "galnet", "notic", "news", "lore", "thargoid", "bolet", "actualidad", "artíc", "artic");
-        bool wantCarrier = general || ContainsAny(p, "carrier", "portanaves", "tritio", "tritium", "flota", "almacen", "bartender", "cg", "comunit");
-        bool wantMarketCargo = general || ContainsAny(p, "carga", "bodega", "vend", "compr", "mercad", "ofert", "astillero", "equipamiento", "módulo", "modulo", "shipyard", "outfitting", "nave");
-        bool wantMissions = general || ContainsAny(p, "misi", "masacre", "pasajer", "vip", "recompensa", "caduc", "combate", "bajas", "miner", "coloniz");
-        bool wantExplore = general || ContainsAny(p, "explor", "planeta", "cuerpo", "mapear", "bio", "exobio", "gravedad", "ruta", "salto", "facci", "bgs", "tick", "servidor", "powerplay");
-        bool wantEng = general || ContainsAny(p, "ingenier", "wishlist", "material", "módulo", "modulo", "fsd", "arma", "escudo", "motor", "dañ");
+        bool wantCarrier = general || mentionsCarrierName || ContainsAny(p, "carrier", "portanaves", "tritio", "tritium", "flota", "almacen", "bartender", "cg", "comunit", "community goal");
+        bool wantMarketCargo = general || ContainsAny(p, "carga", "cargo", "commodit", "toneladas", "a bordo", "bodega", "vend", "compr", "mercad", "ofert", "astillero", "equipamiento", "módulo", "modulo", "shipyard", "outfitting", "nave", "demanda", "precio", "pagan", "suelto");
+        bool wantMissions = general || ContainsAny(p, "misi", "masacre", "massacre", "pasajer", "vip", "recompensa", "caduc", "combate", "combat", "bajas", "miner", "minando", "mining", "refinad", "refiner", "asteroide", "prospect", "picando", "coloniz", "colonis");
+        bool wantExplore = general || ContainsAny(p, "explor", "planeta", "cuerpo", "mapear", "bio", "exobio", "gravedad", "ruta", "salto", "facci", "bgs", "tick", "servidor", "powerplay", "polític", "politic");
+        bool wantEng = general || ContainsAny(p, "ingenier", "wishlist", "material", "módulo", "modulo", "fsd", "arma", "escudo", "motor", "dañ", "planta", "central", "power plant", "propulsor", "thruster", "distribuidor", "distributor", "modificaci", "blindad", "sobrecargad", "integridad", "100%");
+        bool wantSession = general || ContainsAny(p, "hoy", "balance", "neto", "visitado", "ganado", "rendimiento", "por hora", "cr/h");
 
         string activeMode = s.OnFoot ? "OnFoot"
             : s.InSRV ? "SRV"
@@ -170,7 +199,7 @@ public sealed partial class AiCopilotService
             ["ship"] = $"{s.ShipType} ({s.ShipName}/{s.ShipIdent})",
             ["hull"] = Math.Round(s.HullHealth, 1),
             ["shld"] = s.ShieldsUp ? "ON" : "OFF",
-            ["fuel"] = $"{s.FuelMain:0.1}/{s.FuelMax:0.1}t",
+            ["fuel"] = string.Format(CultureInfo.InvariantCulture, "{0:0.0}/{1:0.0}t", s.FuelMain, s.FuelMax),
             ["cargo"] = $"{s.CargoUsed}/{s.CargoCapacity}t",
             ["sys"] = s.CurrentSystem
         };
@@ -321,12 +350,12 @@ public sealed partial class AiCopilotService
             root["galnet"] = articles;
         }
 
-        if (general)
+        if (wantSession)
         {
             root["session"] = $"net:{s.SessionStats.NetCredits:+#,0;-#,0;0}CR, sys:{s.SessionStats.SystemsVisited}({s.SessionStats.TotalDistanceLy:0.0}LY), scans:{s.SessionStats.BodiesScanned}, exo:{s.SessionStats.OrganicsAnalysed}";
         }
 
-        return JsonSerializer.Serialize(root);
+        return JsonSerializer.Serialize(root, CompactTelemetryJsonOptions);
     }
 
     /// <summary>
@@ -341,32 +370,38 @@ public sealed partial class AiCopilotService
         string p = NormalizeVoiceMatchText(userPrompt, null);
         var chunks = new List<string>();
 
-        // 1. Materials ranking / scarcity / fullness / specific grade (G1-G5)
-        if (ContainsAny(p, "material", "taquilla", "odyssey", "mochila"))
-        {
-            string filter = ContainsAny(p, "g5", "grado 5", "grado cinco", "grade 5", "grade five") ? ":g5"
-                : ContainsAny(p, "g4", "grado 4", "grado cuatro", "grade 4", "grade four") ? ":g4"
-                : ContainsAny(p, "g3", "grado 3", "grado tres", "grade 3", "grade three") ? ":g3"
-                : ContainsAny(p, "g2", "grado 2", "grado dos", "grade 2", "grade two") ? ":g2"
-                : ContainsAny(p, "g1", "grado 1", "grado uno", "grade 1", "grade one") ? ":g1"
-                : ContainsAny(p, "bruto", "raw") ? ":raw"
-                : ContainsAny(p, "manufactur") ? ":manufactured"
-                : ContainsAny(p, "codific", "encoded", "datos") ? ":encoded"
-                : ContainsAny(p, "odyssey", "taquilla") ? ":odyssey"
-                : "";
+        // 1. Materials ranking / scarcity / fullness / specific grade (G1-G5) / specific material name
+        string matFilter = ContainsAny(p, "g5", "grado 5", "grado cinco", "grade 5", "grade five") ? ":g5"
+            : ContainsAny(p, "g4", "grado 4", "grado cuatro", "grade 4", "grade four") ? ":g4"
+            : ContainsAny(p, "g3", "grado 3", "grado tres", "grade 3", "grade three") ? ":g3"
+            : ContainsAny(p, "g2", "grado 2", "grado dos", "grade 2", "grade two") ? ":g2"
+            : ContainsAny(p, "g1", "grado 1", "grado uno", "grade 1", "grade one") ? ":g1"
+            : ContainsAny(p, "bruto", "raw") ? ":raw"
+            : ContainsAny(p, "manufactur") ? ":manufactured"
+            : ContainsAny(p, "codific", "encoded", "datos codif") ? ":encoded"
+            : ContainsAny(p, "odyssey", "taquilla", "locker") ? ":odyssey"
+            : "";
 
+        bool wantsMaterialSection = !string.IsNullOrEmpty(matFilter) || ContainsAny(p, "material", "taquilla", "locker", "odyssey", "mochila");
+        if (wantsMaterialSection)
+        {
             if (ContainsAny(p, "menos", "escas", "faltan", "bajo", "minimo", "poco", "lowest", "least"))
-                chunks.Add(QueryMaterialInventory("lowest" + filter));
+                chunks.Add(QueryMaterialInventory("lowest" + matFilter));
             else if (ContainsAny(p, "lleno", "100", "completo", "tope", "mas tengo", "maximo", "sobra", "trader", "full", "highest", "most"))
-                chunks.Add(QueryMaterialInventory("full" + filter));
-            else if (!string.IsNullOrEmpty(filter))
-                chunks.Add(QueryMaterialInventory(filter.TrimStart(':')));
+                chunks.Add(QueryMaterialInventory("full" + matFilter));
+            else if (!string.IsNullOrEmpty(matFilter))
+                chunks.Add(QueryMaterialInventory(matFilter.TrimStart(':')));
             else if (ContainsAny(p, "resumen", "cuantos", "inventario", "summary", "como ando", "como voy"))
                 chunks.Add(QueryMaterialInventory("summary"));
         }
 
+        // Direct lookup when the user names a specific material (ES/EN aliases or exact inventory name)
+        string? directMaterialQuery = FindMentionedMaterialName(s, p);
+        if (!string.IsNullOrEmpty(directMaterialQuery))
+            chunks.Add(QueryMaterialInventory(directMaterialQuery));
+
         // 2. Missions urgency / rewards / massacre / cargo
-        if (ContainsAny(p, "mision", "masacre", "caduc", "vence"))
+        if (ContainsAny(p, "mision", "masacre", "massacre", "caduc", "vence"))
         {
             if (ContainsAny(p, "caduc", "vence", "urgente", "antes", "expir"))
                 chunks.Add(QueryMissionsReport("urgent"));
@@ -381,28 +416,38 @@ public sealed partial class AiCopilotService
         }
 
         // 3. Colonisation trips & progress
-        if (ContainsAny(p, "coloniz", "obra", "construccion") && s.Colonisation.Resources.Count > 0)
+        if (s.Colonisation.Resources.Count > 0 &&
+            (ContainsAny(p, "coloniz", "colonis", "obra", "construccion", "acarrear", "estacion nueva") ||
+             (ContainsAny(p, "acero", "aluminio", "titanio", "steel", "aluminium", "titanium") && ContainsAny(p, "falta", "entreg", "pendient", "estacion"))))
             chunks.Add(QueryOperationalReport("colonisation"));
 
         // 4. Exploration gravity / bio / route / factions
-        if (ContainsAny(p, "gravedad", "gravity"))
+        if (ContainsAny(p, "gravedad", "gravity", "2g", "alta gravedad"))
             chunks.Add(QueryExplorationReport("gravity"));
         if (ContainsAny(p, "exobio", "biolog", "plantas", "especies"))
             chunks.Add(QueryExplorationReport("bio"));
-        if (ContainsAny(p, "ruta", "route") && ContainsAny(p, "salto", "repost", "estrella", "informe", "como"))
+        if (ContainsAny(p, "ruta", "route") && ContainsAny(p, "salto", "repost", "estrella", "informe", "como", "parada", "destino", "final", "trazada"))
             chunks.Add(QueryExplorationReport("route"));
-        if (ContainsAny(p, "faccion", "bgs", "influencia"))
+        bool mentionsSystemFaction = s.SystemFactions.Any(f =>
+            !string.IsNullOrWhiteSpace(f.Name) && f.Name.Length >= 5 &&
+            p.Contains(NormalizeVoiceMatchText(f.Name, null), StringComparison.OrdinalIgnoreCase));
+        if (mentionsSystemFaction || ContainsAny(p, "faccion", "bgs", "influencia", "politico", "controla"))
             chunks.Add(QueryExplorationReport("factions"));
 
-        // 5. Profile ranks & engineers
-        if (ContainsAny(p, "rango", "rank", "perfil"))
+        // 5. Profile ranks & engineers (also match direct engineer names)
+        if (ContainsAny(p, "rango", "rank", "perfil", "elite", "rear admiral", "duke", "federacion", "imperio", "federation", "empire", "hoja de servicio", "galones", "armada", "mercenario"))
             chunks.Add(QueryProfileReport("ranks"));
         if (ContainsAny(p, "escuadron", "squadron", "inara") && s.InaraProfile is { } ip && !string.IsNullOrWhiteSpace(ip.CommanderName))
             chunks.Add($"Inara: {ip.CommanderName} | Escuadrón: {(string.IsNullOrWhiteSpace(ip.SquadronName) ? "ninguno" : $"{ip.SquadronName} ({ip.SquadronRank})")} | Lealtad: {ip.PreferredAllegiance}");
-        if (ContainsAny(p, "ingeniero", "engineer") && ContainsAny(p, "grado", "desbloque", "falta", "subir", "pendiente", "tengo"))
+        bool mentionsEngineerName = s.Engineers.Any(e =>
+            !string.IsNullOrWhiteSpace(e.Name) &&
+            (p.Contains(NormalizeVoiceMatchText(e.Name, null), StringComparison.OrdinalIgnoreCase) ||
+             e.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                   .Any(tok => tok.Length >= 5 && p.Contains(NormalizeVoiceMatchText(tok, null), StringComparison.OrdinalIgnoreCase))));
+        if (mentionsEngineerName || (ContainsAny(p, "ingeniero", "engineer") && ContainsAny(p, "grado", "desbloque", "falta", "subir", "pendiente", "tengo", "progreso", "lista", "estado", "resumen", "cuales", "todos", "progress", "status")))
             chunks.Add(QueryProfileReport("engineers"));
 
-        // 6. Fleet & Carrier reports (prioritize exact ship name match before generic fleet dump)
+        // 6. Fleet & Carrier reports (prioritize exact ship name, ship type, or stored system before generic fleet dump)
         var matchedStoredShip = s.StoredShips.FirstOrDefault(sh =>
             !string.IsNullOrWhiteSpace(sh.ShipName) &&
             sh.ShipName.Length >= 3 &&
@@ -417,37 +462,69 @@ public sealed partial class AiCopilotService
         {
             chunks.Add(QueryFleetReport($"ships:{s.ShipName}"));
         }
-        else if (ContainsAny(p, "flota", "almacenad", "aparcad", "donde tengo", "cuantas naves", "stored"))
+        else if (FindMentionedStoredShipFilter(s, p) is { } shipFilter)
+        {
+            chunks.Add(QueryFleetReport($"ships:{shipFilter}"));
+        }
+        else if (ContainsAny(p, "flota", "almacenad", "aparcad", "donde tengo", "cuantas naves", "stored", "garaje"))
         {
             chunks.Add(QueryFleetReport("ships"));
         }
+        bool mentionsCarrier = ContainsAny(p, "portanaves", "carrier") ||
+            (!string.IsNullOrWhiteSpace(s.Carrier?.Name) && s.Carrier.Name.Length >= 3 &&
+             p.Contains(NormalizeVoiceMatchText(s.Carrier.Name, null), StringComparison.OrdinalIgnoreCase));
         if (ContainsAny(p, "modulos almacenados", "modulo guardado", "donde guarde", "stored modules"))
             chunks.Add(QueryFleetReport("modules"));
-        if (ContainsAny(p, "ordenes de mercado", "ordenes del portanaves", "carrier orders"))
+        if (ContainsAny(p, "ordenes de mercado", "ordenes del portanaves", "carrier orders") ||
+            (mentionsCarrier && ContainsAny(p, "orden", "order", "compra", "venta", "mercad")))
             chunks.Add(QueryFleetReport("orders"));
         if (ContainsAny(p, "servicios del portanaves", "servicios activos", "carrier services"))
             chunks.Add(QueryFleetReport("services"));
         if (ContainsAny(p, "bartender"))
             chunks.Add(QueryFleetReport("bartender"));
-        if (ContainsAny(p, "portanaves", "carrier") && ContainsAny(p, "mantenimiento", "semanas", "autonomia", "saldo", "finanz", "informe"))
+        if (mentionsCarrier && ContainsAny(p, "bodega", "carga", "mercancia", "cargo", "almacen"))
+            chunks.Add(QueryFleetReport("cargo"));
+        if (mentionsCarrier && ContainsAny(p, "mantenimiento", "semanas", "autonomia", "saldo", "finanz", "informe", "espacio", "libre", "salto", "destino"))
             chunks.Add(QueryFleetReport("carrier"));
 
-        // 7. Local Station Shipyard / Outfitting / Cargo Profit
+        // 7. Local Station Shipyard / Outfitting / Market / Cargo Profit
         if (ContainsAny(p, "astillero", "shipyard", "naves disponibles", "que naves", "comprar nave", "venden naves"))
             chunks.Add(QueryStationSnapshot("shipyard"));
         if (ContainsAny(p, "equipamiento", "outfitting"))
             chunks.Add(QueryStationSnapshot("outfitting"));
+        if (s.Market?.Available == true && s.Market.Items.Count > 0 &&
+            ContainsAny(p, "mercado", "market", "demanda", "demand", "precio", "price", "stock", "estacion", "pagan", "suelto", "vender"))
+        {
+            string? marketItem = FindMentionedMarketCommodity(s, p);
+            if (!string.IsNullOrEmpty(marketItem))
+                chunks.Add(QueryStationSnapshot($"market|{marketItem}"));
+        }
         if (ContainsAny(p, "vale mi carga", "vender mi carga", "beneficio de la carga", "cargo profit", "valor de la bodega"))
             chunks.Add(QueryCargoProfitReport());
+
+        // 7b. Session, Mining, Combat & Community Goals
+        if (ContainsAny(p, "balance neto", "sistemas he visitado", "cuantos sistemas", "resumen de sesion", "session summary", "ganado hoy", "llevo hoy"))
+            chunks.Add(QueryOperationalReport("session"));
+        if ((s.MiningSession.TotalRefinedTons > 0 || s.MiningSession.AsteroidsProspected > 0 || s.LastProspectedAsteroid is not null) &&
+            ContainsAny(p, "refinad", "refineria", "minando", "mineria", "mining", "asteroide", "prospect", "motherlode", "nucleo", "picando", "piedra", "roca"))
+            chunks.Add(QueryOperationalReport("mining"));
+        if (s.CombatSession.TotalKills > 0 &&
+            ContainsAny(p, "combate", "combat", "caza de recompensas", "bonos", "bounty", "recompensas", "bajas", "credito por hora", "creditos por hora"))
+            chunks.Add(QueryOperationalReport("combat"));
+        if (ContainsAny(p, "community goal", "objetivo comunit", " cg") && s.CommunityGoals.Count > 0)
+            chunks.Add($"Community Goals ({s.CommunityGoals.Count}): {string.Join(" | ", s.CommunityGoals.Take(5).Select(static g => $"{g.Title} en {g.StarSystem} ({g.StationName}) — {g.ProgressDisplay}, caduca {g.ExpiryDisplay}"))}");
 
         // 8. Wishlist, Surface, Passengers, Server & Integrations status
         if (ContainsAny(p, "wishlist", "lista de deseos", "que me falta para ingenier"))
             chunks.Add(QueryWishlistReport());
-        if (ContainsAny(p, "coordenada", "latitud", "longitud", "marcador", "superficie", "bookmark"))
+        if (ContainsAny(p, "coordenada", "latitud", "longitud", "marcador", "superficie", "bookmark", "temperatura", "kelvin", "rumbo", "brujula", "altitud"))
             chunks.Add(QuerySurfaceReport());
-        if (ContainsAny(p, "pasajero", "cabina", "passenger"))
+        if (ContainsAny(p, "pasajero", "cabina", "passenger", "turista", "tourist", "turismo", "vip") ||
+            (s.PassengerManifest.Count > 0 && s.PassengerManifest.Any(pm =>
+                (!string.IsNullOrWhiteSpace(pm.Type) && pm.Type.Length >= 4 && p.Contains(NormalizeVoiceMatchText(pm.Type, null), StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(pm.DestinationSystem) && pm.DestinationSystem.Length >= 4 && p.Contains(NormalizeVoiceMatchText(pm.DestinationSystem, null), StringComparison.OrdinalIgnoreCase)))))
             chunks.Add(QueryPassengersReport());
-        if (ContainsAny(p, "servidor", "tick", "integracion", "apis activas", "server status"))
+        if (ContainsAny(p, "servidor", "tick", "integracion", "apis", "api externa", "server status"))
             chunks.Add(QueryServerAndIntegrationsStatus());
         if (ContainsAny(p, "virgen", "descubierto", "first discovery", "conocido en edsm") && s.EdsmDiscoveryIntel is { } edsmD)
             chunks.Add($"{edsmD.SystemName}: {edsmD.DiscoveryBadge}");
@@ -461,7 +538,7 @@ public sealed partial class AiCopilotService
             chunks.Add(QueryActiveAlertsReport());
         if (ContainsAny(p, "web hud", "web mfd", "codigo de sesion", "url del servidor"))
             chunks.Add(QueryWebHudStatus());
-        if (ContainsAny(p, "sintesis", "sintetizar", "synthesis", "inyeccion fsd", "fsd injection", "oxigeno", "afmu"))
+        if (ContainsAny(p, "sintesis", "sintetizar", "synthesi", "inyeccion fsd", "inyeccion de fsd", "fsd injection", "fsd boost", "oxigeno", "oxygen", "aire", "soporte vital", "life support", "afmu"))
             chunks.Add(QuerySynthesisReadiness());
         if (ContainsAny(p, "a pie", "traje", "on foot", "suit", "mochila", "backpack"))
             chunks.Add(QueryOdysseyGearReport());
@@ -470,7 +547,118 @@ public sealed partial class AiCopilotService
         if (ContainsAny(p, "acaba de pasar", "ultimo evento", "ultimos eventos", "recent events", "what happened"))
             chunks.Add(QueryRecentEventsReport(""));
 
-        return string.Join("\n", chunks.Take(4));
+        return string.Join("\n", chunks.Take(5));
+    }
+
+    private static readonly (string Alias, string Canonical)[] MarketCommoditySpanishAliases =
+    {
+        ("platino", "platinum"), ("oro", "gold"), ("plata", "silver"), ("tritio", "tritium"),
+        ("acero", "steel"), ("titanio", "titanium"), ("aluminio", "aluminium"), ("cobre", "copper"),
+        ("paladio", "palladium"), ("osmio", "osmium"), ("diamante", "diamond"), ("painita", "painite"),
+        ("monacita", "monazite"), ("musgravita", "musgravite"), ("benitoita", "benitoite"),
+        ("alejandrita", "alexandrite"), ("opalo", "opal"), ("berilio", "beryllium")
+    };
+
+    private static string? FindMentionedStoredShipFilter(ShipState s, string normalizedPrompt)
+    {
+        // Match stored ship type (full name or distinctive model token >= 5 chars, e.g. "Cutter", "Anaconda")
+        foreach (var sh in s.StoredShips)
+        {
+            if (string.IsNullOrWhiteSpace(sh.ShipType))
+                continue;
+            string normType = NormalizeVoiceMatchText(sh.ShipType, null);
+            if (normType.Length >= 4 && normalizedPrompt.Contains(normType, StringComparison.OrdinalIgnoreCase))
+                return sh.ShipType;
+
+            foreach (string token in normType.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (token.Length >= 5 &&
+                    token is not ("imperial" or "federal" or "alliance" or "explorer" or "transporter" or "cruiser") &&
+                    normalizedPrompt.Contains(token, StringComparison.OrdinalIgnoreCase))
+                {
+                    return sh.ShipType;
+                }
+            }
+        }
+
+        // Match stored ship star system when the prompt asks about ships/fleet
+        if (ContainsAny(normalizedPrompt, "nave", "ship", "flota", "aparcad", "guardad", "deje"))
+        {
+            foreach (var sh in s.StoredShips)
+            {
+                if (!string.IsNullOrWhiteSpace(sh.StarSystem) && sh.StarSystem.Length >= 4 &&
+                    normalizedPrompt.Contains(NormalizeVoiceMatchText(sh.StarSystem, null), StringComparison.OrdinalIgnoreCase))
+                {
+                    return sh.StarSystem;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static string? FindMentionedMarketCommodity(ShipState s, string normalizedPrompt)
+    {
+        var items = s.Market?.Items;
+        if (items is not { Count: > 0 })
+            return null;
+
+        foreach (var (alias, canonical) in MarketCommoditySpanishAliases)
+        {
+            if (normalizedPrompt.Contains(alias, StringComparison.OrdinalIgnoreCase) &&
+                items.Any(m => m.DisplayName.Contains(canonical, StringComparison.OrdinalIgnoreCase) ||
+                               m.Name.Contains(canonical, StringComparison.OrdinalIgnoreCase)))
+                return canonical;
+        }
+
+        foreach (var item in items)
+        {
+            if (item.DisplayName.Length >= 4 &&
+                normalizedPrompt.Contains(NormalizeVoiceMatchText(item.DisplayName, null), StringComparison.OrdinalIgnoreCase))
+                return item.DisplayName;
+        }
+        return null;
+    }
+
+    private static readonly (string Alias, string Canonical)[] MaterialSpanishAliases =
+    {
+        ("selenio", "selenium"), ("hierro", "iron"), ("carbono", "carbon"), ("azufre", "sulphur"),
+        ("fosforo", "phosphorus"), ("niquel", "nickel"), ("arsenico", "arsenic"), ("polonio", "polonium"),
+        ("itrio", "yttrium"), ("tecnecio", "technetium"), ("rutenio", "ruthenium"), ("telurio", "tellurium"),
+        ("antimonio", "antimony"), ("vanadio", "vanadium"), ("cromo", "chromium"), ("manganeso", "manganese"),
+        ("germanio", "germanium"), ("tungsteno", "tungsten"), ("molibdeno", "molybdenum"), ("cadmio", "cadmium"),
+        ("mercurio", "mercury"), ("niobio", "niobium"), ("estano", "tin"), ("zinc", "zinc"), ("circonio", "zirconium")
+    };
+
+    private static string? FindMentionedMaterialName(ShipState s, string normalizedPrompt)
+    {
+        foreach (var (alias, canonical) in MaterialSpanishAliases)
+        {
+            if (normalizedPrompt.Contains(alias, StringComparison.OrdinalIgnoreCase) &&
+                s.MaterialsInventory.Any(m => m.Name.Equals(canonical, StringComparison.OrdinalIgnoreCase) ||
+                                              m.DisplayName.Contains(canonical, StringComparison.OrdinalIgnoreCase)))
+                return canonical;
+        }
+
+        foreach (var mat in s.MaterialsInventory)
+        {
+            if (mat.DisplayName.Length >= 5 &&
+                normalizedPrompt.Contains(NormalizeVoiceMatchText(mat.DisplayName, null), StringComparison.OrdinalIgnoreCase))
+                return mat.DisplayName;
+            if (mat.Name.Length >= 5 &&
+                normalizedPrompt.Contains(mat.Name, StringComparison.OrdinalIgnoreCase))
+                return mat.Name;
+        }
+
+        foreach (var item in s.ShipLockerInventory.Concat(s.BackpackInventory))
+        {
+            if (item.DisplayName.Length >= 5 &&
+                normalizedPrompt.Contains(NormalizeVoiceMatchText(item.DisplayName, null), StringComparison.OrdinalIgnoreCase))
+                return item.DisplayName;
+            if (item.Name.Length >= 5 &&
+                normalizedPrompt.Contains(item.Name, StringComparison.OrdinalIgnoreCase))
+                return item.Name;
+        }
+        return null;
     }
 
     private static bool ContainsAny(string text, params string[] terms)

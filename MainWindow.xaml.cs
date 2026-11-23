@@ -45,6 +45,9 @@ public partial class MainWindow : Window
     private readonly AlertService _alertService;
     private readonly AlertSoundService _alertSoundService;
     private readonly PiperTtsService _piperTts;
+    private readonly WhisperSttService _whisperStt;
+    private readonly CockpitRadioService _cockpitRadio;
+    private HUDnopy.UI.HudOverlayWindow? _overlayWindow;
     private readonly AlertSpeechService _alertSpeechService;
     private readonly SpanshSystemDataService _spanshSystemDataService;
     private readonly CommunitySyncService _communitySync;
@@ -84,6 +87,33 @@ public partial class MainWindow : Window
     private ShipState? _pendingShipUiState;
     private bool _shipUiUpdateQueued;
     private int _fontZoomWheelDelta;
+    private System.Windows.Threading.DispatcherTimer? _fontZoomApplyTimer;
+    private System.Windows.Threading.DispatcherTimer? _fontZoomSaveTimer;
+    private int _pendingFontScalePercent;
+    private System.Windows.Threading.DispatcherTimer? _searchDebounceTimer;
+    private Action? _pendingSearchAction;
+
+    private void DebounceSearch(Action action, int delayMs = 150)
+    {
+        _pendingSearchAction = action;
+        if (_searchDebounceTimer is null)
+        {
+            _searchDebounceTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(delayMs)
+            };
+            _searchDebounceTimer.Tick += (_, _) =>
+            {
+                _searchDebounceTimer.Stop();
+                var run = _pendingSearchAction;
+                _pendingSearchAction = null;
+                run?.Invoke();
+            };
+        }
+        _searchDebounceTimer.Stop();
+        _searchDebounceTimer.Interval = TimeSpan.FromMilliseconds(delayMs);
+        _searchDebounceTimer.Start();
+    }
     private System.Windows.Threading.DispatcherTimer? _alertToastTimer;
     private string? _alertToastId;
 
@@ -141,6 +171,8 @@ public partial class MainWindow : Window
         _alertService = services.Alerts;
         _alertSoundService = services.AlertSounds;
         _piperTts = services.PiperTts;
+        _whisperStt = services.WhisperStt;
+        _cockpitRadio = services.CockpitRadio;
         _alertSpeechService = services.AlertSpeech;
         _spanshSystemDataService = services.SpanshSystemData;
         _communitySync = services.CommunitySync;
@@ -156,10 +188,12 @@ public partial class MainWindow : Window
         InitializeTableHeaderKeys();
 
         SldDesktopFontScale.ValueChanged += SldDesktopFontScale_ValueChanged;
+        if (SystemMapControl is not null)
+            SystemMapControl.BodySelected += OnSystemMapBodySelected;
         InitializeTrayIcon();
         _alertSpeechService.SpeechFailed += message => Dispatcher.BeginInvoke(() =>
         {
-            TxtStatusBarLeft.Text = message;
+            SetStatusBarMessage($"⚠ {message}");
             if (TxtPiperStatus is not null &&
                 string.Equals(_configService.Current.SpeechEngine, "piper", StringComparison.OrdinalIgnoreCase))
             {
@@ -191,6 +225,7 @@ public partial class MainWindow : Window
         _aiCopilot.TritiumCalcRequested += ly => Dispatcher.BeginInvoke(() => HandleAiTritiumCalc(ly));
         _aiCopilot.VoiceRateAdjustRequested += delta => Dispatcher.BeginInvoke(() => HandleAiVoiceRateAdjust(delta));
         _aiCopilot.MemoryChanged += () => Dispatcher.BeginInvoke(RefreshAiMemoryPreview);
+        _cockpitRadio.StatusChanged += status => Dispatcher.BeginInvoke(() => RefreshCockpitRadioUi(status));
         SourceInitialized += (_, _) => RegisterGlobalPttHotkey();
         LoadConfigToUi();
         RefreshJournalHistoryList();
@@ -379,6 +414,9 @@ public partial class MainWindow : Window
             StopAiHandsFree();
             CleanupAiVoiceRecorder();
             UnregisterGlobalPttHotkey();
+            CloseOverlayWindow();
+            _cockpitRadio.Dispose();
+            _whisperStt.Dispose();
             _aiCopilot.Dispose();
             _alertSpeechService.StopSpeaking();
             _piperTts.Dispose();
@@ -498,6 +536,15 @@ public partial class MainWindow : Window
         if (BtnAboutWiki is not null) BtnAboutWiki.Tag = HttpClientHeaderDefaults.WikiUrl;
         if (BtnAboutReleases is not null) BtnAboutReleases.Tag = HttpClientHeaderDefaults.ReleasesUrl;
         if (BtnAboutIssues is not null) BtnAboutIssues.Tag = HttpClientHeaderDefaults.IssuesUrl;
+        if (ChkEnableAutoUpdateCheck is not null) ChkEnableAutoUpdateCheck.IsChecked = cfg.EnableAutoUpdateCheck;
+        if (CmbAiSttEngine is not null) CmbAiSttEngine.SelectedValue = string.IsNullOrWhiteSpace(cfg.AiSttEngine) ? "auto" : cfg.AiSttEngine;
+        if (CmbWhisperModel is not null) CmbWhisperModel.SelectedValue = string.IsNullOrWhiteSpace(cfg.WhisperModelId) ? "tiny" : cfg.WhisperModelId;
+        if (SldRadioVolume is not null) SldRadioVolume.Value = Math.Clamp(cfg.RadioVolumePercent, 0, 100);
+        if (ChkRadioAutoDuck is not null) ChkRadioAutoDuck.IsChecked = cfg.RadioAutoDuckEnabled;
+        RefreshWhisperStatusUi();
+        RefreshCockpitRadioStationsUi();
+        InitializeDeckEditorUi();
+        RefreshWebCertificateTrustUi();
         TxtAiDynamicCooldown.Text = cfg.AiDynamicEventCooldownSeconds.ToString();
         TxtFuelLowThreshold.Text = cfg.FuelLowThresholdPercent.ToString();
         TxtFuelCriticalThreshold.Text = cfg.FuelCriticalThresholdPercent.ToString();
@@ -777,7 +824,11 @@ public partial class MainWindow : Window
     private static IEnumerable<FrameworkElement> EnumerateVisualElements(DependencyObject node)
     {
         if (node is FrameworkElement element)
+        {
+            if (element.Visibility == Visibility.Collapsed)
+                yield break;
             yield return element;
+        }
 
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
         {
@@ -806,12 +857,46 @@ public partial class MainWindow : Window
 
         int percent = (int)SldDesktopFontScale.Value;
         TxtDesktopFontScale.Text = $"{percent} %";
-        ApplyDesktopFontScale(percent / 100d);
-        if (_suppressEvents)
-            return;
+        _pendingFontScalePercent = percent;
 
+        if (_suppressEvents)
+        {
+            ApplyDesktopFontScale(percent / 100d);
+            return;
+        }
+
+        // Coalesce rapid Ctrl+Wheel / slider drags (45 ms) so WPF doesn't re-layout on every wheel tick
+        if (_fontZoomApplyTimer is null)
+        {
+            _fontZoomApplyTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(45)
+            };
+            _fontZoomApplyTimer.Tick += (_, _) =>
+            {
+                _fontZoomApplyTimer.Stop();
+                ApplyDesktopFontScale(_pendingFontScalePercent / 100d);
+            };
+        }
+        _fontZoomApplyTimer.Stop();
+        _fontZoomApplyTimer.Start();
+
+        // Debounce config.json disk writes (400 ms) so zooming never stalls on file I/O
         _configService.Current.DesktopFontScalePercent = percent;
-        _configService.Save();
+        if (_fontZoomSaveTimer is null)
+        {
+            _fontZoomSaveTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(400)
+            };
+            _fontZoomSaveTimer.Tick += (_, _) =>
+            {
+                _fontZoomSaveTimer.Stop();
+                _configService.Save();
+            };
+        }
+        _fontZoomSaveTimer.Stop();
+        _fontZoomSaveTimer.Start();
     }
 
     private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

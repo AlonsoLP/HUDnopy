@@ -7,14 +7,75 @@
 // Description: Interactive MFD simulator, theme switcher, i18n, release resolver, and starfield.
 // -----------------------------------------------------------------------------
 
-// Interactive MFD Tab Switcher
-function switchMfd(index, btn) {
-  document.querySelectorAll('.mfd-screen').forEach((el, i) => {
-    el.classList.toggle('active', i === index);
-  });
-  document.querySelectorAll('.mfd-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+// Interactive & Auto-Rotating HUDnopy App Preview Switcher
+const MFD_ROTATE_MS = 5500;
+const MFD_STATUS_MESSAGES = [
+  '✓ Telemetría sincronizada · Web MFD HTTPS activo (PWA)',
+  '✓ Mapa 2D sincronizado · Radar Exobiología activo (800m)',
+  '✓ Botonera táctil cargada · ★ Favoritos y macros listos',
+  '✓ Whisper Offline + Piper Neural TTS · Radio en reproducción',
+  '✓ Wishlist Ingeniería y Fleet Carrier actualizados'
+];
+let mfdCurrentIndex = 0;
+let mfdTimerId = null;
+let mfdPaused = false;
+
+function switchMfd(index, btn, manual) {
+  const screens = document.querySelectorAll('.mfd-screen');
+  const tabs = document.querySelectorAll('.mfd-tab');
+  if (!screens.length) return;
+  mfdCurrentIndex = ((index % screens.length) + screens.length) % screens.length;
+  screens.forEach((el, i) => el.classList.toggle('active', i === mfdCurrentIndex));
+  tabs.forEach((b, i) => b.classList.toggle('active', btn ? b === btn : i === mfdCurrentIndex));
+  const statusEl = document.getElementById('simStatusMsg');
+  if (statusEl) statusEl.textContent = MFD_STATUS_MESSAGES[mfdCurrentIndex] || MFD_STATUS_MESSAGES[0];
+  restartMfdProgressBar();
+  if (manual) scheduleNextMfd();
 }
+
+function restartMfdProgressBar() {
+  const bar = document.getElementById('mfdProgressBar');
+  if (!bar) return;
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  if (mfdPaused) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      bar.style.transition = `width ${MFD_ROTATE_MS}ms linear`;
+      bar.style.width = '100%';
+    });
+  });
+}
+
+function scheduleNextMfd() {
+  if (mfdTimerId) clearTimeout(mfdTimerId);
+  if (mfdPaused) return;
+  mfdTimerId = setTimeout(() => {
+    switchMfd(mfdCurrentIndex + 1, null, false);
+    scheduleNextMfd();
+  }, MFD_ROTATE_MS);
+}
+
+(function initMfdAutoRotate() {
+  const frame = document.getElementById('hudPreviewFrame');
+  if (!frame) return;
+  frame.addEventListener('mouseenter', () => {
+    mfdPaused = true;
+    if (mfdTimerId) clearTimeout(mfdTimerId);
+    const bar = document.getElementById('mfdProgressBar');
+    if (bar) {
+      bar.style.transition = 'none';
+      bar.style.width = '0%';
+    }
+  });
+  frame.addEventListener('mouseleave', () => {
+    mfdPaused = false;
+    restartMfdProgressBar();
+    scheduleNextMfd();
+  });
+  restartMfdProgressBar();
+  scheduleNextMfd();
+})();
 
 // Live HUD Theme Switcher
 function setHudTheme(hex, rgb, secondary, el) {
@@ -41,7 +102,8 @@ fetch('https://api.github.com/repos/AlonsoLP/HUDnopy/releases/latest')
   .then(r => r.ok ? r.json() : null)
   .then(rel => {
     if (!rel || !rel.tag_name) return;
-    document.getElementById('releaseBadgeText').textContent = `RELEASE ${rel.tag_name.toUpperCase()} AVAILABLE · WINDOWS x64`;
+    const badge = document.getElementById('releaseBadgeText');
+    if (badge) badge.textContent = `RELEASE ${rel.tag_name.toUpperCase()} AVAILABLE · WINDOWS x64`;
     if (Array.isArray(rel.assets)) {
       const exe = rel.assets.find(a => a.name && a.name.endsWith('-Setup.exe'));
       const zip = rel.assets.find(a => a.name && a.name.endsWith('-portable.zip'));

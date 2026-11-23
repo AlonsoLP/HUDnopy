@@ -45,6 +45,10 @@ public class InputSimulatorService
         if (actionId.StartsWith("Macro:", StringComparison.OrdinalIgnoreCase))
             return await ExecuteMacroAsync(actionId, language, text);
 
+        if (actionId.Contains(',', StringComparison.Ordinal) ||
+            actionId.StartsWith("Seq:", StringComparison.OrdinalIgnoreCase))
+            return await ExecuteInlineSequenceAsync(actionId, language, text);
+
         var binding = _bindingsService.Bindings.FirstOrDefault(b =>
             string.Equals(b.ActionId, actionId, StringComparison.OrdinalIgnoreCase));
 
@@ -171,6 +175,38 @@ public class InputSimulatorService
             string.Equals(b.ActionId, actionId, StringComparison.OrdinalIgnoreCase))?.DisplayName ?? actionId;
         CommandExecuted?.Invoke(actionId, label);
         return (true, string.Format(text["sent"], label, "MACRO"));
+    }
+
+    private async Task<(bool Success, string Message)> ExecuteInlineSequenceAsync(
+        string sequence,
+        string language,
+        IReadOnlyDictionary<string, string> text)
+    {
+        string raw = sequence.StartsWith("Seq:", StringComparison.OrdinalIgnoreCase)
+            ? sequence[4..]
+            : sequence;
+        string[] steps = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (steps.Length == 0)
+            return (false, string.Format(text["actionMissing"], sequence));
+
+        foreach (string step in steps.Take(16))
+        {
+            if (step.StartsWith("DELAY:", StringComparison.OrdinalIgnoreCase))
+            {
+                if (int.TryParse(step[6..].Trim(), out int ms))
+                    await Task.Delay(Math.Clamp(ms, 20, 3000));
+                continue;
+            }
+            if (step.Contains(',', StringComparison.Ordinal) || step.StartsWith("Seq:", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var (ok, msg) = await ExecuteActionAsync(step);
+            if (!ok)
+                return (false, msg);
+            await Task.Delay(90);
+        }
+
+        CommandExecuted?.Invoke(sequence, "Custom Macro");
+        return (true, string.Format(text["sent"], "Custom Macro", "MACRO"));
     }
 
     private static async Task<(bool Success, string Message)> FocusEliteDangerousWindowAsync(IReadOnlyDictionary<string, string> text)

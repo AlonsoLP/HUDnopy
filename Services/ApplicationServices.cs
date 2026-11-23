@@ -24,6 +24,8 @@ public sealed class ApplicationServices
     public AlertService Alerts { get; }
     public AlertSoundService AlertSounds { get; }
     public PiperTtsService PiperTts { get; }
+    public WhisperSttService WhisperStt { get; }
+    public CockpitRadioService CockpitRadio { get; }
     public AlertSpeechService AlertSpeech { get; }
     public SpanshSystemDataService SpanshSystemData { get; }
     public CommunitySyncService CommunitySync { get; }
@@ -47,7 +49,10 @@ public sealed class ApplicationServices
         Alerts = new AlertService(Configuration, ShipState, GameEvents);
         AlertSounds = new AlertSoundService(Alerts, Configuration);
         PiperTts = new PiperTtsService();
+        WhisperStt = new WhisperSttService();
+        CockpitRadio = new CockpitRadioService(Configuration);
         AlertSpeech = new AlertSpeechService(Alerts, Configuration, PiperTts);
+        AlertSpeech.SpeakingStateChanged += isSpeaking => CockpitRadio.SetDucked(isSpeaking);
         InputSimulator.IsGameDetected = () => ShipState.State.IsGameDetected;
         SpanshSystemData = new SpanshSystemDataService(Configuration, ShipState);
         CommunitySync = new CommunitySyncService(Configuration, ShipState, GameEvents);
@@ -58,8 +63,14 @@ public sealed class ApplicationServices
         ArdentMarket = new ArdentMarketService(Configuration, ShipState);
         EdastroCanonn = new EdastroCanonnService(Configuration, ShipState, GameEvents);
         Discord = new DiscordIntegrationService(Configuration, ShipState, GameEvents, EliteBgsWatchlist);
-        AiCopilot = new AiCopilotService(Configuration, ShipState, Bindings, InputSimulator, SpanshSystemData, CommunitySync, Galnet, GalaxyStatus, AlertSpeech, GameEvents, EliteBgsWatchlist, ArdentMarket, EdastroCanonn, Discord, FrontierCapi, Alerts);
-        WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot, GalaxyStatus, Galnet, EliteBgsWatchlist, ArdentMarket, EdastroCanonn, CommunitySync, AlertSpeech);
+        AiCopilot = new AiCopilotService(Configuration, ShipState, Bindings, InputSimulator, SpanshSystemData, CommunitySync, Galnet, GalaxyStatus, AlertSpeech, GameEvents, EliteBgsWatchlist, ArdentMarket, EdastroCanonn, Discord, FrontierCapi, Alerts)
+        {
+            OfflineWhisperStt = WhisperStt
+        };
+        WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot, GalaxyStatus, Galnet, EliteBgsWatchlist, ArdentMarket, EdastroCanonn, CommunitySync, AlertSpeech)
+        {
+            CockpitRadio = CockpitRadio
+        };
         AiCopilot.WebHudStatusProvider = () => WebServer.IsRunning
             ? $"Web HUD active on port {WebServer.CurrentPort}. URLs: {string.Join(", ", WebServer.GetAccessUrls())}{(string.IsNullOrWhiteSpace(WebServer.SessionCode) ? "" : $". Session code: {WebServer.SessionCode}")}."
             : $"Web HUD is stopped ({WebServer.StatusMessage}).";

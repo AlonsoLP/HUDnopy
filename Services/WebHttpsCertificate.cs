@@ -86,4 +86,74 @@ internal static class WebHttpsCertificate
             CryptographicOperations.ZeroMemory(exported);
         }
     }
+
+    public static bool IsTrustedInCurrentUserRoot(X509Certificate2? certificate)
+    {
+        if (certificate is null)
+            return false;
+        try
+        {
+            using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadOnly);
+            return store.Certificates
+                .Find(X509FindType.FindByThumbprint, certificate.Thumbprint, validOnly: false)
+                .Count > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static bool TrustInCurrentUserRoot(X509Certificate2 certificate, out string message)
+    {
+        try
+        {
+            // Export public certificate ONLY (no private key) and install into CurrentUser\Root
+            byte[] publicBytes = certificate.Export(X509ContentType.Cert);
+            using var publicCert = X509CertificateLoader.LoadCertificate(publicBytes);
+            using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite);
+            if (store.Certificates.Find(X509FindType.FindByThumbprint, publicCert.Thumbprint, validOnly: false).Count == 0)
+                store.Add(publicCert);
+            message = "HTTPS certificate trusted in Windows (restart browser/PWA once to clear cached warning).";
+            return true;
+        }
+        catch (CryptographicException)
+        {
+            message = "Certificate trust cancelled by user.";
+            return false;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("WebHttpsCertificate", $"Failed to trust cert: {ex.Message}");
+            message = $"Could not trust certificate: {ex.Message}";
+            return false;
+        }
+    }
+
+    public static bool UntrustFromCurrentUserRoot(X509Certificate2 certificate, out string message)
+    {
+        try
+        {
+            using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite);
+            var matches = store.Certificates.Find(X509FindType.FindByThumbprint, certificate.Thumbprint, validOnly: false);
+            foreach (var match in matches)
+                store.Remove(match);
+            message = "HTTPS certificate removed from Windows CurrentUser Root store.";
+            return true;
+        }
+        catch (CryptographicException)
+        {
+            message = "Certificate removal cancelled by user.";
+            return false;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("WebHttpsCertificate", $"Failed to remove cert: {ex.Message}");
+            message = $"Could not remove certificate: {ex.Message}";
+            return false;
+        }
+    }
 }

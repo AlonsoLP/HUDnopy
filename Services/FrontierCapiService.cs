@@ -516,9 +516,27 @@ public sealed class FrontierCapiService : IDisposable
 
         _fileWatcher.ApplyCapiEnrichment(state =>
         {
-            if (ships.Count > 0)
-                state.StoredShips = ships.OrderBy(static s => s.StarSystem, StringComparer.CurrentCultureIgnoreCase).ThenBy(static s => s.ShipType).ToList();
-            if (storedModules.Count > 0)
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            bool localShipsFresh = state.IsGameDetected &&
+                state.StoredShips.Count > 0 &&
+                state.LastStoredShipsJournalUtc.HasValue &&
+                now - state.LastStoredShipsJournalUtc.Value < TimeSpan.FromMinutes(10);
+            if (ships.Count > 0 && !localShipsFresh)
+            {
+                state.StoredShips = ships
+                    .Where(s => !state.ShipId.HasValue || s.Id != state.ShipId.Value)
+                    .GroupBy(static s => s.Id > 0 ? $"id:{s.Id}" : $"name:{s.ShipType}:{s.ShipName}:{s.StarSystem}", StringComparer.OrdinalIgnoreCase)
+                    .Select(static g => g.First())
+                    .OrderBy(static s => s.StarSystem, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(static s => s.ShipType)
+                    .ToList();
+            }
+
+            bool localModulesFresh = state.IsGameDetected &&
+                state.StoredModules.Count > 0 &&
+                state.LastStoredModulesJournalUtc.HasValue &&
+                now - state.LastStoredModulesJournalUtc.Value < TimeSpan.FromMinutes(10);
+            if (storedModules.Count > 0 && !localModulesFresh)
                 state.StoredModules = storedModules.OrderBy(static m => m.StarSystem, StringComparer.CurrentCultureIgnoreCase).ThenBy(static m => m.DisplayName).ToList();
             if (!string.IsNullOrWhiteSpace(capiSuit) && string.IsNullOrWhiteSpace(state.ActiveSuit))
                 state.ActiveSuit = capiSuit;
@@ -664,12 +682,26 @@ public sealed class FrontierCapiService : IDisposable
 
         _fileWatcher.ApplyCapiEnrichment(state =>
         {
+            bool localCarrierFresh = state.IsGameDetected &&
+                state.Carrier?.Id == id &&
+                state.LastCarrierJournalUtc.HasValue &&
+                DateTimeOffset.UtcNow - state.LastCarrierJournalUtc.Value < TimeSpan.FromMinutes(10);
+
             var carrier = state.Carrier?.Id == id ? state.Carrier.Snapshot() : new CarrierState { Id = id };
             if (!string.IsNullOrWhiteSpace(decodedName)) carrier.Name = decodedName;
             if (!string.IsNullOrWhiteSpace(callsign)) carrier.Callsign = callsign;
-            if (!string.IsNullOrWhiteSpace(sys)) carrier.System = sys;
-            if (fuel.HasValue) carrier.Fuel = fuel;
-            if (balance.HasValue) carrier.Balance = balance;
+            if (!localCarrierFresh || string.IsNullOrWhiteSpace(carrier.System))
+            {
+                if (!string.IsNullOrWhiteSpace(sys)) carrier.System = sys;
+            }
+            if (!localCarrierFresh || !carrier.Fuel.HasValue)
+            {
+                if (fuel.HasValue) carrier.Fuel = fuel;
+            }
+            if (!localCarrierFresh || !carrier.Balance.HasValue)
+            {
+                if (balance.HasValue) carrier.Balance = balance;
+            }
             if (reserve.HasValue) carrier.Reserve = reserve;
             if (available.HasValue) carrier.Available = available;
             if (weeklyUpkeep.HasValue && weeklyUpkeep.Value > 0) carrier.WeeklyUpkeep = weeklyUpkeep;
@@ -819,7 +851,7 @@ public sealed class FrontierCapiService : IDisposable
             }
         }
 
-        _fileWatcher.ApplyCapiEnrichment(state => state.CommunityGoals = goals);
+        _fileWatcher.MergeCommunityGoals(goals, isAuthoritative: true);
     }
 
     private void ApplyMarketJson(JsonElement root)
@@ -859,6 +891,7 @@ public sealed class FrontierCapiService : IDisposable
                 {
                     Timestamp = DateTimeOffset.UtcNow,
                     MarketId = GetLong(root, "id"),
+                    DataSource = "cAPI",
                     StationName = station,
                     StarSystem = state.CurrentSystem,
                     Items = items
@@ -897,13 +930,14 @@ public sealed class FrontierCapiService : IDisposable
         if (items.Count == 0) return;
         _fileWatcher.ApplyCapiEnrichment(state =>
         {
-            if (state.Shipyard.Items.Count == 0 ||
+            if (state.Shipyard.Items.Count <= 1 ||
                 !string.Equals(state.Shipyard.StationName, station, StringComparison.OrdinalIgnoreCase))
             {
                 state.Shipyard = new ShipyardSnapshot
                 {
                     Timestamp = DateTimeOffset.UtcNow,
                     MarketId = GetLong(root, "id"),
+                    DataSource = "cAPI",
                     StationName = station,
                     StarSystem = state.CurrentSystem,
                     Items = items

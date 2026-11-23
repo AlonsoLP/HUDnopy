@@ -104,7 +104,9 @@ public partial class MainWindow
         _configService.Current.AiCommanderMemory?.Clear();
         _configService.Save();
         RefreshAiMemoryPreview();
-        TxtAiConfigStatus.Text = SettingsTranslations.ForLanguage(_uiLanguage)["aiMemoryCleared"];
+        string clearedMsg = SettingsTranslations.ForLanguage(_uiLanguage)["aiMemoryCleared"];
+        TxtAiConfigStatus.Text = clearedMsg;
+        SetStatusBarMessage($"✓ {clearedMsg}");
     }
 
     private void ChkAiArrivalBriefing_Click(object sender, RoutedEventArgs e)
@@ -299,6 +301,7 @@ public partial class MainWindow
 
         var text = SettingsTranslations.ForLanguage(_uiLanguage);
         TxtAiConfigStatus.Text = text["aiFetchingModels"];
+        SetStatusBarMessage(text["aiFetchingModels"]);
 
         string endpoint = provider switch
         {
@@ -328,11 +331,15 @@ public partial class MainWindow
             targetCombo.ItemsSource = models;
             targetCombo.SelectedItem = chosen;
             SaveAiFieldsToConfig();
-            TxtAiConfigStatus.Text = string.Format(text["aiModelsLoaded"], models.Count);
+            string loadedMsg = string.Format(text["aiModelsLoaded"], models.Count);
+            TxtAiConfigStatus.Text = loadedMsg;
+            SetStatusBarMessage($"✓ {loadedMsg}");
         }
         else
         {
-            TxtAiConfigStatus.Text = success ? text["aiModelsEmpty"] : message;
+            string errMsg = success ? text["aiModelsEmpty"] : message;
+            TxtAiConfigStatus.Text = errMsg;
+            SetStatusBarMessage($"⚠ {errMsg}");
         }
     }
 
@@ -358,10 +365,12 @@ public partial class MainWindow
     private async void BtnTestAiConfig_Click(object sender, RoutedEventArgs e)
     {
         SaveAiFieldsToConfig();
-        TxtAiConfigStatus.Text = SettingsTranslations.ForLanguage(_uiLanguage)["aiTesting"];
+        string testingMsg = SettingsTranslations.ForLanguage(_uiLanguage)["aiTesting"];
+        TxtAiConfigStatus.Text = testingMsg;
+        SetStatusBarMessage(testingMsg);
         var (_, reply) = await _aiCopilot.TestConnectionAsync();
         TxtAiConfigStatus.Text = reply;
-        TxtStatusBarLeft.Text = reply;
+        SetStatusBarMessage(reply);
     }
 
     private void TxtAiPrompt_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)

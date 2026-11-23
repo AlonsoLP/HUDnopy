@@ -739,6 +739,7 @@ public sealed class CommunitySyncService : IDisposable
 
             int knownBodies = 0;
             long estValue = 0;
+            var edsmBodies = new List<SpanshBodySummary>();
             using (var bResp = await bodiesTask)
             {
                 if (bResp.IsSuccessStatusCode)
@@ -752,10 +753,29 @@ public sealed class CommunitySyncService : IDisposable
                         knownBodies = bArr.GetArrayLength();
                         foreach (var b in bArr.EnumerateArray())
                         {
-                            string subType = GetString(b, "subType") ?? "";
+                            string bName = GetString(b, "name") ?? "";
+                            string subType = GetString(b, "subType") ?? GetString(b, "type") ?? "";
                             string terra = GetString(b, "terraformingState") ?? "";
                             bool isTerraformable = terra.Contains("Terraformable", StringComparison.OrdinalIgnoreCase);
                             estValue += EstimateEdsmBodyValue(subType, isTerraformable);
+                            if (!string.IsNullOrWhiteSpace(bName))
+                            {
+                                double? gravG = GetDouble(b, "gravity");
+                                bool? landable = b.TryGetProperty("isLandable", out var lp) && lp.ValueKind is JsonValueKind.True or JsonValueKind.False
+                                    ? lp.GetBoolean()
+                                    : null;
+                                bool hasRings = b.TryGetProperty("rings", out var rp) && rp.ValueKind == JsonValueKind.Array && rp.GetArrayLength() > 0;
+                                edsmBodies.Add(new SpanshBodySummary(
+                                    bName,
+                                    subType,
+                                    GetDouble(b, "distanceToArrival"),
+                                    landable,
+                                    GetInt(b, "bodyId"),
+                                    gravG.HasValue ? gravG.Value * 9.80665 : null,
+                                    GetDouble(b, "surfaceTemperature"),
+                                    GetString(b, "atmosphereType"),
+                                    HasRings: hasRings));
+                            }
                         }
                     }
                 }
@@ -790,7 +810,8 @@ public sealed class CommunitySyncService : IDisposable
                                     InfluencePercent = inf,
                                     FactionState = GetString(f, "state") ?? "None",
                                     Government = GetString(f, "government") ?? "",
-                                    Allegiance = GetString(f, "allegiance") ?? ""
+                                    Allegiance = GetString(f, "allegiance") ?? "",
+                                    DataSource = "EDSM"
                                 });
                             }
                         }
@@ -818,6 +839,8 @@ public sealed class CommunitySyncService : IDisposable
                         state.SystemFactions = intel.Factions.Select(static f => f.Snapshot()).ToList();
                 }
             });
+            if (edsmBodies.Count > 0)
+                _fileWatcher.SyncEdsmSystemBodies(systemName, _fileWatcher.State.SystemAddress, edsmBodies);
 
             EdsmDiscoveryUpdated?.Invoke(intel);
             return intel;
@@ -1008,11 +1031,7 @@ public sealed class CommunitySyncService : IDisposable
 
             if (goals.Count > 0)
             {
-                _fileWatcher.ApplyCapiEnrichment(state =>
-                {
-                    if (state.CommunityGoals.Count == 0)
-                        state.CommunityGoals = goals;
-                });
+                _fileWatcher.MergeCommunityGoals(goals, isAuthoritative: false);
             }
 
             return (true, goals, $"Inara CGs: {goals.Count}");

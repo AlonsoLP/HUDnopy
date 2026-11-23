@@ -35,6 +35,16 @@ public class ExplorationBodyItem
     public string Id { get; set; } = "";
     public int? BodyId { get; set; }
     public int HierarchyDepth { get; set; }
+    public int? DirectParentBodyId { get; set; }
+    public string DirectParentType { get; set; } = "";
+    public int? BarycentreId { get; set; }
+    public int? HostStarBodyId { get; set; }
+    public int? ParentPlanetBodyId { get; set; }
+    public string DataSource { get; set; } = "Local";
+    [JsonIgnore]
+    public bool IsSpanshOnly => string.Equals(DataSource, "Spansh", StringComparison.OrdinalIgnoreCase);
+    [JsonIgnore]
+    public bool IsExternalOnly => IsSpanshOnly || string.Equals(DataSource, "EDSM", StringComparison.OrdinalIgnoreCase);
     public string SystemName { get; set; } = "";
     public string BodyName { get; set; } = "";
     public string HierarchyName => HierarchyDepth <= 0 ? BodyName : $"{new string(' ', Math.Min(HierarchyDepth, 4) * 2)}└─ {BodyName}";
@@ -242,6 +252,14 @@ public class ExplorationRingItem
     public double? OuterRadiusMeters { get; set; }
 }
 
+public sealed record ExoSamplePoint(
+    int Index,
+    double Latitude,
+    double Longitude,
+    double RelativeX,
+    double RelativeY,
+    double DistanceMeters);
+
 public sealed class ExobiologyTrackerState
 {
     public string Species { get; set; } = "";
@@ -252,9 +270,56 @@ public sealed class ExobiologyTrackerState
     public double CurrentDistanceMeters { get; set; }
     public double? LastSampleLatitude { get; set; }
     public double? LastSampleLongitude { get; set; }
+    public double PlayerHeadingDegrees { get; set; }
+    public List<ExoSamplePoint> SamplePoints { get; set; } = new();
     public bool CanSampleNext => SamplesCollected is > 0 and < 3 && CurrentDistanceMeters >= RequiredDistanceMeters;
 
-    internal ExobiologyTrackerState Snapshot() => (ExobiologyTrackerState)MemberwiseClone();
+    internal ExobiologyTrackerState Snapshot()
+    {
+        var copy = (ExobiologyTrackerState)MemberwiseClone();
+        copy.SamplePoints = new List<ExoSamplePoint>(SamplePoints);
+        return copy;
+    }
+
+    /// <summary>
+    /// Projects collected sample coordinates into heading-up 2D radar meters relative to the player.
+    /// Positive RelativeX = right, positive RelativeY = forward (top of radar).
+    /// </summary>
+    public static List<ExoSamplePoint> ProjectSamplePoints(
+        IReadOnlyList<(double Lat, double Lon)> samples,
+        double playerLat,
+        double playerLon,
+        double headingDeg,
+        double planetRadiusMeters)
+    {
+        var result = new List<ExoSamplePoint>(samples.Count);
+        if (samples.Count == 0 || planetRadiusMeters <= 0)
+            return result;
+
+        double latRad = playerLat * Math.PI / 180.0;
+        double headingRad = headingDeg * Math.PI / 180.0;
+        double cosH = Math.Cos(headingRad);
+        double sinH = Math.Sin(headingRad);
+        double cosLat = Math.Cos(latRad);
+
+        for (int i = 0; i < samples.Count; i++)
+        {
+            var (sLat, sLon) = samples[i];
+            double dLatRad = (sLat - playerLat) * Math.PI / 180.0;
+            double dLonRad = (sLon - playerLon) * Math.PI / 180.0;
+            double northM = dLatRad * planetRadiusMeters;
+            double eastM = dLonRad * planetRadiusMeters * cosLat;
+
+            // Rotate world (East, North) into player heading-up (Right, Forward)
+            double relX = eastM * cosH - northM * sinH;
+            double relY = eastM * sinH + northM * cosH;
+            double dist = Math.Sqrt(northM * northM + eastM * eastM);
+
+            result.Add(new ExoSamplePoint(i + 1, sLat, sLon, Math.Round(relX, 1), Math.Round(relY, 1), Math.Round(dist, 0)));
+        }
+
+        return result;
+    }
 }
 
 public sealed class SurfaceBookmarkItem

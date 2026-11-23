@@ -72,17 +72,7 @@ public partial class EliteFileWatcherService
                 RestoreExplorationBodyHistory(folder, _currentSystemAddress);
             if (_explorationBodiesChanged)
             {
-                var currentSystemBodies = _explorationBodies.Values
-                    .Where(item => string.Equals(item.SystemName, _state.CurrentSystem, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                _state.SystemScannedBodies = currentSystemBodies.Count;
-                _state.ExplorationBodies = currentSystemBodies
-                    .Where(static item => item.IsInteresting)
-                    .OrderBy(static item => item.BodyId ?? int.MaxValue)
-                    .ThenBy(static item => item.BodyName, StringComparer.CurrentCultureIgnoreCase)
-                    .Select(static item => item.Snapshot())
-                    .ToList();
-                _explorationBodiesChanged = false;
+                RebuildExplorationBodiesSnapshot();
             }
         }
         catch

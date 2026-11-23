@@ -374,8 +374,8 @@ public sealed partial class AiCopilotService
                         string mode = (param ?? "session").Trim().ToLowerInvariant();
                         string title = mode == "ship" ? $"🚀 {st.CommanderName} — Ship Status" : $"📊 {st.CommanderName} — Session Summary";
                         string body = mode == "ship"
-                            ? $"**Ship:** {st.ShipType} ({st.ShipName} / {st.ShipIdent})\n**System:** `{st.CurrentSystem}`{(string.IsNullOrWhiteSpace(st.StationName) ? "" : $" — {st.StationName}")}\n**Hull:** {st.HullHealth:0}% | **Fuel:** {st.FuelMain:0.1}/{st.FuelMax:0.1} t | **Cargo:** {st.CargoUsed}/{st.CargoCapacity} t | **Credits:** {st.Credits:N0} CR"
-                            : $"**System:** `{st.CurrentSystem}` | **Ship:** {st.ShipType}\n**Net Credits:** {st.SessionStats.NetCredits:+#,0;-#,0;0} CR ({st.SessionStats.CreditsPerHour:N0} CR/h)\n**Systems:** {st.SessionStats.SystemsVisited} ({st.SessionStats.TotalDistanceLy:0.1} LY) | **Scans:** {st.SessionStats.BodiesScanned} | **Exobiology:** {st.SessionStats.OrganicsAnalysed} | **Missions:** {st.SessionStats.MissionsCompleted}";
+                            ? $"**Ship:** {st.ShipType} ({st.ShipName} / {st.ShipIdent})\n**System:** `{st.CurrentSystem}`{(string.IsNullOrWhiteSpace(st.StationName) ? "" : $" — {st.StationName}")}\n**Hull:** {st.HullHealth:0}% | **Fuel:** {st.FuelMain:0.0}/{st.FuelMax:0.0} t | **Cargo:** {st.CargoUsed}/{st.CargoCapacity} t | **Credits:** {st.Credits:N0} CR"
+                            : $"**System:** `{st.CurrentSystem}` | **Ship:** {st.ShipType}\n**Net Credits:** {st.SessionStats.NetCredits:+#,0;-#,0;0} CR ({st.SessionStats.CreditsPerHour:N0} CR/h)\n**Systems:** {st.SessionStats.SystemsVisited} ({st.SessionStats.TotalDistanceLy:0.0} LY) | **Scans:** {st.SessionStats.BodiesScanned} | **Exobiology:** {st.SessionStats.OrganicsAnalysed} | **Missions:** {st.SessionStats.MissionsCompleted}";
                         var (dsOk, dsMsg) = await _discord.SendWebhookAsync(title, body);
                         actionLogs.Add(dsOk ? $"📨 {dsMsg}" : $"⚠ {dsMsg}");
                     }
@@ -441,7 +441,7 @@ public sealed partial class AiCopilotService
                         string links = !string.IsNullOrWhiteSpace(st.LastLoadoutJson)
                             ? $"\n🔗 **[Open in EDSY]({ShipLoadoutExportService.BuildEdsyUrl(st.LastLoadoutJson)})** · **[Open in Coriolis]({ShipLoadoutExportService.BuildCoriolisUrl(st.LastLoadoutJson)})**"
                             : "";
-                        string body = $"**Ship:** {st.ShipType} ({st.ShipName} / {st.ShipIdent})\n**Hull:** {st.HullHealth:0}% | **Fuel:** {st.FuelMax:0.1} t | **Cargo:** {st.CargoCapacity} t{links}";
+                        string body = $"**Ship:** {st.ShipType} ({st.ShipName} / {st.ShipIdent})\n**Hull:** {st.HullHealth:0}% | **Fuel:** {st.FuelMax:0.0} t | **Cargo:** {st.CargoCapacity} t{links}";
                         var (dbOk, dbMsg) = await _discord.SendWebhookAsync($"🛠 {st.CommanderName} — Ship Loadout", body, 0x9B59B6);
                         actionLogs.Add(dbOk ? $"📨 {dbMsg}" : $"⚠ {dbMsg}");
                     }
@@ -824,8 +824,8 @@ public sealed partial class AiCopilotService
             if (s.FuelMax <= 0) return (false, "");
             double pct = Math.Clamp((s.FuelMain / s.FuelMax) * 100.0, 0, 100);
             string msg = isEs
-                ? $"Combustible al {pct:0} por ciento, {s.FuelMain:0.1} de {s.FuelMax:0.1} toneladas."
-                : $"Fuel is at {pct:0} percent, {s.FuelMain:0.1} of {s.FuelMax:0.1} tons.";
+                ? $"Combustible al {pct:0} por ciento, {s.FuelMain:0.0} de {s.FuelMax:0.0} toneladas."
+                : $"Fuel is at {pct:0} percent, {s.FuelMain:0.0} of {s.FuelMax:0.0} tons.";
             return (true, msg);
         }
 
@@ -1274,7 +1274,7 @@ public sealed partial class AiCopilotService
         var s = _fileWatcher.State;
         var parts = new List<string>();
         if (s.HasLatLong)
-            parts.Add($"Posición en {s.BodyName}: LAT {s.Latitude:0.000}, LON {s.Longitude:0.000}, ALT {s.Altitude:0} m, Rumbo {s.Heading:0}°, Gravedad {s.GravityDisplay}");
+            parts.Add($"Posición en {s.BodyName}: LAT {s.Latitude:0.000}, LON {s.Longitude:0.000}, ALT {s.Altitude:0} m, Rumbo {s.Heading:0}°, Gravedad {s.GravityDisplay}{(s.TemperatureKelvin is > 0 ? $", Temp {s.TemperatureKelvin:0} K" : "")}");
         else
             parts.Add("Sin telemetría activa de superficie.");
 
@@ -1291,9 +1291,18 @@ public sealed partial class AiCopilotService
     internal string QueryPassengersReport()
     {
         var s = _fileWatcher.State;
-        if (s.PassengerManifest.Count == 0)
+        var paxMissions = s.ActiveMissions.Where(static m => m.PassengerMission == true).ToList();
+        if (s.PassengerManifest.Count == 0 && paxMissions.Count == 0)
             return "No llevas pasajeros a bordo actualmente.";
-        return $"Pasajeros ({s.PassengerManifest.Count} grupos): {string.Join(" | ", s.PassengerManifest.Take(8).Select(static p => $"{p.Type} x{p.Count}{(p.Vip ? " VIP" : "")}{(p.Wanted ? " BUSCADO" : "")}"))}";
+
+        var parts = new List<string>();
+        if (s.PassengerManifest.Count > 0)
+            parts.Add($"Pasajeros ({s.PassengerManifest.Count} grupos): {string.Join(" | ", s.PassengerManifest.Take(8).Select(static p => $"{p.Type} x{p.Count}{(p.Vip ? " VIP" : "")}{(p.Wanted ? " BUSCADO" : "")}{(string.IsNullOrWhiteSpace(p.DestinationSystem) ? "" : $" → {p.DestinationSystem}{(string.IsNullOrWhiteSpace(p.DestinationStation) ? "" : $" ({p.DestinationStation})")}")}"))}");
+
+        if (paxMissions.Count > 0)
+            parts.Add($"Destinos de pasajeros: {string.Join(" | ", paxMissions.Take(6).Select(static m => $"{m.Name} → {m.DestinationSystem}{(string.IsNullOrWhiteSpace(m.DestinationStation) ? "" : $" ({m.DestinationStation})")}, {m.Reward ?? 0:N0} CR"))}");
+
+        return string.Join(" | ", parts);
     }
 
     internal string QueryServerAndIntegrationsStatus()
@@ -1428,7 +1437,7 @@ public sealed partial class AiCopilotService
         }
 
         var top = nearby.OrderBy(static x => x.Dist).Take(12)
-            .Select(static x => $"{x.Name} ({x.Dist:0.1} LY{(string.IsNullOrWhiteSpace(x.Eco) ? "" : ", " + x.Eco)})");
+            .Select(static x => $"{x.Name} ({x.Dist:0.0} LY{(string.IsNullOrWhiteSpace(x.Eco) ? "" : ", " + x.Eco)})");
         return $"EDSM systems within {radius:0} LY of {sys} ({nearby.Count} found): {string.Join(" | ", top)}";
     }
 
@@ -1547,7 +1556,7 @@ public sealed partial class AiCopilotService
         double pct = s.FuelMax > 0 ? (s.FuelMain / s.FuelMax) * 100.0 : 0;
         var parts = new List<string>
         {
-            $"Fuel: {s.FuelMain:0.1}/{s.FuelMax:0.1} t ({pct:0}%). Next scoopable on route: {(s.RouteHasNoFuelStar ? "NONE" : (s.JumpsToNextFuelStar?.ToString() ?? "N/A"))}."
+            $"Fuel: {s.FuelMain:0.0}/{s.FuelMax:0.0} t ({pct:0}%). Next scoopable on route: {(s.RouteHasNoFuelStar ? "NONE" : (s.JumpsToNextFuelStar?.ToString() ?? "N/A"))}."
         };
 
         if (_configService.Current.EnableSpanshSystemData)
@@ -1788,7 +1797,7 @@ public sealed partial class AiCopilotService
             int nonFuel = s.NavRoute.Count - fuelStars;
             var dest = s.NavRoute[^1];
             double totalLy = s.NavRoute.Sum(static w => w.StepDistanceLy);
-            return $"Ruta activa hacia {dest.StarSystem}: {s.NavRoute.Count} sistemas ({totalLy:0.1} AL totales), {fuelStars} estrellas repostables y {nonFuel} no repostables. Próxima repostable en: {(s.RouteHasNoFuelStar ? "NINGUNA" : (s.JumpsToNextFuelStar?.ToString() ?? "?"))} saltos.";
+            return $"Ruta activa hacia {dest.StarSystem}: {s.NavRoute.Count} sistemas ({totalLy:0.0} AL totales), {fuelStars} estrellas repostables y {nonFuel} no repostables. Próxima repostable en: {(s.RouteHasNoFuelStar ? "NINGUNA" : (s.JumpsToNextFuelStar?.ToString() ?? "?"))} saltos.";
         }
 
         if (lower == "factions")
@@ -1808,9 +1817,10 @@ public sealed partial class AiCopilotService
 
         var bodies = s.ExplorationBodies
             .OrderByDescending(static b => b.EstimatedCredits ?? 0)
+            .ThenBy(static b => b.IsSpanshOnly ? 1 : 0)
             .Take(10)
-            .Select(static b => $"{b.BodyName} ({b.BodyType}, {(b.DistanceFromArrivalLs.HasValue ? $"{b.DistanceFromArrivalLs.Value:0} LS" : "? LS")}, ~{b.EstimatedCredits ?? 0:N0} CR{(b.WasMapped == true ? ", mapeado" : ", sin mapear")}{(b.BiologicalSignalCount > 0 ? $", {b.BiologicalSignalCount} bio" : "")})");
-        return $"Cuerpos escaneados en {s.CurrentSystem} ({s.SystemScannedBodies}/{s.SystemTotalBodies?.ToString() ?? "?"}): {string.Join(" | ", bodies)}";
+            .Select(static b => $"{b.BodyName} ({b.BodyType}, {(b.DistanceFromArrivalLs.HasValue ? $"{b.DistanceFromArrivalLs.Value:0} LS" : "? LS")}, {(b.IsSpanshOnly ? "Spansh sin escanear" : $"~{b.EstimatedCredits ?? 0:N0} CR{(b.WasMapped == true ? ", mapeado" : ", sin mapear")}")}{(b.BiologicalSignalCount > 0 ? $", {b.BiologicalSignalCount} bio" : "")})");
+        return $"Cuerpos en {s.CurrentSystem} ({s.SystemScannedBodies}/{s.SystemTotalBodies?.ToString() ?? "?"} escaneados, {s.ExplorationBodies.Count} listados): {string.Join(" | ", bodies)}";
     }
 
     internal string QueryMissionsReport(string param)
@@ -1933,12 +1943,12 @@ public sealed partial class AiCopilotService
             var mods = s.ShipModules
                 .Take(16)
                 .Select(static m => $"{m.DisplayName} (P{m.Priority}, {m.HealthPercent:0}%{(string.IsNullOrWhiteSpace(m.Engineering) ? "" : $", {m.Engineering}")})");
-            return $"Nave {s.ShipType} ({s.ShipName}): {s.ShipModules.Count} módulos, consumo activo {totalMw:0.00} MW, bodega {s.CargoUsed}/{s.CargoCapacity} t, combustible {s.FuelMain:0.1}/{s.FuelMax:0.1} t. Módulos: {string.Join(" | ", mods)}";
+            return $"Nave {s.ShipType} ({s.ShipName}): {s.ShipModules.Count} módulos, consumo activo {totalMw:0.00} MW, bodega {s.CargoUsed}/{s.CargoCapacity} t, combustible {s.FuelMain:0.0}/{s.FuelMax:0.0} t. Módulos: {string.Join(" | ", mods)}";
         }
 
         // Default: session report
         var st = s.SessionStats;
-        return $"Informe de sesión: balance neto {st.NetCredits:+#,0;-#,0;0} CR ({st.CreditsPerHour:N0} CR/h), {st.SystemsVisited} sistemas visitados ({st.TotalDistanceLy:0.1} AL), {st.BodiesScanned} cuerpos escaneados, {st.OrganicsAnalysed} especies exobiológicas, {st.MissionsCompleted} misiones completadas. Sin vender: Cartografía ~{s.UnsoldCartographyCredits:N0} CR, Exobiología ~{s.UnsoldExobiologyCredits:N0} CR.";
+        return $"Informe de sesión: balance neto {st.NetCredits:+#,0;-#,0;0} CR ({st.CreditsPerHour:N0} CR/h), {st.SystemsVisited} sistemas visitados ({st.TotalDistanceLy:0.0} AL), {st.BodiesScanned} cuerpos escaneados, {st.OrganicsAnalysed} especies exobiológicas, {st.MissionsCompleted} misiones completadas. Sin vender: Cartografía ~{s.UnsoldCartographyCredits:N0} CR, Exobiología ~{s.UnsoldExobiologyCredits:N0} CR.";
     }
 
     private string QueryProfileReport(string param)
@@ -1964,12 +1974,17 @@ public sealed partial class AiCopilotService
         {
             if (s.Engineers.Count > 0)
             {
-                int maxG5 = s.Engineers.Count(static e => e.Rank >= 5);
+                var g5List = s.Engineers
+                    .Where(static e => e.Rank >= 5)
+                    .Take(15)
+                    .Select(static e => e.Name)
+                    .ToList();
                 var pending = s.Engineers
                     .Where(static e => (e.Rank ?? 0) < 5)
-                    .Take(10)
-                    .Select(static e => $"{e.Name} ({e.Progress}, G{e.Rank?.ToString() ?? "0"})");
-                sections.Add($"Ingenieros: {s.Engineers.Count} registrados ({maxG5} en Grado 5). Pendientes de G5: {(pending.Any() ? string.Join(" | ", pending) : "ninguno")}");
+                    .Take(12)
+                    .Select(static e => $"{e.Name} ({e.Progress}, G{e.Rank?.ToString() ?? "0"})")
+                    .ToList();
+                sections.Add($"Ingenieros: {s.Engineers.Count} registrados ({g5List.Count} en Grado 5: {(g5List.Count > 0 ? string.Join(", ", g5List) : "ninguno")}). Pendientes de G5: {(pending.Count > 0 ? string.Join(" | ", pending) : "ninguno")}");
             }
             else
             {
@@ -2113,7 +2128,7 @@ public sealed partial class AiCopilotService
             double dy = yp.GetDouble() - curPos[1];
             double dz = zp.GetDouble() - curPos[2];
             double ly = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-            distText = $"Distancia desde {_fileWatcher.State.CurrentSystem}: {ly:0.1} AL";
+            distText = $"Distancia desde {_fileWatcher.State.CurrentSystem}: {ly:0.0} AL";
         }
 
         var parts = new List<string> { $"Sistema: {name}" };

@@ -51,7 +51,9 @@ public class AppConfig
     public int SpeechRate { get; set; }
     public string SpeechQueueMode { get; set; } = "tactical";
     public int SpeechQueueExpirationSeconds { get; set; } = 5;
-    public bool CaptureUnhandledEvents { get; set; } = true;
+    public bool CaptureUnhandledEvents { get; set; }
+    public bool EnableAutoUpdateCheck { get; set; }
+    public bool HasCompletedFirstRunWizard { get; set; } = true;
     public bool WriteUnhandledEventsToFile { get; set; } = true;
     public bool GroupUnhandledEvents { get; set; } = true;
     public Dictionary<string, int> MaterialWishlist { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -112,6 +114,21 @@ public class AppConfig
     public bool AiVoiceMacrosEnabled { get; set; } = true;
     public List<VoiceMacroDefinition> AiVoiceMacros { get; set; } = VoiceMacroDefinition.CreateDefaults();
     public List<string> AiCommanderMemory { get; set; } = new();
+    // v0.5.0 — Click-Through Overlay, Custom Control Deck, Offline Whisper STT & Cockpit Radio
+    public double OverlayOpacity { get; set; } = 0.84;
+    public bool OverlayClickThrough { get; set; } = true;
+    public double? OverlayLeft { get; set; }
+    public double? OverlayTop { get; set; }
+    public string OverlayToggleHotkey { get; set; } = "Ctrl+Alt+O";
+    public List<CustomDeckButtonItem> CustomDeckButtons { get; set; } = new();
+    public List<DeckTabDefinition> DeckTabs { get; set; } = new();
+    public bool UseCustomDeckLayout { get; set; } = false;
+    public string AiSttEngine { get; set; } = "auto";
+    public string WhisperModelId { get; set; } = "tiny";
+    public int RadioVolumePercent { get; set; } = 45;
+    public bool RadioAutoDuckEnabled { get; set; } = true;
+    public string RadioLastStationId { get; set; } = "sidewinder";
+    public List<RadioStationItem> CustomRadioStations { get; set; } = new();
     public Dictionary<string, AlertChannelPreferences> AlertPreferences { get; set; } =
         AlertDefinitions.CreateDefaultPreferences();
 
@@ -145,6 +162,48 @@ public class HudThemePreset
     public string Name { get; set; } = "";
     public string AccentHex { get; set; } = "#FF7100";
     public string SecondaryHex { get; set; } = "#FFB300";
+}
+
+/// <summary>
+/// User-customized Control Deck button persisted in config.json and synced to the Web HUD.
+/// </summary>
+public class CustomDeckButtonItem
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
+    public string Label { get; set; } = "";
+    public string Icon { get; set; } = "⚡";
+    public string ActionId { get; set; } = "";
+    public string AccentHex { get; set; } = "";
+    public int Order { get; set; }
+    public bool IsVisible { get; set; } = true;
+    public bool IsFavorite { get; set; }
+    public bool RequireConfirmation { get; set; }
+    public double SizeScale { get; set; } = 1.0;
+}
+
+/// <summary>
+/// Customizable Control Deck tab containing an ordered list of buttons and optional auto-context trigger.
+/// </summary>
+public class DeckTabDefinition
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
+    public string Name { get; set; } = "";
+    public string Icon { get; set; } = "🎛";
+    public string AutoContext { get; set; } = ""; // "" | "combat" | "srv" | "onfoot" | "landing"
+    public int Order { get; set; }
+    public bool IsVisible { get; set; } = true;
+    public List<CustomDeckButtonItem> Buttons { get; set; } = new();
+}
+
+/// <summary>
+/// Cockpit Radio station definition (built-in community stations or user-added custom stream URLs).
+/// </summary>
+public class RadioStationItem
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string StreamUrl { get; set; } = "";
+    public string Genre { get; set; } = "";
 }
 
 /// <summary>

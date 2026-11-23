@@ -83,7 +83,7 @@ public partial class MainWindow
             GridSpanshServices, GridGalnetArticles,
             GridSpanshRoute, GridSpanshTrade, GridSpanshMiningRings, GridColonisationSuppliers,
             GridCarrierCargo, GridCarrierMarketOrders, GridStoredShips, GridStoredModules, GridCommunityGoals, GridEngineeringWishlist,
-            GridEliteBgsWatchlist, GridSpanshBodiesSearch, GridSpanshCarriersSearch, GridNearestDssa, GridArdentMarket
+            GridEliteBgsWatchlist, GridSpanshBodiesSearch, GridSupportCarriers, GridArdentMarket
         };
         foreach (var column in tables.SelectMany(table => table.Columns))
         {
@@ -239,7 +239,6 @@ public partial class MainWindow
             _readyStatusText = text["readyStatus"];
             TxtStatusBarLeft.Text = _readyStatusText;
         }
-        TxtStatusBarRight.Text = text["trayStatus"];
         BtnOpenWebHeader.ToolTip = text["openWeb"];
         System.Windows.Automation.AutomationProperties.SetName(BtnOpenWebHeader, text["openWeb"]);
         BtnExitHeader.ToolTip = text["exitApp"];
@@ -364,6 +363,12 @@ public partial class MainWindow
                 (!string.IsNullOrEmpty(selected.Id) && row.Body.Id == selected.Id));
         TxtExplorationBodiesStatus.Text = rows.Count == 0 ? text["empty"] :
             string.Format(text["bodyCount"], rows.Count, state.ExplorationBodies[0].SystemName);
+        if (SystemMapSection is not null && SystemMapControl is not null)
+        {
+            SystemMapSection.Visibility = state.ExplorationBodies.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (state.ExplorationBodies.Count > 0)
+                SystemMapControl.UpdateMap(state.ExplorationBodies, state.CurrentSystem);
+        }
         TxtExplorationEventsStatus.Text = GridExplorationEvents.Items.Count == 0 ? text["milestonesEmpty"] :
             string.Format(text["milestonesCount"], GridExplorationEvents.Items.Count);
         UpdateExplorationProgressAndTracker(state);
@@ -408,10 +413,12 @@ public partial class MainWindow
                 ? string.Format(culture, text["exoTrackerReady"], exo.CurrentDistanceMeters, exo.RequiredDistanceMeters)
                 : string.Format(culture, text["exoTrackerDistance"], exo.CurrentDistanceMeters, exo.RequiredDistanceMeters);
             BarExobiologyDistance.Value = pct;
+            ExoRadarControl?.UpdateRadar(exo);
             ExobiologyTrackerCard.Visibility = Visibility.Visible;
         }
         else
         {
+            ExoRadarControl?.UpdateRadar(null);
             ExobiologyTrackerCard.Visibility = Visibility.Collapsed;
         }
     }
@@ -466,6 +473,11 @@ public partial class MainWindow
         }
 
         _uiLanguage = language;
+        ApplyAllLocalizedLabels();
+    }
+
+    private void ApplyAllLocalizedLabels()
+    {
         ApplyLanguageSettingsLabels();
         ApplyNavigationLabels();
         ApplyDashboardLabels();

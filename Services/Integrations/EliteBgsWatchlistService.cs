@@ -97,6 +97,11 @@ public sealed class EliteBgsWatchlistService : IDisposable
         if (!cfg.EnableEliteBgsWatchlist)
         {
             LastStatus = "Disabled";
+            if (_fileWatcher.State.WatchedBgsFactions.Count > 0)
+            {
+                _fileWatcher.ApplyCapiEnrichment(static s => s.WatchedBgsFactions = new List<EliteBgsFactionWatchItem>());
+                WatchlistUpdated?.Invoke(Array.Empty<EliteBgsFactionWatchItem>());
+            }
             return (false, new List<EliteBgsFactionWatchItem>(), "EliteBGS Watchlist is disabled.");
         }
 

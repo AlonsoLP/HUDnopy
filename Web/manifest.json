@@ -1,0 +1,19 @@
+{
+  "name": "HUDnopy — Elite Dangerous MFD HUD",
+  "short_name": "HUDnopy",
+  "description": "Elite Dangerous telemetry HUD, tactical Control Deck, 2D System Map, Exobiology Radar, and COVAS AI Copilot.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090C10",
+  "theme_color": "#FF7100",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

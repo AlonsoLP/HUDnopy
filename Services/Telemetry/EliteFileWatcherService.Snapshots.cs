@@ -143,6 +143,9 @@ public partial class EliteFileWatcherService
                         coord.Lat, coord.Lon, _state.Latitude, _state.Longitude, _state.PlanetRadius));
                 var nextTracker = tracker.Snapshot();
                 nextTracker.CurrentDistanceMeters = Math.Round(minDist, 0);
+                nextTracker.PlayerHeadingDegrees = _state.Heading;
+                nextTracker.SamplePoints = ExobiologyTrackerState.ProjectSamplePoints(
+                    _activeExoSampleCoords, _state.Latitude, _state.Longitude, _state.Heading, _state.PlanetRadius);
                 _state.ExobiologyTracker = nextTracker;
             }
 
@@ -552,6 +555,7 @@ public partial class EliteFileWatcherService
             {
                 Timestamp = ReadJsonTimestamp(root, "updateTime") ?? DateTimeOffset.UtcNow,
                 MarketId = ReadJsonInt64(root, "marketId"),
+                DataSource = "EDSM",
                 StationName = station.Trim(),
                 StarSystem = system.Trim(),
                 Items = items.OrderBy(static i => i.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToList()
