@@ -40,32 +40,40 @@ internal static class WebHttpsCertificate
         }
         if (File.Exists(path))
         {
-            byte[] plaintext = ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
             try
             {
-                var stored = JsonSerializer.Deserialize<StoredCertificate>(plaintext)
-                    ?? throw new InvalidDataException("El certificado HTTPS guardado no es válido.");
-                byte[] pfx = Convert.FromBase64String(stored.Pfx);
+                byte[] plaintext = ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
                 try
                 {
-                    var certificate = X509CertificateLoader.LoadPkcs12(pfx, null, X509KeyStorageFlags.UserKeySet);
-                    if (certificate.HasPrivateKey && certificate.NotAfter.ToUniversalTime() > DateTime.UtcNow.AddDays(7) &&
-                        required.All(address => stored.Addresses.Contains(address, StringComparer.Ordinal)))
+                    var stored = JsonSerializer.Deserialize<StoredCertificate>(plaintext)
+                        ?? throw new InvalidDataException("El certificado HTTPS guardado no es válido.");
+                    byte[] pfx = Convert.FromBase64String(stored.Pfx);
+                    try
                     {
-                        lock (CertCacheLock)
-                            _inMemoryCachedCert = (certificate, stored.Addresses);
-                        return certificate;
+                        var certificate = X509CertificateLoader.LoadPkcs12(pfx, null, X509KeyStorageFlags.UserKeySet);
+                        if (certificate.HasPrivateKey && certificate.NotAfter.ToUniversalTime() > DateTime.UtcNow.AddDays(7) &&
+                            required.All(address => stored.Addresses.Contains(address, StringComparer.Ordinal)))
+                        {
+                            lock (CertCacheLock)
+                                _inMemoryCachedCert = (certificate, stored.Addresses);
+                            return certificate;
+                        }
+                        certificate.Dispose();
                     }
-                    certificate.Dispose();
+                    finally
+                    {
+                        CryptographicOperations.ZeroMemory(pfx);
+                    }
                 }
                 finally
                 {
-                    CryptographicOperations.ZeroMemory(pfx);
+                    CryptographicOperations.ZeroMemory(plaintext);
                 }
             }
-            finally
+            catch (Exception ex)
             {
-                CryptographicOperations.ZeroMemory(plaintext);
+                AppDiagnosticsLogger.Warn("WebHttpsCertificate", $"Saved HTTPS certificate is unreadable or corrupt; regenerating: {ex.Message}");
+                try { File.Delete(path); } catch { }
             }
         }
 

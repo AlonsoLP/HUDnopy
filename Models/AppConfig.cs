@@ -131,18 +131,6 @@ public class AppConfig
     public Dictionary<string, AlertChannelPreferences> AlertPreferences { get; set; } =
         AlertDefinitions.CreateDefaultPreferences();
 
-    [JsonPropertyName("StatusFileFreshnessSeconds")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? LegacyStatusFileFreshnessSeconds
-    {
-        get => null;
-        set
-        {
-            if (value.HasValue)
-                GameProcessExitGraceSeconds = value.Value;
-        }
-    }
-
     public static string GetDefaultJournalPath()
     {
         string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

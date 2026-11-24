@@ -174,7 +174,7 @@ public sealed class AlertSoundService
                 {
                     SoundProfile profile = ResolveProfile(alertId, severity, selectedProfile);
                     profileName = SoundProfileTranslations.Name(profile.Id, profile.Name, _configService.Current.InterfaceLanguage);
-                    stream = CreateWaveStream(profile, 1);
+                    stream = CreateWaveStream(profile);
                     reader = new WaveFileReader(stream);
                 }
                 output = AudioPlaybackHelper.CreateOutputPlayer(latencyMs: 80);
@@ -183,8 +183,10 @@ public sealed class AlertSoundService
                     if (eventArgs.Exception is not null)
                     {
                         string language = _configService.Current.InterfaceLanguage;
-                        PlaybackFailed?.Invoke(string.Format(SettingsTranslations.ForLanguage(language)["playbackStopped"],
-                            profileName, eventArgs.Exception.Message));
+                        string msg = string.Format(SettingsTranslations.ForLanguage(language)["playbackStopped"],
+                            profileName, eventArgs.Exception.Message);
+                        AppDiagnosticsLogger.Warn("AlertSound", msg);
+                        PlaybackFailed?.Invoke(msg);
                     }
 
                     _ = Task.Run(DisposePlayback);
@@ -196,8 +198,10 @@ public sealed class AlertSoundService
             {
                 DisposePlayback();
                 string language = _configService.Current.InterfaceLanguage;
-                PlaybackFailed?.Invoke(string.Format(SettingsTranslations.ForLanguage(language)["playbackError"],
-                    profileName, exception.Message));
+                string msg = string.Format(SettingsTranslations.ForLanguage(language)["playbackError"],
+                    profileName, exception.Message);
+                AppDiagnosticsLogger.Warn("AlertSound", msg);
+                PlaybackFailed?.Invoke(msg);
             }
         });
     }
@@ -225,17 +229,12 @@ public sealed class AlertSoundService
             : throw new InvalidDataException(string.Format(SoundProfileTranslations.Errors(_configService.Current.InterfaceLanguage)["automaticUnresolved"], profile.Id, alertId, severity));
     }
 
-    private MemoryStream CreateWaveStream(SoundProfile profile, double volume)
+    private MemoryStream CreateWaveStream(SoundProfile profile)
     {
-        if (volume == 1.0)
-        {
-            byte[] cachedBytes = _synthesizedWaveCache.GetOrAdd(
-                profile.Id,
-                _ => SynthesizeWaveBytes(profile, 1.0));
-            return new MemoryStream(cachedBytes, writable: false);
-        }
-
-        return new MemoryStream(SynthesizeWaveBytes(profile, volume), writable: false);
+        byte[] cachedBytes = _synthesizedWaveCache.GetOrAdd(
+            profile.Id,
+            _ => SynthesizeWaveBytes(profile, 1.0));
+        return new MemoryStream(cachedBytes, writable: false);
     }
 
     private byte[] SynthesizeWaveBytes(SoundProfile profile, double volume)

@@ -28,9 +28,6 @@ public sealed class SystemMap2DControl : Border
 {
     private readonly ScrollViewer _scroll;
     private readonly Canvas _canvas;
-    private readonly Border _detailCard;
-    private readonly TextBlock _detailTitle;
-    private readonly TextBlock _detailMetrics;
     private string _lastSignature = "";
 
     public event Action<ExplorationBodyItem>? BodySelected;
@@ -53,27 +50,6 @@ public sealed class SystemMap2DControl : Border
         };
         root.Children.Add(_scroll);
 
-        _detailTitle = new TextBlock { FontWeight = FontWeights.Bold, FontSize = 12, TextWrapping = TextWrapping.Wrap };
-        _detailTitle.SetResourceReference(TextBlock.ForegroundProperty, "HudAccentBrush");
-        _detailMetrics = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
-        _detailMetrics.SetResourceReference(TextBlock.ForegroundProperty, "HudTextBrush");
-
-        var detailStack = new StackPanel();
-        detailStack.Children.Add(_detailTitle);
-        detailStack.Children.Add(_detailMetrics);
-
-        _detailCard = new Border
-        {
-            Visibility = Visibility.Collapsed,
-            Margin = new Thickness(0, 8, 0, 0),
-            Padding = new Thickness(10, 6, 10, 6),
-            BorderThickness = new Thickness(1),
-            Child = detailStack
-        };
-        _detailCard.SetResourceReference(BackgroundProperty, "HudPanelAltBrush");
-        _detailCard.SetResourceReference(BorderBrushProperty, "HudBorderBrush");
-        root.Children.Add(_detailCard);
-
         Child = root;
     }
 
@@ -82,7 +58,6 @@ public sealed class SystemMap2DControl : Border
         if (bodies is null || bodies.Count == 0)
         {
             _canvas.Children.Clear();
-            _detailCard.Visibility = Visibility.Collapsed;
             _lastSignature = "";
             return;
         }
@@ -337,7 +312,6 @@ public sealed class SystemMap2DControl : Border
 
     private void ShowBodyDetail(ExplorationBodyItem b)
     {
-        _detailCard.Visibility = Visibility.Collapsed;
         BodySelected?.Invoke(b);
     }
 

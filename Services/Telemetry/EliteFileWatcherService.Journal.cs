@@ -1108,7 +1108,11 @@ public partial class EliteFileWatcherService
                     break;
 
                 case "HullDamage":
-                    if (root.TryGetProperty("Health", out var hDmg))
+                    // Ignore damage reported for fighters or NPC pilots; only the commander's own ship hull is tracked.
+                    bool hullFromOtherCraft =
+                        (root.TryGetProperty("Fighter", out var fighterProp) && fighterProp.ValueKind == JsonValueKind.True) ||
+                        (root.TryGetProperty("PlayerPilot", out var pilotProp) && pilotProp.ValueKind == JsonValueKind.False);
+                    if (!hullFromOtherCraft && root.TryGetProperty("Health", out var hDmg) && hDmg.ValueKind == JsonValueKind.Number)
                     {
                         _state.HullHealth = Math.Round(hDmg.GetDouble() * 100.0, 1);
                         _state.HasHullTelemetry = true;

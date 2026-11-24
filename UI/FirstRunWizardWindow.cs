@@ -39,6 +39,7 @@ public sealed class FirstRunWizardWindow : Window
     private readonly System.Windows.Controls.Button _btnBack;
     private readonly System.Windows.Controls.Button _btnNext;
     private int _stepIndex;
+    private bool _importedGameTheme;
 
     public FirstRunWizardWindow(ConfigService configService, Window? owner = null, WebServerService? webServer = null)
     {
@@ -149,6 +150,7 @@ public sealed class FirstRunWizardWindow : Window
                 matchedPresetIdx = i;
         }
         _cmbTheme.SelectedIndex = matchedPresetIdx;
+        _cmbTheme.SelectionChanged += (_, _) => _importedGameTheme = false;
         _txtThemeImportStatus = MakeMutedLabel("");
         var btnImportGame = new System.Windows.Controls.Button { Content = "🎨 Import from Elite HUD / EDHM", MinHeight = 38, Padding = new Thickness(12, 6, 12, 6), HorizontalAlignment = System.Windows.HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 4) };
         btnImportGame.SetResourceReference(StyleProperty, "HudButtonStyle");
@@ -156,6 +158,7 @@ public sealed class FirstRunWizardWindow : Window
         {
             if (GameHudThemeImportService.TryImportGameTheme(out string acc, out string sec, out string src))
             {
+                _importedGameTheme = true;
                 _configService.Current.ThemeAccentHex = acc;
                 _configService.Current.ThemeSecondaryHex = sec;
                 _configService.ApplyThemeToApplication();
@@ -163,6 +166,7 @@ public sealed class FirstRunWizardWindow : Window
             }
             else
             {
+                _importedGameTheme = false;
                 _txtThemeImportStatus.Text = "No GraphicsConfigurationOverride.xml or EDHM UI profile found.";
             }
         };
@@ -194,23 +198,31 @@ public sealed class FirstRunWizardWindow : Window
         RefreshWizardCertUi();
         btnTrustCert.Click += (_, _) =>
         {
-            bool ok;
-            string msg;
-            if (_webServer is { IsRunning: true })
+            try
             {
-                ok = _webServer.IsCertificateTrusted
-                    ? _webServer.TryUntrustCertificate(out msg)
-                    : _webServer.TryTrustCertificate(out msg);
+                bool ok;
+                string msg;
+                if (_webServer is { IsRunning: true })
+                {
+                    ok = _webServer.IsCertificateTrusted
+                        ? _webServer.TryUntrustCertificate(out msg)
+                        : _webServer.TryTrustCertificate(out msg);
+                }
+                else
+                {
+                    var cert = WebHttpsCertificate.LoadOrCreate(Array.Empty<System.Net.IPAddress>());
+                    ok = WebHttpsCertificate.IsTrustedInCurrentUserRoot(cert)
+                        ? WebHttpsCertificate.UntrustFromCurrentUserRoot(cert, out msg)
+                        : WebHttpsCertificate.TrustInCurrentUserRoot(cert, out msg);
+                }
+                txtCertStatus.Text = ok ? $"✓ {msg}" : $"⚠ {msg}";
+                RefreshWizardCertUi();
             }
-            else
+            catch (Exception ex)
             {
-                using var cert = WebHttpsCertificate.LoadOrCreate(Array.Empty<System.Net.IPAddress>());
-                ok = WebHttpsCertificate.IsTrustedInCurrentUserRoot(cert)
-                    ? WebHttpsCertificate.UntrustFromCurrentUserRoot(cert, out msg)
-                    : WebHttpsCertificate.TrustInCurrentUserRoot(cert, out msg);
+                AppDiagnosticsLogger.Warn("Wizard.Cert", $"Failed to update HTTPS certificate trust: {ex.Message}");
+                txtCertStatus.Text = $"⚠ {ex.Message}";
             }
-            txtCertStatus.Text = ok ? $"✓ {msg}" : $"⚠ {msg}";
-            RefreshWizardCertUi();
         };
         var step3 = BuildStepPanel("Choose a cockpit HUD theme or import your in-game colors:", _cmbTheme, btnImportGame, _txtThemeImportStatus, _chkWebHud, btnTrustCert, txtCertStatus);
 
@@ -267,8 +279,13 @@ public sealed class FirstRunWizardWindow : Window
         if (!string.IsNullOrWhiteSpace(_txtJournal.Text))
             cfg.JournalFolderPath = _txtJournal.Text.Trim();
         if (!string.IsNullOrWhiteSpace(_txtBinds.Text))
-            cfg.BindingsFolderPath = _txtBinds.Text.Trim();
-        if (string.IsNullOrWhiteSpace(_txtThemeImportStatus.Text) &&
+        {
+            string newBindsFolder = _txtBinds.Text.Trim();
+            if (!string.Equals(cfg.BindingsFolderPath, newBindsFolder, StringComparison.OrdinalIgnoreCase))
+                cfg.SelectedBindsFile = "";
+            cfg.BindingsFolderPath = newBindsFolder;
+        }
+        if (!_importedGameTheme &&
             _cmbTheme.SelectedItem is ComboBoxItem { Tag: HudThemePreset preset })
         {
             cfg.ThemeAccentHex = preset.AccentHex;

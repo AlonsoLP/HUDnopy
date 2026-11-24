@@ -131,7 +131,6 @@ public partial class MainWindow : Window
     private WindowState _miniHudState;
     private bool _miniHudTopmost;
     private double _miniHudOpacity = 1.0;
-    private string? _lastAutoDeckCategory;
     private string? _selectedBindingCategory;
     private Rect _windowedBounds;
     private WindowState _windowedState;
@@ -239,9 +238,9 @@ public partial class MainWindow : Window
         _spanshSystemDataService.StateChanged += OnSpanshDataChanged;
         _alertService.AlertsChanged += () => Dispatcher.BeginInvoke(RefreshAlertsUi);
         _alertService.AlertRaised += alert => Dispatcher.BeginInvoke(() => ShowAlertToast(alert));
-        _alertSoundService.PlaybackFailed += message => Dispatcher.BeginInvoke(() => TxtStatusBarLeft.Text = message);
-        _bindingsService.BindingsUpdated += _ => Dispatcher.Invoke(RefreshBindingsUi);
-        _webServer.ServerStatusChanged += () => Dispatcher.Invoke(RefreshWebServerUi);
+        _alertSoundService.PlaybackFailed += message => Dispatcher.BeginInvoke(() => SetStatusBarMessage($"⚠ {message}"));
+        _bindingsService.BindingsUpdated += _ => Dispatcher.BeginInvoke(RefreshBindingsUi);
+        _webServer.ServerStatusChanged += () => Dispatcher.BeginInvoke(RefreshWebServerUi);
         _configService.ConfigChanged += _ => Dispatcher.BeginInvoke(() =>
         {
             RefreshHeaderOptions();
@@ -1053,7 +1052,6 @@ public partial class MainWindow : Window
         UpdateEngineersUi(s);
         UpdateMiningUi(s);
         UpdateTargetAndCombatUi(s);
-        ApplyAutoContextDeck(s);
         UpdateCarrierAdvancedUi(s);
         UpdateLandingPadUi(s);
         UpdateMiniHudContextUi(s);

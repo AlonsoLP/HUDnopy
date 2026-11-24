@@ -217,6 +217,11 @@ public class InputSimulatorService
             return (false, text["gameWindowMissing"]);
         }
 
+        if (GetForegroundWindow() == windowHandle && !IsIconic(windowHandle))
+        {
+            return (true, "");
+        }
+
         if (IsIconic(windowHandle))
             ShowWindow(windowHandle, SW_RESTORE);
 

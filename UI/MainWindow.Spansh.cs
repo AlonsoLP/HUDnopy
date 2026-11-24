@@ -182,18 +182,26 @@ public partial class MainWindow
 
     private void BtnImportSpanshCsv_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog
+        try
         {
-            Filter = "Spansh CSV (*.csv)|*.csv|All files (*.*)|*.*"
-        };
-        if (dialog.ShowDialog() != true)
-            return;
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Spansh CSV (*.csv)|*.csv|All files (*.*)|*.*"
+            };
+            if (dialog.ShowDialog() != true)
+                return;
 
-        var waypoints = SpanshSystemDataService.ParseSpanshCsvRoute(dialog.FileName);
-        if (waypoints.Count > 0)
-            ApplySpanshRouteWaypoints(waypoints);
-        else
-            TxtSpanshRouteStatus.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
+            var waypoints = SpanshSystemDataService.ParseSpanshCsvRoute(dialog.FileName);
+            if (waypoints.Count > 0)
+                ApplySpanshRouteWaypoints(waypoints);
+            else
+                TxtSpanshRouteStatus.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("Spansh", $"CSV route import failed: {ex.Message}");
+            SetStatusBarMessage($"⚠️ {ex.Message}");
+        }
     }
 
     private void ApplySpanshRouteWaypoints(List<SpanshRouteWaypoint> waypoints)

@@ -234,6 +234,12 @@ public partial class MainWindow
         UpdateExplorationProgressAndTracker(s);
     }
 
+    private IReadOnlyList<ShipModuleItem>? _lastShipModulesSource;
+    private string? _lastShipModulesLoadoutJson;
+    private string? _lastShipModulesLang;
+    private IReadOnlyList<MaterialItem>? _lastTraderMaterialsSource;
+    private string? _lastTraderMaterialsLang;
+
     private void UpdateShipModulesAndVehiclesUi(
         ShipState s,
         IReadOnlyDictionary<string, string> flight,
@@ -260,6 +266,15 @@ public partial class MainWindow
         {
             VehicleTelemetryCard.Visibility = Visibility.Collapsed;
         }
+
+        if (ReferenceEquals(_lastShipModulesSource, s.ShipModules) &&
+            string.Equals(_lastShipModulesLoadoutJson, s.LastLoadoutJson, StringComparison.Ordinal) &&
+            string.Equals(_lastShipModulesLang, _uiLanguage, StringComparison.Ordinal))
+            return;
+
+        _lastShipModulesSource = s.ShipModules;
+        _lastShipModulesLoadoutJson = s.LastLoadoutJson;
+        _lastShipModulesLang = _uiLanguage;
 
         if (!ReferenceEquals(GridShipModules.ItemsSource, s.ShipModules))
             GridShipModules.ItemsSource = s.ShipModules;
@@ -301,6 +316,13 @@ public partial class MainWindow
     {
         if (TxtMaterialTraderSummary is null)
             return;
+
+        if (ReferenceEquals(_lastTraderMaterialsSource, s.MaterialsInventory) &&
+            string.Equals(_lastTraderMaterialsLang, _uiLanguage, StringComparison.Ordinal))
+            return;
+
+        _lastTraderMaterialsSource = s.MaterialsInventory;
+        _lastTraderMaterialsLang = _uiLanguage;
 
         var text = MaterialTranslations.ForLanguage(_uiLanguage);
         var parts = new List<string>();
@@ -659,7 +681,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            TxtStatusBarLeft.Text = ex.Message;
+            AppDiagnosticsLogger.Warn("Journal.Export", $"Failed to export journal view: {ex.Message}");
+            SetStatusBarMessage($"⚠ {ex.Message}");
         }
     }
 
@@ -698,21 +721,22 @@ public partial class MainWindow
             TxtBgsTickInfo.Text = tickFull;
     }
 
-    private async void BtnRefreshGalaxyStatus_Click(object sender, RoutedEventArgs e)
-    {
-        if (BtnRefreshGalaxyStatus is not null)
-            BtnRefreshGalaxyStatus.IsEnabled = false;
-        try
-        {
-            var snap = await _galaxyStatus.RefreshAsync();
-            UpdateGalaxyStatusUi(snap);
-        }
-        finally
+    private async void BtnRefreshGalaxyStatus_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Refresh Galaxy Status", async () =>
         {
             if (BtnRefreshGalaxyStatus is not null)
-                BtnRefreshGalaxyStatus.IsEnabled = true;
-        }
-    }
+                BtnRefreshGalaxyStatus.IsEnabled = false;
+            try
+            {
+                var snap = await _galaxyStatus.RefreshAsync();
+                UpdateGalaxyStatusUi(snap);
+            }
+            finally
+            {
+                if (BtnRefreshGalaxyStatus is not null)
+                    BtnRefreshGalaxyStatus.IsEnabled = true;
+            }
+        });
 
     private void BtnExportEdsy_Click(object sender, RoutedEventArgs e)
     {
@@ -886,42 +910,43 @@ public partial class MainWindow
         }
     }
 
-    private async void BtnAnalyzeExpeditionHistory_Click(object sender, RoutedEventArgs e)
-    {
-        if (BtnAnalyzeExpeditionHistory is null || TxtExpeditionSummary is null)
-            return;
-
-        BtnAnalyzeExpeditionHistory.IsEnabled = false;
-        try
+    private async void BtnAnalyzeExpeditionHistory_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Analyze Expedition History", async () =>
         {
-            string folder = _configService.Current.JournalFolderPath;
-            var stats = await ExpeditionAnalyticsService.AnalyzeFolderAsync(folder);
-            _lastExpeditionStats = stats;
+            if (BtnAnalyzeExpeditionHistory is null || TxtExpeditionSummary is null)
+                return;
 
-            var ops = OperationsTranslations.ForLanguage(_uiLanguage);
-            var culture = UiCulture;
-            TxtExpeditionSummary.Text = string.Format(
-                culture,
-                ops["expeditionSummary"],
-                stats.JournalsScanned,
-                stats.TotalJumps.ToString("N0", culture),
-                stats.TotalDistanceLy.ToString("N1", culture),
-                stats.UniqueSystems.ToString("N0", culture),
-                stats.EarthLikeWorlds,
-                stats.WaterWorlds,
-                stats.AmmoniaWorlds,
-                stats.OrganicsAnalysed,
-                stats.MissionsCompleted,
-                stats.TotalBountiesAndSalesCredits.ToString("N0", culture));
-            TxtExpeditionSummary.Visibility = Visibility.Visible;
-            if (BtnExportExpeditionMarkdown is not null)
-                BtnExportExpeditionMarkdown.IsEnabled = stats.JournalsScanned > 0;
-        }
-        finally
-        {
-            BtnAnalyzeExpeditionHistory.IsEnabled = true;
-        }
-    }
+            BtnAnalyzeExpeditionHistory.IsEnabled = false;
+            try
+            {
+                string folder = _configService.Current.JournalFolderPath;
+                var stats = await ExpeditionAnalyticsService.AnalyzeFolderAsync(folder);
+                _lastExpeditionStats = stats;
+
+                var ops = OperationsTranslations.ForLanguage(_uiLanguage);
+                var culture = UiCulture;
+                TxtExpeditionSummary.Text = string.Format(
+                    culture,
+                    ops["expeditionSummary"],
+                    stats.JournalsScanned,
+                    stats.TotalJumps.ToString("N0", culture),
+                    stats.TotalDistanceLy.ToString("N1", culture),
+                    stats.UniqueSystems.ToString("N0", culture),
+                    stats.EarthLikeWorlds,
+                    stats.WaterWorlds,
+                    stats.AmmoniaWorlds,
+                    stats.OrganicsAnalysed,
+                    stats.MissionsCompleted,
+                    stats.TotalBountiesAndSalesCredits.ToString("N0", culture));
+                TxtExpeditionSummary.Visibility = Visibility.Visible;
+                if (BtnExportExpeditionMarkdown is not null)
+                    BtnExportExpeditionMarkdown.IsEnabled = stats.JournalsScanned > 0;
+            }
+            finally
+            {
+                BtnAnalyzeExpeditionHistory.IsEnabled = true;
+            }
+        });
 
     private void BtnExportExpeditionMarkdown_Click(object sender, RoutedEventArgs e)
     {
@@ -944,7 +969,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            TxtStatusBarLeft.Text = ex.Message;
+            AppDiagnosticsLogger.Warn("Expedition.Export", $"Failed to export expedition Markdown report: {ex.Message}");
+            SetStatusBarMessage($"⚠ {ex.Message}");
         }
     }
 
@@ -962,7 +988,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            TxtStatusBarLeft.Text = ex.Message;
+            AppDiagnosticsLogger.Warn("Loadout.Export", $"Failed to open external loadout URL: {ex.Message}");
+            SetStatusBarMessage($"⚠ {ex.Message}");
         }
     }
 

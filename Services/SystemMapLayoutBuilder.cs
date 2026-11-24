@@ -38,7 +38,6 @@ public sealed record SystemMapNode(
     bool IsLandable,
     bool IsSpanshOnly,
     string ShortLabel,
-    string BadgeText,
     int ParentIndex,
     int StarBandIndex,
     int IndentLevel);
@@ -432,14 +431,6 @@ public static partial class SystemMapLayoutBuilder
         if (shortLabel.Length > 10)
             shortLabel = shortLabel[..10];
 
-        string badge = "";
-        if (isStar && !string.IsNullOrWhiteSpace(body.StarType))
-            badge = body.StarType.Length <= 5 ? body.StarType : body.StarType[..5];
-        else if (hasBio) badge = $"{body.BiologicalSignalCount}B";
-        else if (isHighG) badge = $"{gravityG:0.0}G";
-        else if (body.WasMapped == true) badge = "DSS";
-        else if (body.IsExternalOnly) badge = body.DataSource == "EDSM" ? "EDSM" : "SP";
-
         return new SystemMapNode(
             Body: body,
             X: x,
@@ -457,7 +448,6 @@ public static partial class SystemMapLayoutBuilder
             IsLandable: !isStar && body.Landable == true,
             IsSpanshOnly: body.IsExternalOnly,
             ShortLabel: shortLabel,
-            BadgeText: badge,
             ParentIndex: parentIdx,
             StarBandIndex: starBandIdx,
             IndentLevel: indentLevel);

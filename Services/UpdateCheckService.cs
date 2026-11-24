@@ -69,6 +69,7 @@ public static class UpdateCheckService
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("UpdateCheck", $"Release check failed: {ex.Message}");
             return new(false, false, current, current, ReleasesPageUrl, ex.Message);
         }
     }

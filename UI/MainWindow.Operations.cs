@@ -101,10 +101,20 @@ public partial class MainWindow
     private void TxtShipLockerSearch_TextChanged(object sender, TextChangedEventArgs e) =>
         DebounceSearch(() => UpdateShipLockerUi(_fileWatcher.State));
 
+    private IReadOnlyList<EngineerProgressItem>? _lastEngineersSource;
+    private string? _lastEngineersLang;
+
     private void UpdateEngineersUi(ShipState s)
     {
         if (GridEngineers is null || TxtEngineersStatus is null)
             return;
+
+        if (ReferenceEquals(_lastEngineersSource, s.Engineers) &&
+            string.Equals(_lastEngineersLang, _uiLanguage, StringComparison.Ordinal))
+            return;
+
+        _lastEngineersSource = s.Engineers;
+        _lastEngineersLang = _uiLanguage;
 
         var text = OperationsTranslations.ForLanguage(_uiLanguage);
         if (!ReferenceEquals(GridEngineers.ItemsSource, s.Engineers))
@@ -156,6 +166,9 @@ public partial class MainWindow
     {
         _fileWatcher.ResetMiningSession();
     }
+
+    private IReadOnlyList<MassacreStackItem>? _lastMassacreStacksSource;
+    private string? _lastMassacreLang;
 
     private void UpdateTargetAndCombatUi(ShipState s)
     {
@@ -213,8 +226,13 @@ public partial class MainWindow
                 GridCombatFactions.ItemsSource = combat.ByFaction;
         }
 
-        if (TxtMassacreSummary is not null && GridMassacreStacks is not null)
+        if (TxtMassacreSummary is not null && GridMassacreStacks is not null &&
+            (!ReferenceEquals(_lastMassacreStacksSource, s.MassacreStacks) ||
+             !string.Equals(_lastMassacreLang, _uiLanguage, StringComparison.Ordinal)))
         {
+            _lastMassacreStacksSource = s.MassacreStacks;
+            _lastMassacreLang = _uiLanguage;
+
             if (s.MassacreStacks.Count == 0)
             {
                 TxtMassacreSummary.Text = ops["massacreEmpty"];
@@ -249,35 +267,8 @@ public partial class MainWindow
             return;
         _configService.Current.AutoContextDeck = ChkAutoContextDeck.IsChecked == true;
         _configService.Save();
-        _lastAutoDeckCategory = null;
         if (_configService.Current.AutoContextDeck)
-            ApplyAutoContextDeck(_fileWatcher.State);
-    }
-
-    private void ApplyAutoContextDeck(ShipState s)
-    {
-        if (!_configService.Current.AutoContextDeck || ViewControls?.Visibility != Visibility.Visible)
-            return;
-
-        string targetCategory;
-        if (s.OnFoot)
-            targetCategory = "A Pie (Odyssey)";
-        else if (s.InSRV)
-            targetCategory = "Vehículo SRV";
-        else if (s.HardpointsDeployed)
-            targetCategory = "Combate y Defensas";
-        else
-            targetCategory = "Vuelo y Navegación";
-
-        if (string.Equals(_lastAutoDeckCategory, targetCategory, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        _lastAutoDeckCategory = targetCategory;
-        if (!string.Equals(_selectedBindingCategory, targetCategory, StringComparison.OrdinalIgnoreCase))
-        {
-            _selectedBindingCategory = targetCategory;
-            BuildBindingCategoryNavigation();
-        }
+            RefreshDesktopDeckLiveStatesIfVisible(_fileWatcher.State);
     }
 
     private void UpdateSurfaceNavigationUi(ShipState s)
@@ -345,6 +336,10 @@ public partial class MainWindow
         TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["noExoSampleCoords"];
     }
 
+    private IReadOnlyList<MissionItem>? _lastMissionsGroupedSource;
+    private IReadOnlyList<CargoItem>? _lastMissionsCargoSource;
+    private string? _lastMissionsGroupedLang;
+
     /// <summary>
     /// Displays active missions grouped by destination star system and warns about missing delivery cargo.
     /// </summary>
@@ -352,6 +347,15 @@ public partial class MainWindow
     {
         if (TxtMissionsGroupedSummary is null || TxtMissionsCargoWarning is null)
             return;
+
+        if (ReferenceEquals(_lastMissionsGroupedSource, s.ActiveMissions) &&
+            ReferenceEquals(_lastMissionsCargoSource, s.CargoInventory) &&
+            string.Equals(_lastMissionsGroupedLang, _uiLanguage, StringComparison.Ordinal))
+            return;
+
+        _lastMissionsGroupedSource = s.ActiveMissions;
+        _lastMissionsCargoSource = s.CargoInventory;
+        _lastMissionsGroupedLang = _uiLanguage;
 
         if (s.ActiveMissions.Count == 0)
         {
@@ -416,6 +420,12 @@ public partial class MainWindow
         }
     }
 
+    private IReadOnlyList<CargoItem>? _lastTradeCargoSource;
+    private IReadOnlyList<MarketCommodityItem>? _lastTradeMarketSource;
+    private IReadOnlyList<ColonisationResourceItem>? _lastTradeColSource;
+    private int _lastTradeColCount = -1;
+    private string? _lastTradeLang;
+
     /// <summary>
     /// Cross-references carried cargo against the current station market, colonisation needs, and Fleet Carrier cargo.
     /// </summary>
@@ -423,6 +433,22 @@ public partial class MainWindow
     {
         if (TxtCargoTradeProfitSummary is null)
             return;
+
+        var marketItems = s.Market?.Items;
+        var colResources = s.Colonisation?.Resources;
+        int colCount = colResources?.Count ?? 0;
+        if (ReferenceEquals(_lastTradeCargoSource, s.CargoInventory) &&
+            ReferenceEquals(_lastTradeMarketSource, marketItems) &&
+            ReferenceEquals(_lastTradeColSource, colResources) &&
+            _lastTradeColCount == colCount &&
+            string.Equals(_lastTradeLang, _uiLanguage, StringComparison.Ordinal))
+            return;
+
+        _lastTradeCargoSource = s.CargoInventory;
+        _lastTradeMarketSource = marketItems;
+        _lastTradeColSource = colResources;
+        _lastTradeColCount = colCount;
+        _lastTradeLang = _uiLanguage;
 
         if (s.CargoInventory.Count == 0)
         {
@@ -494,6 +520,10 @@ public partial class MainWindow
     }
 
     private string? _lastWishlistSignature;
+    private IReadOnlyList<MaterialItem>? _lastWishlistMatsSource;
+    private IReadOnlyList<BackpackItem>? _lastWishlistBackpackSource;
+    private IReadOnlyList<BackpackItem>? _lastWishlistLockerSource;
+    private string? _lastWishlistLang;
 
     /// <summary>
     /// Refreshes the Engineering Blueprint Wishlist grid against live ship and Odyssey material inventories.
@@ -502,6 +532,18 @@ public partial class MainWindow
     {
         if (GridEngineeringWishlist is null || TxtEngineeringWishlistSummary is null)
             return;
+
+        if (_lastWishlistSignature is not null &&
+            ReferenceEquals(_lastWishlistMatsSource, s.MaterialsInventory) &&
+            ReferenceEquals(_lastWishlistBackpackSource, s.BackpackInventory) &&
+            ReferenceEquals(_lastWishlistLockerSource, s.ShipLockerInventory) &&
+            string.Equals(_lastWishlistLang, _uiLanguage, StringComparison.Ordinal))
+            return;
+
+        _lastWishlistMatsSource = s.MaterialsInventory;
+        _lastWishlistBackpackSource = s.BackpackInventory;
+        _lastWishlistLockerSource = s.ShipLockerInventory;
+        _lastWishlistLang = _uiLanguage;
 
         var selected = _configService.Current.EngineeringWishlistBlueprints ?? new List<string>();
         var rows = EngineeringWishlistService.Evaluate(selected, s);
@@ -543,35 +585,36 @@ public partial class MainWindow
         UpdateEngineeringWishlistUi(_fileWatcher.State);
     }
 
-    private async void BtnWishlistFindTrader_Click(object sender, RoutedEventArgs e)
-    {
-        var s = _fileWatcher.State;
-        if (s.StarPos is not { Length: 3 })
+    private async void BtnWishlistFindTrader_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Find Material Trader", async () =>
         {
-            TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
-            return;
-        }
-
-        BtnWishlistFindTrader.IsEnabled = false;
-        try
-        {
-            var (_, results, _) = await _spanshSystemDataService.SearchNearestServicesAsync("material_trader", s.CurrentSystem, s.StarPos);
-            if (results.Count > 0)
-            {
-                var best = results[0];
-                CopySystemToClipboard(best.SystemName);
-                TxtStatusBarLeft.Text = $"Material Trader: {best.SystemName} / {best.StationName} ({best.DistanceDisplay})";
-            }
-            else
+            var s = _fileWatcher.State;
+            if (s.StarPos is not { Length: 3 })
             {
                 TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
+                return;
             }
-        }
-        finally
-        {
-            BtnWishlistFindTrader.IsEnabled = true;
-        }
-    }
+
+            BtnWishlistFindTrader.IsEnabled = false;
+            try
+            {
+                var (_, results, _) = await _spanshSystemDataService.SearchNearestServicesAsync("material_trader", s.CurrentSystem, s.StarPos);
+                if (results.Count > 0)
+                {
+                    var best = results[0];
+                    CopySystemToClipboard(best.SystemName);
+                    TxtStatusBarLeft.Text = $"Material Trader: {best.SystemName} / {best.StationName} ({best.DistanceDisplay})";
+                }
+                else
+                {
+                    TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
+                }
+            }
+            finally
+            {
+                BtnWishlistFindTrader.IsEnabled = true;
+            }
+        });
 
     private void SurfaceTarget_TextChanged(object sender, TextChangedEventArgs e) =>
         UpdateSurfaceGuidance(_fileWatcher.State);
@@ -832,8 +875,6 @@ public partial class MainWindow
 
     private static readonly Dictionary<string, string> SectionIcons = new(StringComparer.Ordinal)
     {
-        ["summary"] = "📊",
-        ["alerts-activity"] = "🔔",
         ["status-resources"] = "🚀",
         ["ship-systems"] = "⚡",
         ["ship-modules"] = "🔧",
@@ -869,6 +910,7 @@ public partial class MainWindow
         ["ai-settings"] = "🤖",
         ["voice-audio"] = "🔊",
         ["alerts"] = "🚨",
+        ["deck-editor"] = "🎛️",
         ["diagnostics"] = "🩺",
         ["about"] = "ℹ️"
     };
@@ -1176,11 +1218,7 @@ public partial class MainWindow
         if (!_webServer.IsRunning)
         {
             var text = SettingsTranslations.ForLanguage(_uiLanguage);
-            System.Windows.MessageBox.Show(
-                text["webDisabledMessage"],
-                text["webDisabled"],
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            SetStatusBarMessage($"⚠ {text["webDisabled"]}: {text["webDisabledMessage"]}");
             return;
         }
 
@@ -1206,8 +1244,15 @@ public partial class MainWindow
         string url = LstWebUrls.SelectedItem as string ?? $"https://localhost:{_webServer.CurrentPort}";
         if (!string.IsNullOrEmpty(url))
         {
-            System.Windows.Clipboard.SetText(url);
-            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["urlCopied"], url);
+            try
+            {
+                System.Windows.Clipboard.SetText(url);
+                TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["urlCopied"], url);
+            }
+            catch (System.Runtime.InteropServices.ExternalException ex)
+            {
+                TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["clipboardError"], ex.Message);
+            }
         }
     }
 
@@ -1251,7 +1296,8 @@ public partial class MainWindow
         int port = _configService.Current.WebServerPort;
         if (useEditedPort && (!int.TryParse(TxtConfigPort.Text.Trim(), out port) || port <= 1024 || port >= 65535))
         {
-            System.Windows.MessageBox.Show(text["invalidPortMessage"], text["invalidPort"], MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDiagnosticsLogger.Warn("WebHUD", $"Invalid port entered in Settings: '{TxtConfigPort.Text.Trim()}'.");
+            SetStatusBarMessage($"⚠ {text["invalidPort"]}: {text["invalidPortMessage"]}");
             return;
         }
         string? mode = CmbWebAccessMode.SelectedValue as string;
@@ -1606,7 +1652,7 @@ public partial class MainWindow
         bool ok = GameHudThemeImportService.TryImportGameTheme(out string primary, out string secondary, out string sourceLabel);
         string message = ok
             ? $"✓ Imported HUD theme ({primary} / {secondary}) from {sourceLabel}."
-            : $"⚠ {sourceLabel}";
+            : $"⚠ {(string.IsNullOrWhiteSpace(sourceLabel) ? "No Elite Dangerous XML override or EDHM theme found." : sourceLabel)}";
         SetStatusBarMessage(message);
         if (!ok || string.IsNullOrWhiteSpace(primary))
             return;
@@ -1712,7 +1758,28 @@ public partial class MainWindow
         ApplyAllLocalizedLabels();
         _bindingsService.ReloadBindings();
         _fileWatcher.RefreshState();
-        _ = _webServer.BroadcastStateAsync();
+        _ = SyncWebServerAfterWizardAsync();
+    }
+
+    private async Task SyncWebServerAfterWizardAsync()
+    {
+        try
+        {
+            if (_configService.Current.AutoStartWebServer && !_webServer.IsRunning)
+                await _webServer.StartAsync();
+            else if (!_configService.Current.AutoStartWebServer && _webServer.IsRunning)
+                await _webServer.StopAsync();
+            else if (_webServer.IsRunning)
+                await _webServer.BroadcastStateAsync();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("Wizard.WebHUD", $"Failed to sync Web HUD state after wizard: {ex.Message}");
+        }
+        finally
+        {
+            RefreshWebServerUi();
+        }
     }
 
     private void TxtCustomThemeColor_TextChanged(object sender, TextChangedEventArgs e)
@@ -1763,7 +1830,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            TxtStatusBarLeft.Text = ex.Message;
+            AppDiagnosticsLogger.Warn("UI.ExternalUrl", $"Failed to open external URL '{uri.AbsoluteUri}': {ex.Message}");
+            SetStatusBarMessage($"⚠ {ex.Message}");
         }
     }
 
@@ -1814,10 +1882,11 @@ public partial class MainWindow
             RenderCockpitSystemCards(_fileWatcher.State);
             TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["colorChanged"], hex);
         }
-        catch
+        catch (Exception ex)
         {
             var text = SettingsTranslations.ForLanguage(_uiLanguage);
-            System.Windows.MessageBox.Show(text["invalidColorMessage"], text["invalidColor"], MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDiagnosticsLogger.Warn("Theme", $"Invalid custom theme color '{rawHex}': {ex.Message}");
+            SetStatusBarMessage($"⚠ {text["invalidColor"]}: {text["invalidColorMessage"]}");
         }
     }
 
@@ -2079,6 +2148,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             var text = SettingsTranslations.ForLanguage(_uiLanguage);
+            AppDiagnosticsLogger.Warn("UnhandledEvents", $"Failed to open unhandled events file: {ex.Message}");
             TxtStatusBarLeft.Text = string.Format(text["clipboardError"], ex.Message);
         }
     }

@@ -90,10 +90,19 @@ public static class ExpeditionAnalyticsService
             if (string.IsNullOrWhiteSpace(journalFolder) || !Directory.Exists(journalFolder))
                 return new ExpeditionStatsSnapshot(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, null);
 
-            var files = Directory.GetFiles(journalFolder, "Journal.*.log")
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .Take(Math.Clamp(maxFiles, 1, 300))
-                .ToList();
+            List<string> files;
+            try
+            {
+                files = Directory.GetFiles(journalFolder, "Journal.*.log")
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .Take(Math.Clamp(maxFiles, 1, 300))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                AppDiagnosticsLogger.Warn("ExpeditionAnalytics", $"Failed to enumerate journal files in '{journalFolder}': {ex.Message}");
+                return new ExpeditionStatsSnapshot(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, null);
+            }
 
             var partials = new ConcurrentBag<FileStats>();
             var parallelOptions = new ParallelOptions
@@ -267,7 +276,7 @@ public static class ExpeditionAnalyticsService
         public DateTimeOffset? FirstVisit;
         public DateTimeOffset? LastVisit;
         public string? MatchedSystemName;
-        public int ElwMatches;
+        public readonly HashSet<string> ElwBodies = new(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -301,10 +310,19 @@ public static class ExpeditionAnalyticsService
 
         return await Task.Run(() =>
         {
-            var files = Directory.GetFiles(journalFolder, "Journal.*.log")
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .Take(Math.Clamp(maxFiles, 1, 200))
-                .ToList();
+            List<string> files;
+            try
+            {
+                files = Directory.GetFiles(journalFolder, "Journal.*.log")
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .Take(Math.Clamp(maxFiles, 1, 200))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                AppDiagnosticsLogger.Warn("ExpeditionAnalytics", $"Failed to enumerate journal files for logbook query in '{journalFolder}': {ex.Message}");
+                return $"No se pudieron leer los diarios de vuelo en '{journalFolder}'.";
+            }
 
             var matchPartials = new ConcurrentBag<LogbookMatchStats>();
             var parallelOptions = new ParallelOptions
@@ -359,7 +377,17 @@ public static class ExpeditionAnalyticsService
                                      pc.ValueKind == JsonValueKind.String &&
                                      pc.GetString()!.Equals("Earthlike body", StringComparison.OrdinalIgnoreCase))
                             {
-                                local.ElwMatches++;
+                                string body = root.TryGetProperty("BodyName", out var bn) && bn.ValueKind == JsonValueKind.String
+                                    ? bn.GetString() ?? ""
+                                    : "";
+                                string scanSys = root.TryGetProperty("StarSystem", out var sSys) && sSys.ValueKind == JsonValueKind.String
+                                    ? sSys.GetString() ?? ""
+                                    : "";
+                                bool matchesSys = !string.IsNullOrWhiteSpace(scanSys)
+                                    ? scanSys.Contains(systemFilter, StringComparison.OrdinalIgnoreCase)
+                                    : body.Contains(systemFilter, StringComparison.OrdinalIgnoreCase);
+                                if (matchesSys && !string.IsNullOrWhiteSpace(body))
+                                    local.ElwBodies.Add(body);
                             }
                         }
                         catch
@@ -373,7 +401,7 @@ public static class ExpeditionAnalyticsService
                     // Skip unreadable files.
                 }
 
-                if (local.VisitCount > 0 || local.ElwMatches > 0)
+                if (local.VisitCount > 0 || local.ElwBodies.Count > 0)
                     matchPartials.Add(local);
             });
 
@@ -381,12 +409,12 @@ public static class ExpeditionAnalyticsService
             DateTimeOffset? firstVisit = null;
             DateTimeOffset? lastVisit = null;
             string matchedSystemName = systemFilter;
-            int elwMatches = 0;
+            var elwBodies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var m in matchPartials)
             {
                 visitCount += m.VisitCount;
-                elwMatches += m.ElwMatches;
+                elwBodies.UnionWith(m.ElwBodies);
                 if (!string.IsNullOrWhiteSpace(m.MatchedSystemName))
                     matchedSystemName = m.MatchedSystemName;
                 if (m.FirstVisit.HasValue && (!firstVisit.HasValue || m.FirstVisit.Value < firstVisit.Value)) firstVisit = m.FirstVisit;
@@ -396,7 +424,7 @@ public static class ExpeditionAnalyticsService
             if (visitCount == 0)
                 return $"No se encontraron visitas a '{systemFilter}' en los últimos {files.Count} diarios.";
 
-            return $"Sistema '{matchedSystemName}': {visitCount} visita(s) registrada(s) en los últimos {files.Count} diarios. Última visita: {lastVisit?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "?"}, primera en este rango: {firstVisit?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "?"}{(elwMatches > 0 ? $". Planetas tipo Tierra detectados ahí: {elwMatches}" : "")}.";
+            return $"Sistema '{matchedSystemName}': {visitCount} visita(s) registrada(s) en los últimos {files.Count} diarios. Última visita: {lastVisit?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "?"}, primera en este rango: {firstVisit?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "?"}{(elwBodies.Count > 0 ? $". Planetas tipo Tierra detectados ahí: {elwBodies.Count}" : "")}.";
         }, ct);
     }
 }

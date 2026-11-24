@@ -154,7 +154,7 @@ public sealed class AlertService
         var previous = _previousState;
         _previousState = current;
 
-        if (current.IsSimulation || !current.IsGameDetected)
+        if (!current.IsGameDetected)
         {
             ClearAllActiveAlerts();
             _missionAlertConditions.Clear();
@@ -172,7 +172,6 @@ public sealed class AlertService
 
         bool hasPreviousGameStatus = previous is
         {
-            IsSimulation: false,
             IsGameDetected: true,
             HasStatusTelemetry: true
         };
@@ -1230,7 +1229,6 @@ public sealed class AlertService
         Math.Clamp(state.FuelMain / state.FuelMax * 100, 0, 100);
 
     private static StateSnapshot Capture(ShipState state) => new(
-        state.IsSimulation,
         state.IsGameDetected,
         state.HasStatusTelemetry,
         state.HasLoadoutTelemetry,
@@ -1248,7 +1246,6 @@ public sealed class AlertService
         state.FuelMax);
 
     private sealed record StateSnapshot(
-        bool IsSimulation,
         bool IsGameDetected,
         bool HasStatusTelemetry,
         bool HasLoadoutTelemetry,

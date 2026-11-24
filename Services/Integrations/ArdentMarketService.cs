@@ -98,6 +98,7 @@ public sealed class ArdentMarketService : IDisposable
         catch (Exception ex)
         {
             LastStatus = $"Ardent API error: {ex.Message}";
+            AppDiagnosticsLogger.Warn("Ardent", LastStatus);
             return (false, new List<ArdentMarketOfferItem>(), LastStatus);
         }
     }

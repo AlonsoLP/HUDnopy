@@ -22,7 +22,19 @@ namespace HUDnopy.UI.Controls;
 /// </summary>
 public sealed class ExobiologyRadarControl : Border
 {
+    private static readonly SolidColorBrush GridBrush = CreateFrozenBrush(45, 255, 255, 255);
+    private static readonly SolidColorBrush ClearFillBrush = CreateFrozenBrush(24, 0, 230, 118);
+    private static readonly SolidColorBrush DangerFillBrush = CreateFrozenBrush(36, 255, 46, 76);
+
     private readonly Canvas _canvas;
+    private string _lastSignature = "";
+
+    private static SolidColorBrush CreateFrozenBrush(byte a, byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(a, r, g, b));
+        brush.Freeze();
+        return brush;
+    }
 
     public ExobiologyRadarControl()
     {
@@ -40,9 +52,32 @@ public sealed class ExobiologyRadarControl : Border
 
     public void UpdateRadar(ExobiologyTrackerState? tracker)
     {
-        _canvas.Children.Clear();
         if (tracker is null || tracker.SamplesCollected <= 0)
+        {
+            if (_canvas.Children.Count > 0)
+                _canvas.Children.Clear();
+            _lastSignature = "";
             return;
+        }
+
+        var sigBuilder = new System.Text.StringBuilder(64);
+        sigBuilder.Append(tracker.RequiredDistanceMeters.ToString("0")).Append('|')
+                  .Append(tracker.SamplesCollected).Append('|')
+                  .Append(tracker.PlayerHeadingDegrees.ToString("0")).Append('|');
+        foreach (var pt in tracker.SamplePoints)
+        {
+            sigBuilder.Append(pt.Index).Append(':')
+                      .Append(pt.RelativeX.ToString("0.0")).Append(',')
+                      .Append(pt.RelativeY.ToString("0.0")).Append(',')
+                      .Append(pt.DistanceMeters.ToString("0")).Append(';');
+        }
+
+        string sig = sigBuilder.ToString();
+        if (string.Equals(sig, _lastSignature, StringComparison.Ordinal))
+            return;
+        _lastSignature = sig;
+
+        _canvas.Children.Clear();
 
         const double cx = 85;
         const double cy = 85;
@@ -53,16 +88,15 @@ public sealed class ExobiologyRadarControl : Border
         double pxPerMeter = 74.0 / maxDist;
 
         // Crosshair & reference range ring
-        var gridBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(45, 255, 255, 255));
-        _canvas.Children.Add(new Line { X1 = cx, Y1 = 6, X2 = cx, Y2 = 164, Stroke = gridBrush, StrokeThickness = 1 });
-        _canvas.Children.Add(new Line { X1 = 6, Y1 = cy, X2 = 164, Y2 = cy, Stroke = gridBrush, StrokeThickness = 1 });
+        _canvas.Children.Add(new Line { X1 = cx, Y1 = 6, X2 = cx, Y2 = 164, Stroke = GridBrush, StrokeThickness = 1 });
+        _canvas.Children.Add(new Line { X1 = 6, Y1 = cy, X2 = 164, Y2 = cy, Stroke = GridBrush, StrokeThickness = 1 });
 
         double refR = Math.Min(76, req * pxPerMeter);
         var refRing = new Ellipse
         {
             Width = refR * 2,
             Height = refR * 2,
-            Stroke = gridBrush,
+            Stroke = GridBrush,
             StrokeThickness = 1,
             StrokeDashArray = new DoubleCollection { 3, 3 }
         };
@@ -73,6 +107,22 @@ public sealed class ExobiologyRadarControl : Border
         var okBrush = TryFindResource("HudOkBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.LimeGreen;
         var dangerBrush = TryFindResource("HudDangerBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.OrangeRed;
         var accentBrush = TryFindResource("HudAccentBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Orange;
+
+        // Rotated compass N indicator (heading-up) matching Web HUD parity
+        double headingRad = tracker.PlayerHeadingDegrees * Math.PI / 180.0;
+        double nx = cx - Math.Sin(headingRad) * 74.0;
+        double ny = cy - Math.Cos(headingRad) * 74.0;
+        var northLbl = new TextBlock
+        {
+            Text = "N",
+            Foreground = accentBrush,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            FontSize = 9.5,
+            FontWeight = FontWeights.Bold
+        };
+        Canvas.SetLeft(northLbl, nx - 3.5);
+        Canvas.SetTop(northLbl, ny - 6.0);
+        _canvas.Children.Add(northLbl);
 
         // Sample points & minimum diversity exclusion circles
         foreach (var pt in tracker.SamplePoints)
@@ -89,9 +139,7 @@ public sealed class ExobiologyRadarControl : Border
                 Height = radPx * 2,
                 Stroke = ringBrush,
                 StrokeThickness = 1.4,
-                Fill = new SolidColorBrush(clear
-                    ? System.Windows.Media.Color.FromArgb(24, 0, 230, 118)
-                    : System.Windows.Media.Color.FromArgb(36, 255, 46, 76))
+                Fill = clear ? ClearFillBrush : DangerFillBrush
             };
             Canvas.SetLeft(circle, sx - radPx);
             Canvas.SetTop(circle, sy - radPx);

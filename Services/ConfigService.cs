@@ -47,24 +47,30 @@ public class ConfigService
 
     public AppConfig Load()
     {
-        try
+        // Try the main file first, then the automatic backup written by WriteConfig.
+        foreach (string path in new[] { _configPath, _configPath + ".bak" })
         {
-            if (File.Exists(_configPath))
+            try
             {
-                string json = File.ReadAllText(_configPath);
+                if (!File.Exists(path))
+                    continue;
+
+                string json = File.ReadAllText(path);
                 var cfg = JsonSerializer.Deserialize(json, AppConfigJsonContext.Default.AppConfig);
                 if (cfg != null)
                 {
                     if (!json.Contains("HasCompletedFirstRunWizard", StringComparison.OrdinalIgnoreCase))
                         cfg.HasCompletedFirstRunWizard = true;
+                    if (!string.Equals(path, _configPath, StringComparison.OrdinalIgnoreCase))
+                        AppDiagnosticsLogger.Warn("ConfigService", "config.json was unreadable; settings restored from config.json.bak.");
                     Current = cfg;
                     return cfg;
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            AppDiagnosticsLogger.Warn("ConfigService", $"Failed to load config.json; falling back to defaults: {ex.Message}");
+            catch (Exception ex)
+            {
+                AppDiagnosticsLogger.Warn("ConfigService", $"Failed to load '{Path.GetFileName(path)}': {ex.Message}");
+            }
         }
 
         Current = new AppConfig();
@@ -225,10 +231,24 @@ public class ConfigService
         ConfigChanged?.Invoke(Current);
     }
 
+    private readonly object _writeLock = new();
+
+    /// <summary>
+    /// Serializes the configuration and writes it atomically (temp file + replace) so a crash or a
+    /// concurrent save can never leave a truncated config.json. The previous version is kept as config.json.bak.
+    /// </summary>
     private void WriteConfig()
     {
-        string json = JsonSerializer.Serialize(Current, AppConfigJsonContext.Default.AppConfig);
-        File.WriteAllText(_configPath, json);
+        lock (_writeLock)
+        {
+            string json = JsonSerializer.Serialize(Current, AppConfigJsonContext.Default.AppConfig);
+            string tempPath = _configPath + ".tmp";
+            File.WriteAllText(tempPath, json);
+            if (File.Exists(_configPath))
+                File.Replace(tempPath, _configPath, _configPath + ".bak", ignoreMetadataErrors: true);
+            else
+                File.Move(tempPath, _configPath);
+        }
     }
 
     private static SolidColorBrush CreateFrozenBrush(System.Windows.Media.Color color)
@@ -240,9 +260,18 @@ public class ConfigService
 
     public void ApplyThemeToApplication()
     {
-        if (System.Windows.Application.Current == null) return;
+        var app = System.Windows.Application.Current;
+        if (app == null) return;
 
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        // Never block a background caller (web endpoints, timers) on the UI thread: marshal asynchronously.
+        if (app.Dispatcher.CheckAccess())
+            ApplyThemeCore();
+        else
+            app.Dispatcher.BeginInvoke(ApplyThemeCore);
+    }
+
+    private void ApplyThemeCore()
+    {
         {
             try
             {
@@ -261,11 +290,12 @@ public class ConfigService
                 res["HudBorderBrush"] = CreateFrozenBrush(borderColor);
                 res["HudGlowBrush"] = CreateFrozenBrush(glowColor);
             }
-            catch
+            catch (Exception ex)
             {
                 // Invalid color, keep the current one
+                AppDiagnosticsLogger.Warn("ConfigService", $"Invalid HUD theme color HEX: {ex.Message}");
             }
-        });
+        }
     }
 }
 

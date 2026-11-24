@@ -411,7 +411,7 @@ function renderState(payload) {
       || !payload.explorationTranslations || typeof payload.explorationTranslations !== 'object' || Array.isArray(payload.explorationTranslations)
       || !payload.inputTranslations || typeof payload.inputTranslations !== 'object' || Array.isArray(payload.inputTranslations)
       || !payload.deckTranslations || typeof payload.deckTranslations !== 'object' || Array.isArray(payload.deckTranslations)
-      || !Array.isArray(payload.deckBindings)
+      || !Array.isArray(payload.deckTabs)
       || !payload.languageSettings || typeof payload.languageSettings.partialWarning !== 'string') {
       console.error('Faltan las traducciones de navegación recibidas del servidor.');
       return;
@@ -1723,10 +1723,8 @@ function renderState(payload) {
     autoCtxEl.checked = payload.autoContextDeck;
 
   // Deck de controles
-  if (Array.isArray(payload.deckTabs) && payload.deckTabs.length > 0) {
+  if (Array.isArray(payload.deckTabs)) {
     renderCustomDeckTabs(payload.deckTabs);
-  } else if (payload.deckBindings) {
-    renderDeck(payload.deckBindings, payload.hideUnassignedBindings);
   }
   document.body.classList.add('localized');
 }
@@ -1995,66 +1993,6 @@ function renderCustomDeckTabs(tabs) {
   updateSectionTabs();
 }
 
-function renderDeck(bindings, hideUnassigned) {
-  const groups = new Map();
-  const search = document.getElementById('deckSearch').value.trim().toLocaleLowerCase();
-  const renderKey = JSON.stringify([sectionLanguage, bindings, hideUnassigned, search]);
-  if (renderKey === lastDeckRenderKey) return;
-  lastDeckRenderKey = renderKey;
-  const filteredBindings = (bindings || [])
-    .filter(b => !hideUnassigned || b.IsAssigned)
-    .filter(b => !search || `${b.DisplayName || ''} ${b.Category || ''} ${b.FormattedBind || ''} ${b.SourceDisplayName || ''} ${b.SourceCategory || ''} ${b.SourceFormattedBind || ''} ${b.ActionId || ''}`.toLocaleLowerCase().includes(search));
-  filteredBindings.forEach(b => {
-    const cat = b.CategoryId;
-    if (!groups.has(cat)) groups.set(cat, []);
-    groups.get(cat).push(b);
-  });
-
-  const container = document.getElementById('deckContainer');
-  container.replaceChildren();
-  if (filteredBindings.length === 0) {
-    const card = document.createElement('div');
-    card.className = 'hud-card module-section active';
-    card.dataset.sectionTitle = 'Controles';
-    card.dataset.sectionLabel = deckTranslations.emptyTitle;
-    const title = document.createElement('h3');
-    title.textContent = deckTranslations.emptyTitle;
-    const message = document.createElement('p');
-    message.style.color = 'var(--hud-muted)';
-    message.textContent = search ? deckTranslations.noSearch : deckTranslations.noBindings;
-    card.append(title, message);
-    container.append(card);
-    updateSectionTabs();
-    return;
-  }
-  for (const [categoryId, items] of groups) {
-    const section = document.createElement('div');
-    section.className = 'deck-category module-section';
-    section.classList.toggle('active', activeSectionByTab.get('tab-deck') === categoryId);
-    section.dataset.sectionTitle = categoryId;
-    section.dataset.sectionLabel = items[0].Category;
-    const title = document.createElement('h4');
-    title.textContent = items[0].Category;
-    const grid = document.createElement('div');
-    grid.className = 'deck-grid';
-    for (const binding of items) {
-      const button = document.createElement('button');
-      button.className = 'deck-button';
-      button.addEventListener('click', () => sendCmd(binding.ActionId));
-      for (const [className, value] of [['deck-icon', binding.IconGlyph || '⚙'], ['deck-title', binding.DisplayName], ['deck-bind', binding.FormattedBind]]) {
-        const span = document.createElement('span');
-        span.className = className;
-        span.textContent = value;
-        button.append(span);
-      }
-      grid.append(button);
-    }
-    section.append(title, grid);
-    container.append(section);
-  }
-  updateSectionTabs();
-}
-
 function connectWs() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${proto}//${location.host}/ws`);
@@ -2101,10 +2039,8 @@ for (const [prefix, render] of [['market', renderMarket], ['profile', renderProf
   }
 }
 document.getElementById('deckSearch').addEventListener('input', () => {
-  if (lastPayload && Array.isArray(lastPayload.deckTabs) && lastPayload.deckTabs.length > 0)
+  if (lastPayload && Array.isArray(lastPayload.deckTabs))
     renderCustomDeckTabs(lastPayload.deckTabs);
-  else if (lastPayload && lastPayload.bindings)
-    renderDeck(lastPayload.deckBindings, lastPayload.hideUnassignedBindings);
 });
 
 function exportWebAiChat() {
@@ -2498,7 +2434,7 @@ function renderWebSurfaceBookmarks(bookmarks) {
     const lat = b.latitude ?? b.Latitude ?? 0;
     const lon = b.longitude ?? b.Longitude ?? 0;
     const lbl = b.label ?? b.Label ?? '';
-    return `<tr><td>${escapeHtml(b.systemName ?? b.SystemName ?? '')}</td><td>${escapeHtml(b.bodyName ?? b.BodyName ?? '')}</td><td>${escapeHtml(lbl)}</td><td>${lat.toFixed(3)}, ${lon.toFixed(3)}</td><td><button class="deck-button" style="min-height:28px;padding:0 8px;" onclick="navigateWebBookmark(${lat},${lon})">🧭</button> <button class="deck-button" style="min-height:28px;padding:0 8px;" onclick="deleteWebSurfaceBookmark('${escapeHtml(lbl).replace(/'/g, '&#39;')}')">🗑</button></td></tr>`;
+    return `<tr><td>${escapeHtml(b.systemName ?? b.SystemName ?? '')}</td><td>${escapeHtml(b.bodyName ?? b.BodyName ?? '')}</td><td>${escapeHtml(lbl)}</td><td>${lat.toFixed(3)}, ${lon.toFixed(3)}</td><td><button class="deck-button" style="min-height:38px;min-width:38px;padding:4px 10px;" onclick="event.stopPropagation();navigateWebBookmark(${lat},${lon})">🧭</button> <button class="deck-button" style="min-height:38px;min-width:38px;padding:4px 10px;" onclick="event.stopPropagation();deleteWebSurfaceBookmark('${escapeHtml(lbl).replace(/'/g, '&#39;')}')">🗑</button></td></tr>`;
   }).join('');
 }
 
@@ -2528,7 +2464,6 @@ async function speakWebGalnet(stop) {
 }
 
 let webViewingHistoricalJournal = false;
-let webJournalFilesLoaded = false;
 let webCurrentJournalEvents = [];
 let webLastExpeditionMarkdown = '';
 
@@ -2942,7 +2877,6 @@ window.toggleWebSystemMap = toggleWebSystemMap;
 function renderWebSystemMap(mapData) {
   const sec = document.getElementById('webSystemMapSection');
   const svg = document.getElementById('webSystemMapSvg');
-  const detail = document.getElementById('webSystemMapDetail');
   if (!sec || !svg) return;
 
   const nodes = mapData && Array.isArray(mapData.nodes) ? mapData.nodes : [];
@@ -2956,7 +2890,6 @@ function renderWebSystemMap(mapData) {
   const sig = `${mapData.width}x${mapData.height}|` + nodes.map(n => `${n.shortLabel}:${n.fillHex}:${n.isStar ? 1 : 0}:${n.hasBioHalo ? 1 : 0}:${n.isSpanshOnly ? 1 : 0}`).join('|');
   if (sig === lastWebSystemMapSig) return;
   lastWebSystemMapSig = sig;
-  if (detail) detail.hidden = true;
 
   const ns = "http://www.w3.org/2000/svg";
   svg.setAttribute('width', String(mapData.width || 420));
@@ -3049,7 +2982,8 @@ function renderWebSystemMap(mapData) {
       if ((n.fillHex || '').toUpperCase() !== '#0B0E17') {
         const discId = `starDisc_${idx}`;
         const discGrad = makeEl('radialGradient', { id: discId, cx: '38%', cy: '38%', r: '62%' });
-        const isBrownDwarf = (n.badgeText || '').toUpperCase() === 'L' || (n.badgeText || '').toUpperCase() === 'T' || (n.badgeText || '').toUpperCase() === 'Y';
+        const starTypeUpper = (n.starType || '').toUpperCase();
+        const isBrownDwarf = starTypeUpper === 'L' || starTypeUpper === 'T' || starTypeUpper === 'Y';
         discGrad.appendChild(makeEl('stop', { offset: '0%', 'stop-color': isBrownDwarf ? '#D966A8' : '#FFFFFF' }));
         discGrad.appendChild(makeEl('stop', { offset: '55%', 'stop-color': n.fillHex }));
         discGrad.appendChild(makeEl('stop', { offset: '100%', 'stop-color': n.fillHex, 'stop-opacity': '0.78' }));
@@ -3102,7 +3036,6 @@ function renderWebSystemMap(mapData) {
     g.appendChild(tip);
 
     g.addEventListener('click', () => {
-      if (detail) detail.hidden = true;
       const tbody = document.getElementById('explorationBodiesTableBody');
       if (!tbody) return;
       const rows = [...tbody.querySelectorAll('tr')].filter(r => r.children.length > 1);

@@ -190,7 +190,7 @@ public sealed class SpanshSystemDataService : IDisposable
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or
                                    JsonException or IOException or InvalidDataException)
         {
-            Debug.WriteLine($"Spansh system lookup failed for {id64}: {ex.Message}");
+            AppDiagnosticsLogger.Warn("Spansh", $"System lookup failed for {id64}: {ex.Message}");
             SpanshSystemDataState current = State;
             SpanshSystemDataState failedState = current.Snapshot is { } snapshot && snapshot.Id64 == id64
                 ? new(SpanshSystemDataStatus.Ready, snapshot, true)
@@ -249,7 +249,7 @@ public sealed class SpanshSystemDataService : IDisposable
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            Debug.WriteLine($"Spansh cache could not be read: {ex.Message}");
+            AppDiagnosticsLogger.Warn("Spansh.Cache", $"Cache could not be read: {ex.Message}");
             return null;
         }
     }
@@ -275,7 +275,7 @@ public sealed class SpanshSystemDataService : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Debug.WriteLine($"Spansh cache could not be written: {ex.Message}");
+            AppDiagnosticsLogger.Warn("Spansh.Cache", $"Cache could not be written: {ex.Message}");
         }
         finally
         {
@@ -723,10 +723,6 @@ public sealed class SpanshSystemDataService : IDisposable
         if (string.IsNullOrWhiteSpace(cleanQuery))
             return (false, new List<SpanshBodySearchItem>(), "Enter a material or body type.");
 
-        object refCoords = starPos is { Length: 3 }
-            ? new { x = starPos[0], y = starPos[1], z = starPos[2] }
-            : new { x = 0.0, y = 0.0, z = 0.0 };
-
         var filters = new Dictionary<string, object>
         {
             ["is_landable"] = new { value = true },
@@ -734,15 +730,17 @@ public sealed class SpanshSystemDataService : IDisposable
             ["materials"] = new[] { new { name = cleanQuery, value = new[] { 1.0, 100.0 } } }
         };
 
-        var payload = new
+        var payload = new Dictionary<string, object>
         {
-            filters,
-            sort = new[] { new Dictionary<string, object> { ["distance"] = new { direction = "asc" } } },
-            size = 20,
-            page = 0,
-            reference_system = string.IsNullOrWhiteSpace(referenceSystem) || referenceSystem == "---" ? "Sol" : referenceSystem,
-            reference_coords = refCoords
+            ["filters"] = filters,
+            ["sort"] = new[] { new Dictionary<string, object> { ["distance"] = new { direction = "asc" } } },
+            ["size"] = 20,
+            ["page"] = 0
         };
+        if (starPos is { Length: >= 3 })
+            payload["reference_coords"] = new { x = starPos[0], y = starPos[1], z = starPos[2] };
+        else
+            payload["reference_system"] = string.IsNullOrWhiteSpace(referenceSystem) || referenceSystem == "---" ? "Sol" : referenceSystem;
 
         try
         {
@@ -800,10 +798,6 @@ public sealed class SpanshSystemDataService : IDisposable
         if (!_configService.Current.EnableSpanshSystemData)
             return (false, new List<SpanshCarrierSearchItem>(), "Spansh API is disabled.");
 
-        object refCoords = starPos is { Length: 3 }
-            ? new { x = starPos[0], y = starPos[1], z = starPos[2] }
-            : new { x = 0.0, y = 0.0, z = 0.0 };
-
         var filters = new Dictionary<string, object>
         {
             ["type"] = new { value = new[] { "Drake-Class Carrier" } },
@@ -812,15 +806,17 @@ public sealed class SpanshSystemDataService : IDisposable
         if (!string.IsNullOrWhiteSpace(requiredService))
             filters["services"] = new { value = new[] { requiredService.Trim() } };
 
-        var payload = new
+        var payload = new Dictionary<string, object>
         {
-            filters,
-            sort = new[] { new Dictionary<string, object> { ["distance"] = new { direction = "asc" } } },
-            size = 20,
-            page = 0,
-            reference_system = string.IsNullOrWhiteSpace(referenceSystem) || referenceSystem == "---" ? "Sol" : referenceSystem,
-            reference_coords = refCoords
+            ["filters"] = filters,
+            ["sort"] = new[] { new Dictionary<string, object> { ["distance"] = new { direction = "asc" } } },
+            ["size"] = 20,
+            ["page"] = 0
         };
+        if (starPos is { Length: >= 3 })
+            payload["reference_coords"] = new { x = starPos[0], y = starPos[1], z = starPos[2] };
+        else
+            payload["reference_system"] = string.IsNullOrWhiteSpace(referenceSystem) || referenceSystem == "---" ? "Sol" : referenceSystem;
 
         try
         {
@@ -1143,7 +1139,17 @@ public sealed class SpanshSystemDataService : IDisposable
         if (!File.Exists(filePath))
             return list;
 
-        string[] lines = File.ReadAllLines(filePath);
+        string[] lines;
+        try
+        {
+            lines = File.ReadAllLines(filePath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("Spansh", $"Failed to read Spansh CSV route file '{filePath}': {ex.Message}");
+            return list;
+        }
+
         if (lines.Length < 2)
             return list;
 

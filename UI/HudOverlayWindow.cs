@@ -172,7 +172,9 @@ public sealed class HudOverlayWindow : Window
         string fuel = s.FuelMax > 0
             ? $"{Math.Clamp(s.FuelMain / s.FuelMax * 100.0, 0, 100):0}%"
             : "---";
-        string hull = $"{Math.Clamp(s.HullHealth * 100.0, 0, 100):0}%";
+        string hull = s.HasHullTelemetry
+            ? $"{Math.Clamp(s.HullHealth, 0, 100):0}%"
+            : "---";
         string shd = s.ShieldsUp ? "UP" : "DOWN";
         string pips = $"S{s.PipsSys:0.#} E{s.PipsEng:0.#} W{s.PipsWep:0.#}";
         _txtVitals.Text = $"SHD {shd} · HULL {hull} · FUEL {fuel} · {pips}";

@@ -69,10 +69,28 @@ public sealed class GalaxyStatusService : IDisposable
         {
             await Task.Delay(1500, _loopCts.Token);
             if (!_disposed)
-                await RefreshAsync(_loopCts.Token);
+            {
+                try
+                {
+                    await RefreshAsync(_loopCts.Token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    AppDiagnosticsLogger.Warn("GalaxyStatus", $"Initial galaxy status refresh failed: {ex.Message}");
+                }
+            }
 
             while (await _timer.WaitForNextTickAsync(_loopCts.Token))
-                await RefreshAsync(_loopCts.Token);
+            {
+                try
+                {
+                    await RefreshAsync(_loopCts.Token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    AppDiagnosticsLogger.Warn("GalaxyStatus", $"Galaxy status loop iteration failed: {ex.Message}");
+                }
+            }
         }
         catch (OperationCanceledException)
         {

@@ -85,7 +85,6 @@ public class ShipState
 {
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
     public bool IsGameDetected { get; set; }
-    public bool IsSimulation { get; set; }
 
     // Comandante y Nave (Journal)
     public string CommanderName { get; set; } = "CMDR DESCONOCIDO";
@@ -115,9 +114,6 @@ public class ShipState
     public string DestinationSystem { get; set; } = "";
     public string DestinationBody { get; set; } = "";
     public string SystemAddress { get; set; } = "";
-    public double StarPosX { get; set; }
-    public double StarPosY { get; set; }
-    public double StarPosZ { get; set; }
 
     // Estado en tiempo real (Status.json)
     public uint RawFlags { get; set; }

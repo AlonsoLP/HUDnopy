@@ -398,6 +398,7 @@ public partial class MainWindow
             _suppressEvents = true;
             selector.SelectedValue = previous;
             _suppressEvents = false;
+            AppDiagnosticsLogger.Warn("AlertSound", $"Failed to save alert sound profile: {ex.Message}");
             string err = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundDirError"], ex.Message);
             SetStatusBarMessage($"⚠ {err}");
         }
@@ -454,6 +455,7 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException or NotSupportedException)
         {
+            AppDiagnosticsLogger.Warn("AlertSound", $"Failed to save alert sound directories: {ex.Message}");
             string err = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["soundDirError"], ex.Message);
             SetStatusBarMessage($"⚠ {err}");
         }
@@ -544,7 +546,8 @@ public partial class MainWindow
         if (sender is not System.Windows.Controls.Button { Tag: AlertDefinition definition })
             return;
 
-        if (!CmbAlertVoice.IsEnabled)
+        bool isPiper = string.Equals(_configService.Current.SpeechEngine, "piper", StringComparison.OrdinalIgnoreCase);
+        if (!isPiper && !CmbAlertVoice.IsEnabled)
         {
             TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["voicesUnavailable"];
             return;
@@ -592,6 +595,7 @@ public partial class MainWindow
             SldSpeechRate.Value = previous;
             TxtSpeechRate.Text = previous.ToString("+0;-0;0");
             _suppressEvents = false;
+            AppDiagnosticsLogger.Warn("Speech", $"Failed to save speech rate: {ex.Message}");
             TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["voiceRateSaveError"], ex.Message);
         }
     }
@@ -907,6 +911,7 @@ public partial class MainWindow
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
             RefreshHeaderOptions();
+            AppDiagnosticsLogger.Warn("HeaderModules", $"Failed to save header module preferences: {ex.Message}");
             TxtStatusBarLeft.Text = string.Format(DashboardTranslations.ForLanguage(_uiLanguage)["headerSaveError"], ex.Message);
         }
     }
@@ -1126,71 +1131,73 @@ public partial class MainWindow
             }
         });
 
-    private async void BtnTestPiperVoice_Click(object sender, RoutedEventArgs e)
-    {
-        string voiceId = CmbPiperVoice.SelectedValue as string ?? _configService.Current.PiperVoiceId;
-        var resolved = _piperTts.ResolveVoice(voiceId, _uiLanguage);
-        if (!_piperTts.IsEngineInstalled())
+    private async void BtnTestPiperVoice_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Test Piper Voice", async () =>
         {
-            SetStatusBarMessage("⚠ Motor Piper no instalado. Pulsa «Descargar voz» o «Pack 6 idiomas».");
-            return;
-        }
-        if (resolved is null || !_piperTts.IsVoiceInstalled(resolved.Id))
-        {
-            SetStatusBarMessage($"⚠ La voz seleccionada ({resolved?.DisplayName ?? voiceId}) no está descargada. Pulsa «Descargar voz».");
-            return;
-        }
-
-        SetPiperButtonsEnabled(false);
-        BtnTestPiperVoice.IsEnabled = false;
-        SetStatusBarMessage($"Probando voz Piper ({resolved.DisplayName})...");
-
-        try
-        {
-            int currentRate = SldSpeechRate is not null
-                ? Math.Clamp((int)SldSpeechRate.Value, -5, 5)
-                : Math.Clamp(_configService.Current.SpeechRate, -5, 5);
-            string sample = AlertControlTranslations.ForLanguage(_uiLanguage)["speechTest"];
-            byte[]? wav = await _piperTts.TrySynthesizeWavAsync(
-                sample,
-                resolved.Id,
-                _uiLanguage,
-                currentRate,
-                System.Threading.CancellationToken.None);
-
-            if (wav is not { Length: > 44 })
+            string voiceId = CmbPiperVoice.SelectedValue as string ?? _configService.Current.PiperVoiceId;
+            var resolved = _piperTts.ResolveVoice(voiceId, _uiLanguage);
+            if (!_piperTts.IsEngineInstalled())
             {
-                string err = string.IsNullOrWhiteSpace(_piperTts.LastError)
-                    ? "Piper no generó audio."
-                    : _piperTts.LastError;
-                SetStatusBarMessage($"⚠ {err}");
+                SetStatusBarMessage("⚠ Motor Piper no instalado. Pulsa «Descargar voz» o «Pack 6 idiomas».");
+                return;
+            }
+            if (resolved is null || !_piperTts.IsVoiceInstalled(resolved.Id))
+            {
+                SetStatusBarMessage($"⚠ La voz seleccionada ({resolved?.DisplayName ?? voiceId}) no está descargada. Pulsa «Descargar voz».");
                 return;
             }
 
-            SetStatusBarMessage($"▶ Reproduciendo Piper ({resolved.DisplayName})...");
-            await Task.Run(() =>
+            SetPiperButtonsEnabled(false);
+            BtnTestPiperVoice.IsEnabled = false;
+            SetStatusBarMessage($"Probando voz Piper ({resolved.DisplayName})...");
+
+            try
             {
-                using var ms = new MemoryStream(wav);
-                using var reader = new NAudio.Wave.WaveFileReader(ms);
-                using var output = AudioPlaybackHelper.CreateOutputPlayer(latencyMs: 80);
-                using var done = new System.Threading.ManualResetEventSlim(false);
-                output.PlaybackStopped += (_, _) => done.Set();
-                output.Init(reader);
-                output.Play();
-                done.Wait(TimeSpan.FromSeconds(15));
-            });
-            SetStatusBarMessage($"✓ Piper ({resolved.DisplayName})");
-        }
-        catch (Exception ex)
-        {
-            SetStatusBarMessage($"⚠ Error al reproducir Piper: {ex.Message}");
-        }
-        finally
-        {
-            BtnTestPiperVoice.IsEnabled = true;
-            SetPiperButtonsEnabled(true);
-        }
-    }
+                int currentRate = SldSpeechRate is not null
+                    ? Math.Clamp((int)SldSpeechRate.Value, -5, 5)
+                    : Math.Clamp(_configService.Current.SpeechRate, -5, 5);
+                string sample = AlertControlTranslations.ForLanguage(_uiLanguage)["speechTest"];
+                byte[]? wav = await _piperTts.TrySynthesizeWavAsync(
+                    sample,
+                    resolved.Id,
+                    _uiLanguage,
+                    currentRate,
+                    System.Threading.CancellationToken.None);
+
+                if (wav is not { Length: > 44 })
+                {
+                    string err = string.IsNullOrWhiteSpace(_piperTts.LastError)
+                        ? "Piper no generó audio."
+                        : _piperTts.LastError;
+                    SetStatusBarMessage($"⚠ {err}");
+                    return;
+                }
+
+                SetStatusBarMessage($"▶ Reproduciendo Piper ({resolved.DisplayName})...");
+                await Task.Run(() =>
+                {
+                    using var ms = new MemoryStream(wav);
+                    using var reader = new NAudio.Wave.WaveFileReader(ms);
+                    using var output = AudioPlaybackHelper.CreateOutputPlayer(latencyMs: 80);
+                    using var done = new System.Threading.ManualResetEventSlim(false);
+                    output.PlaybackStopped += (_, _) => done.Set();
+                    output.Init(reader);
+                    output.Play();
+                    done.Wait(TimeSpan.FromSeconds(15));
+                });
+                SetStatusBarMessage($"✓ Piper ({resolved.DisplayName})");
+            }
+            catch (Exception ex)
+            {
+                AppDiagnosticsLogger.Warn("PiperTts", $"Failed to play Piper voice sample: {ex.Message}");
+                SetStatusBarMessage($"⚠ Error al reproducir Piper: {ex.Message}");
+            }
+            finally
+            {
+                BtnTestPiperVoice.IsEnabled = true;
+                SetPiperButtonsEnabled(true);
+            }
+        });
 
     private void SetPiperButtonsEnabled(bool enabled)
     {

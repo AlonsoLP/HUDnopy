@@ -111,6 +111,7 @@ public sealed partial class GalnetService : IDisposable
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("GalNet", $"Feed fetch failed: {ex.Message}");
             return (false, new List<GalnetArticle>(), $"GalNet: {ex.Message}");
         }
     }

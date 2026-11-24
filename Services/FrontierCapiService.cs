@@ -82,8 +82,15 @@ public sealed class FrontierCapiService : IDisposable
             _lastAutoSyncUtc = DateTimeOffset.UtcNow;
             _ = Task.Run(async () =>
             {
-                await Task.Delay(1200).ConfigureAwait(false);
-                await SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked).ConfigureAwait(false);
+                try
+                {
+                    await Task.Delay(1200).ConfigureAwait(false);
+                    await SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    AppDiagnosticsLogger.Warn("FrontierCapi", $"Startup auto-sync failed: {ex.Message}");
+                }
             });
         }
     }
@@ -279,8 +286,9 @@ public sealed class FrontierCapiService : IDisposable
             string body = await resp.Content.ReadAsStringAsync(ct);
             return ParseAndSaveTokens(body) ? _tokens?.AccessToken : null;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("FrontierCapi", $"OAuth2 token refresh failed: {ex.Message}");
             return null;
         }
         finally

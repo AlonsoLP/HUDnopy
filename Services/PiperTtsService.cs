@@ -67,6 +67,7 @@ public sealed class PiperTtsService : IDisposable
     private readonly SemaphoreSlim _synthLock = new(1, 1);
     private Process? _daemonProcess;
     private string _daemonKey = "";
+    private string? _cachedExePath;
 
     public string BaseDirectory { get; }
     public string VoicesDirectory { get; }
@@ -94,6 +95,9 @@ public sealed class PiperTtsService : IDisposable
 
     public string? FindPiperExecutable()
     {
+        if (!string.IsNullOrEmpty(_cachedExePath) && IsValidPiperBinary(_cachedExePath))
+            return _cachedExePath;
+
         string[] localCandidates =
         {
             Path.Combine(BaseDirectory, "piper", "piper.exe"),
@@ -102,7 +106,7 @@ public sealed class PiperTtsService : IDisposable
         foreach (string candidate in localCandidates)
         {
             if (IsValidPiperBinary(candidate))
-                return candidate;
+                return _cachedExePath = candidate;
         }
 
         if (Directory.Exists(BaseDirectory))
@@ -112,7 +116,7 @@ public sealed class PiperTtsService : IDisposable
                 string? found = Directory.EnumerateFiles(BaseDirectory, "piper.exe", SearchOption.AllDirectories)
                     .FirstOrDefault(IsValidPiperBinary);
                 if (found is not null)
-                    return found;
+                    return _cachedExePath = found;
             }
             catch
             {
@@ -129,7 +133,7 @@ public sealed class PiperTtsService : IDisposable
                 {
                     string candidate = Path.Combine(dir, "piper.exe");
                     if (IsValidPiperBinary(candidate))
-                        return candidate;
+                        return _cachedExePath = candidate;
                 }
                 catch
                 {
@@ -204,6 +208,7 @@ public sealed class PiperTtsService : IDisposable
         catch (Exception ex)
         {
             try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+            AppDiagnosticsLogger.Warn("PiperTTS", $"Engine installation failed: {ex.Message}");
             return (false, $"Error instalando Piper TTS: {ex.Message}");
         }
     }
@@ -369,6 +374,7 @@ public sealed class PiperTtsService : IDisposable
         catch (Exception ex)
         {
             try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            AppDiagnosticsLogger.Warn("PiperTTS", $"File download failed for '{url}': {ex.Message}");
             return (false, ex.Message);
         }
     }
@@ -514,6 +520,7 @@ public sealed class PiperTtsService : IDisposable
         string tempWav,
         CancellationToken ct)
     {
+        Process? procRef = null;
         try
         {
             SanitizeVoiceConfigJson(modelPath + ".json");
@@ -524,15 +531,19 @@ public sealed class PiperTtsService : IDisposable
                 LastError = "No se pudo iniciar piper.exe.";
                 return null;
             }
+            procRef = proc;
 
-            Task<string> stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
-            Task<string> stderrTask = proc.StandardError.ReadToEndAsync(ct);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
+
+            Task<string> stdoutTask = proc.StandardOutput.ReadToEndAsync(timeoutCts.Token);
+            Task<string> stderrTask = proc.StandardError.ReadToEndAsync(timeoutCts.Token);
 
             await proc.StandardInput.WriteAsync(cleanLine + "\n");
-            await proc.StandardInput.FlushAsync(ct);
+            await proc.StandardInput.FlushAsync(timeoutCts.Token);
             proc.StandardInput.Close();
 
-            await proc.WaitForExitAsync(ct);
+            await proc.WaitForExitAsync(timeoutCts.Token);
             string stderr = await stderrTask;
             _ = await stdoutTask;
 
@@ -552,6 +563,7 @@ public sealed class PiperTtsService : IDisposable
         }
         catch (Exception ex)
         {
+            try { if (procRef is { HasExited: false }) procRef.Kill(entireProcessTree: true); } catch { }
             LastError = $"Piper excepción: {ex.Message}";
             return null;
         }

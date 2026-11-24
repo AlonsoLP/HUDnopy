@@ -426,6 +426,11 @@ public partial class MainWindow
             FinishAiStreamOrAppend(replySpeaker, reply);
             UpdateAiLatencyStatusBar();
         }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Error("AI", "Unexpected error running COVAS quick action.", ex);
+            SetStatusBarMessage($"⚠ COVAS: {ex.Message}");
+        }
         finally
         {
             SetAiBusy(false);
@@ -454,6 +459,11 @@ public partial class MainWindow
             FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
             UpdateAiLatencyStatusBar();
         }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Error("AI", "Unexpected error sending COVAS text prompt.", ex);
+            SetStatusBarMessage($"⚠ COVAS: {ex.Message}");
+        }
         finally
         {
             SetAiBusy(false);
@@ -467,6 +477,8 @@ public partial class MainWindow
         BtnAiQuickStatus.IsEnabled = !busy;
         BtnAiSummarizeGalnet.IsEnabled = !busy;
         BtnAiSummarizeSession.IsEnabled = !busy;
+        BtnAiVision.IsEnabled = !busy;
+        BtnAiPreFlightCheck.IsEnabled = !busy;
     }
 
     private async void BtnAiVoiceInput_Click(object sender, RoutedEventArgs e)
@@ -500,7 +512,8 @@ public partial class MainWindow
             catch (Exception ex)
             {
                 CleanupAiVoiceRecorder();
-                TxtStatusBarLeft.Text = $"Micrófono: {ex.Message}";
+                AppDiagnosticsLogger.Warn("AI.Mic", $"Microphone PTT initialization failed: {ex.Message}");
+                SetStatusBarMessage($"⚠ Micrófono: {ex.Message}");
             }
             return;
         }
@@ -543,6 +556,11 @@ public partial class MainWindow
                 AppendAiChatLine("CMDR", transcript, sentAt);
             FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
             UpdateAiLatencyStatusBar();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Error("AI.Voice", "Unexpected error processing COVAS PTT voice input.", ex);
+            SetStatusBarMessage($"⚠ COVAS: {ex.Message}");
         }
         finally
         {
@@ -588,7 +606,8 @@ public partial class MainWindow
         catch (Exception ex)
         {
             StopAiHandsFree();
-            TxtStatusBarLeft.Text = $"Micrófono: {ex.Message}";
+            AppDiagnosticsLogger.Warn("AI.Mic", $"Hands-free VAD microphone initialization failed: {ex.Message}");
+            SetStatusBarMessage($"⚠ Micrófono: {ex.Message}");
         }
     }
 
@@ -861,6 +880,11 @@ public partial class MainWindow
             else if (_aiStreamLineOpen)
                 CloseAiStreamLine();
             UpdateAiLatencyStatusBar();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Error("AI.HandsFree", "Unexpected error processing hands-free VAD voice utterance.", ex);
+            SetStatusBarMessage($"⚠ COVAS: {ex.Message}");
         }
         finally
         {
@@ -1192,7 +1216,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            TxtStatusBarLeft.Text = ex.Message;
+            AppDiagnosticsLogger.Warn("AI.Export", $"Failed to export COVAS chat log: {ex.Message}");
+            SetStatusBarMessage($"⚠ {ex.Message}");
         }
     }
 

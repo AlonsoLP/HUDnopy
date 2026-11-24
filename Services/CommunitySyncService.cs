@@ -131,7 +131,16 @@ public sealed class CommunitySyncService : IDisposable
         try
         {
             while (await _flushTimer.WaitForNextTickAsync(_flushLoopCts.Token))
-                await FlushQueuesAsync(forceInara: false);
+            {
+                try
+                {
+                    await FlushQueuesAsync(forceInara: false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    AppDiagnosticsLogger.Warn("CommunitySync", $"Flush loop iteration failed: {ex.Message}");
+                }
+            }
         }
         catch (OperationCanceledException)
         {

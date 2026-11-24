@@ -484,24 +484,31 @@ public partial class EliteFileWatcherService
 
         _ = System.Threading.Tasks.Task.Run(async () =>
         {
-            var snapshot = await FetchEdsmShipyardAsync(system, station);
-            if (snapshot is null)
-                return;
-
-            lock (_refreshLock)
+            try
             {
-                if (!string.Equals(_state.CurrentSystem, system, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(_state.StationName, station, StringComparison.OrdinalIgnoreCase))
+                var snapshot = await FetchEdsmShipyardAsync(system, station);
+                if (snapshot is null)
                     return;
 
-                if (_state.Shipyard.Available &&
-                    _state.Shipyard.Items.Count > 1 &&
-                    string.Equals(_state.Shipyard.StationName, station, StringComparison.OrdinalIgnoreCase))
-                    return;
+                lock (_refreshLock)
+                {
+                    if (!string.Equals(_state.CurrentSystem, system, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(_state.StationName, station, StringComparison.OrdinalIgnoreCase))
+                        return;
 
-                _state.Shipyard = snapshot;
-                _state.LastUpdated = DateTime.UtcNow;
-                PublishState();
+                    if (_state.Shipyard.Available &&
+                        _state.Shipyard.Items.Count > 1 &&
+                        string.Equals(_state.Shipyard.StationName, station, StringComparison.OrdinalIgnoreCase))
+                        return;
+
+                    _state.Shipyard = snapshot;
+                    _state.LastUpdated = DateTime.UtcNow;
+                    PublishState();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppDiagnosticsLogger.Warn("FileWatcher.Shipyard", $"EDSM shipyard fallback failed for '{station}': {ex.Message}");
             }
         });
     }
@@ -785,10 +792,19 @@ public partial class EliteFileWatcherService
         }
     }
 
-    private void SyncMarketColonisationNeeds()
+    private void SyncMarketColonisationNeeds(bool force = false)
     {
         if (_state.Market.Items.Count == 0)
             return;
+
+        if (!force &&
+            ReferenceEquals(_lastSyncedMarketRef, _state.Market) &&
+            ReferenceEquals(_lastSyncedColonisationRef, _state.Colonisation))
+        {
+            return;
+        }
+        _lastSyncedMarketRef = _state.Market;
+        _lastSyncedColonisationRef = _state.Colonisation;
 
         var neededByKey = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         foreach (var res in _state.Colonisation.Resources)

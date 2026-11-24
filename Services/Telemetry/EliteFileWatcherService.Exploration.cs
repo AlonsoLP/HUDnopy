@@ -221,10 +221,18 @@ public partial class EliteFileWatcherService
                     if (!TryGetJournalInt(signal, "Count", out int count) || count < 0)
                         continue;
 
-                    string? type = GetJournalRawText(signal, "Type_Localised", "Type");
-                    if (type?.Contains("Biological", StringComparison.OrdinalIgnoreCase) == true)
+                    string? rawType = GetJournalRawText(signal, "Type");
+                    string? locType = GetJournalRawText(signal, "Type_Localised");
+                    string combinedType = $"{rawType} {locType}";
+                    if (combinedType.Contains("Biological", StringComparison.OrdinalIgnoreCase) ||
+                        combinedType.Contains("Biológ", StringComparison.OrdinalIgnoreCase) ||
+                        combinedType.Contains("Biolog", StringComparison.OrdinalIgnoreCase) ||
+                        combinedType.Contains("Биолог", StringComparison.OrdinalIgnoreCase))
                         body.BiologicalSignalCount += count;
-                    else if (type?.Contains("Geological", StringComparison.OrdinalIgnoreCase) == true)
+                    else if (combinedType.Contains("Geological", StringComparison.OrdinalIgnoreCase) ||
+                             combinedType.Contains("Geológ", StringComparison.OrdinalIgnoreCase) ||
+                             combinedType.Contains("Geolog", StringComparison.OrdinalIgnoreCase) ||
+                             combinedType.Contains("Геолог", StringComparison.OrdinalIgnoreCase))
                         body.GeologicalSignalCount += count;
                 }
             }
@@ -246,6 +254,9 @@ public partial class EliteFileWatcherService
             string scanType = GetJournalRawText(data, "ScanType") ?? "";
             string? species = GetJournalText(data, "Species_Localised", "Species");
             string? genusName = GetJournalText(data, "Genus_Localised", "Genus");
+            string? rawSpecies = GetJournalRawText(data, "Species");
+            string? rawGenus = GetJournalRawText(data, "Genus");
+            string lookupKey = $"{rawSpecies} {rawGenus} {species} {genusName}".Trim();
             if (scanType.Equals("Log", StringComparison.OrdinalIgnoreCase) ||
                 scanType.Equals("Sample", StringComparison.OrdinalIgnoreCase))
             {
@@ -267,7 +278,7 @@ public partial class EliteFileWatcherService
                     Genus = genusName ?? "",
                     BodyName = body.BodyName,
                     SamplesCollected = sampleNumber,
-                    RequiredDistanceMeters = ExobiologyPredictor.GetRequiredDistanceMeters(!string.IsNullOrWhiteSpace(genusName) ? genusName : speciesDisplay),
+                    RequiredDistanceMeters = ExobiologyPredictor.GetRequiredDistanceMeters(lookupKey),
                     CurrentDistanceMeters = 0,
                     LastSampleLatitude = _state.HasLatLong ? _state.Latitude : null,
                     LastSampleLongitude = _state.HasLatLong ? _state.Longitude : null,
@@ -294,12 +305,11 @@ public partial class EliteFileWatcherService
                     _activeExoSampleCoords.Clear();
                     _state.ExobiologyTracker = null;
 
-                    string exoKey = $"{id}:{species ?? genusName ?? "organic"}";
+                    string exoKey = $"{id}:{rawSpecies ?? species ?? rawGenus ?? genusName ?? "organic"}";
                     if (_unsoldExobiologyKeys.Add(exoKey))
                     {
                         bool firstFootfall = body.WasDiscovered == false || body.WasMapped == false;
-                        _state.UnsoldExobiologyCredits += ExobiologyPredictor.EstimateSpeciesCredits(
-                            !string.IsNullOrWhiteSpace(species) ? species : genusName, firstFootfall);
+                        _state.UnsoldExobiologyCredits += ExobiologyPredictor.EstimateSpeciesCredits(lookupKey, firstFootfall);
                     }
                 }
             }
@@ -582,8 +592,23 @@ public partial class EliteFileWatcherService
         if (!_explorationHistoryResolvedSystems.Add(systemAddress))
             return;
 
-        foreach (var journalInfo in new DirectoryInfo(folder).EnumerateFiles("Journal.*.log")
-                     .OrderBy(static info => info.Name, StringComparer.OrdinalIgnoreCase))
+        FileInfo[] journals;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+                return;
+
+            journals = new DirectoryInfo(folder).EnumerateFiles("Journal.*.log")
+                .OrderBy(static info => info.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("FileWatcher.Exploration", $"Could not enumerate journals in '{folder}' for exploration restore: {ex.Message}");
+            return;
+        }
+
+        foreach (var journalInfo in journals)
         {
             string journalFile = journalInfo.FullName;
             try
@@ -615,13 +640,9 @@ public partial class EliteFileWatcherService
                     }
                 }
             }
-            catch (IOException ex)
+            catch (Exception ex)
             {
-                Debug.WriteLine($"No se pudo leer el Journal para recuperar exploración ({journalFile}): {ex.Message}");
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                Debug.WriteLine($"Acceso denegado al Journal de exploración ({journalFile}): {ex.Message}");
+                AppDiagnosticsLogger.Warn("FileWatcher.Exploration", $"Could not read historical Journal for exploration restore ({Path.GetFileName(journalFile)}): {ex.Message}");
             }
         }
     }

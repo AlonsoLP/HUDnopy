@@ -203,8 +203,9 @@ public class BindingsService
                 .OrderByDescending(File.GetLastWriteTimeUtc)
                 .FirstOrDefault();
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("Bindings", $"Failed to resolve active .binds file in '{folder}': {ex.Message}");
             return null;
         }
     }

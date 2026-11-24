@@ -107,7 +107,9 @@ public sealed class AlertSpeechService
             exception is InvalidOperationException or PlatformNotSupportedException or
                 System.Runtime.InteropServices.COMException)
         {
-            SpeechFailed?.Invoke(string.Format(SettingsTranslations.ForLanguage(_configService.Current.InterfaceLanguage)["voicesQueryError"], exception.Message));
+            string msg = string.Format(SettingsTranslations.ForLanguage(_configService.Current.InterfaceLanguage)["voicesQueryError"], exception.Message);
+            AppDiagnosticsLogger.Warn("Speech", msg);
+            SpeechFailed?.Invoke(msg);
             return Array.Empty<string>();
         }
     }
@@ -443,7 +445,9 @@ public sealed class AlertSpeechService
                 }
                 else if (!string.IsNullOrWhiteSpace(_piperTts.LastError))
                 {
-                    SpeechFailed?.Invoke($"{_piperTts.LastError} (usando Windows SAPI)");
+                    string msg = $"{_piperTts.LastError} (usando Windows SAPI)";
+                    AppDiagnosticsLogger.Warn("Speech", msg);
+                    SpeechFailed?.Invoke(msg);
                 }
             }
 
@@ -516,14 +520,13 @@ public sealed class AlertSpeechService
         {
             // Normal cancellation due to priority preemption or a new manual test.
         }
-        catch (Exception exception) when (
-            exception is InvalidOperationException or ArgumentException or IOException or
-                PlatformNotSupportedException or System.Runtime.InteropServices.COMException or
-                NAudio.MmException)
+        catch (Exception exception)
         {
             if (!request.IsCancellationRequested)
             {
-                SpeechFailed?.Invoke(string.Format(SettingsTranslations.ForLanguage(_configService.Current.InterfaceLanguage)["speechError"], exception.Message));
+                string msg = string.Format(SettingsTranslations.ForLanguage(_configService.Current.InterfaceLanguage)["speechError"], exception.Message);
+                AppDiagnosticsLogger.Warn("Speech", msg);
+                SpeechFailed?.Invoke(msg);
             }
         }
     }

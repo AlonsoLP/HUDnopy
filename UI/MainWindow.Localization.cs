@@ -330,8 +330,32 @@ public partial class MainWindow
                 (row.Item.CategoryKey == selected.CategoryKey && row.Item.Category == selected.Category && row.Item.Name == selected.Name));
     }
 
+    private (IReadOnlyList<MissionItem>? Missions,
+        IReadOnlyList<PassengerItem>? Passengers,
+        IReadOnlyList<BackpackItem>? Backpack,
+        IReadOnlyList<ProfileValueItem>? Profile,
+        DateTimeOffset? MarketTs, string MarketStation,
+        DateTimeOffset? OutfittingTs, string OutfittingStation,
+        DateTimeOffset? ShipyardTs, string ShipyardStation,
+        DateTimeOffset? ColTs, double? ColProgress, bool? ColComplete, bool? ColFailed,
+        string Language)? _lastOperationsStatusKey;
+
     private void UpdateOperationsStatus(ShipState state)
     {
+        var key = (
+            state.ActiveMissions,
+            state.PassengerManifest,
+            state.BackpackInventory,
+            state.CommanderProfile,
+            state.Market.Timestamp, state.Market.StationName,
+            state.Outfitting.Timestamp, state.Outfitting.StationName,
+            state.Shipyard.Timestamp, state.Shipyard.StationName,
+            state.Colonisation.Timestamp, state.Colonisation.ConstructionProgress, state.Colonisation.ConstructionComplete, state.Colonisation.ConstructionFailed,
+            _uiLanguage);
+        if (_lastOperationsStatusKey == key)
+            return;
+        _lastOperationsStatusKey = key;
+
         var text = OperationsTranslations.ForLanguage(_uiLanguage);
         TxtMissionsStatus.Text = state.ActiveMissions.Count == 0 ? text["missionsEmpty"] :
             string.Format(text["missionsCount"], state.ActiveMissions.Count);
@@ -374,30 +398,37 @@ public partial class MainWindow
         UpdateExplorationProgressAndTracker(state);
     }
 
+    private (int? TotalBodies, int ScannedBodies, bool AllFound, long UnsoldCarto, long UnsoldExo, string Language)? _lastExplorationPortfolioKey;
+
     private void UpdateExplorationProgressAndTracker(ShipState state)
     {
         var text = ExplorationTranslations.ForLanguage(_uiLanguage);
         var culture = UiCulture;
 
-        var summaryParts = new List<string>();
-        if (state.SystemTotalBodies is > 0)
+        var portfolioKey = (state.SystemTotalBodies, state.SystemScannedBodies, state.SystemAllBodiesFound, state.UnsoldCartographyCredits, state.UnsoldExobiologyCredits, _uiLanguage);
+        if (_lastExplorationPortfolioKey != portfolioKey)
         {
-            string fssPart = state.SystemAllBodiesFound
-                ? string.Format(culture, text["fssProgressComplete"], state.SystemTotalBodies.Value)
-                : string.Format(culture, text["fssProgress"], state.SystemScannedBodies, state.SystemTotalBodies.Value);
-            summaryParts.Add(fssPart);
-        }
-        if (state.UnsoldCartographyCredits > 0 || state.UnsoldExobiologyCredits > 0)
-        {
-            summaryParts.Add(string.Format(
-                culture,
-                text["unsoldPortfolio"],
-                state.UnsoldCartographyCredits,
-                state.UnsoldExobiologyCredits));
-        }
+            _lastExplorationPortfolioKey = portfolioKey;
+            var summaryParts = new List<string>();
+            if (state.SystemTotalBodies is > 0)
+            {
+                string fssPart = state.SystemAllBodiesFound
+                    ? string.Format(culture, text["fssProgressComplete"], state.SystemTotalBodies.Value)
+                    : string.Format(culture, text["fssProgress"], state.SystemScannedBodies, state.SystemTotalBodies.Value);
+                summaryParts.Add(fssPart);
+            }
+            if (state.UnsoldCartographyCredits > 0 || state.UnsoldExobiologyCredits > 0)
+            {
+                summaryParts.Add(string.Format(
+                    culture,
+                    text["unsoldPortfolio"],
+                    state.UnsoldCartographyCredits,
+                    state.UnsoldExobiologyCredits));
+            }
 
-        TxtExplorationPortfolio.Text = string.Join("  ·  ", summaryParts);
-        TxtExplorationPortfolio.Visibility = summaryParts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            TxtExplorationPortfolio.Text = string.Join("  ·  ", summaryParts);
+            TxtExplorationPortfolio.Visibility = summaryParts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
 
         if (state.ExobiologyTracker is { SamplesCollected: > 0 and < 3 } exo)
         {

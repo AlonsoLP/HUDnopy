@@ -278,6 +278,7 @@ public sealed class CockpitRadioService : IDisposable
             _statusMessage = $"Connecting to {station.Name}...";
         }
         _configService.Current.RadioLastStationId = station.Id;
+        _configService.Save();
         NotifyStatus();
 
         try
@@ -321,8 +322,12 @@ public sealed class CockpitRadioService : IDisposable
             AppDiagnosticsLogger.Warn("CockpitRadioService", $"Stream error ({station.Name}): {ex.Message}");
             lock (_sync)
             {
-                _isPlaying = false;
-                _statusMessage = $"Stream unavailable: {station.Name}";
+                // Only update shared state when this attempt is still the active one (a newer Play may have superseded it).
+                if (ReferenceEquals(_connectCts, cts))
+                {
+                    _isPlaying = false;
+                    _statusMessage = $"Stream unavailable: {station.Name}";
+                }
             }
             NotifyStatus();
             return (false, $"Could not connect to {station.Name}: {ex.Message}");

@@ -76,10 +76,28 @@ public sealed class DiscordIntegrationService : IDisposable
         {
             await Task.Delay(2000, _presenceLoopCts.Token);
             if (!_disposed && _configService.Current.EnableDiscord)
-                await RefreshPresenceAsync(_presenceLoopCts.Token);
+            {
+                try
+                {
+                    await RefreshPresenceAsync(_presenceLoopCts.Token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    AppDiagnosticsLogger.Warn("Discord", $"Initial presence refresh failed: {ex.Message}");
+                }
+            }
 
             while (await _presenceTimer.WaitForNextTickAsync(_presenceLoopCts.Token))
-                await RefreshPresenceAsync(_presenceLoopCts.Token);
+            {
+                try
+                {
+                    await RefreshPresenceAsync(_presenceLoopCts.Token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    AppDiagnosticsLogger.Warn("Discord", $"Presence loop iteration failed: {ex.Message}");
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -184,6 +202,15 @@ public sealed class DiscordIntegrationService : IDisposable
     }
 
     /// <summary>
+    /// Returns true only for the exact Discord domains (or their subdomains), rejecting look-alikes such as discord.com.example.net.
+    /// </summary>
+    internal static bool IsDiscordHost(string host) =>
+        host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) ||
+        host.EndsWith(".discord.com", StringComparison.OrdinalIgnoreCase) ||
+        host.Equals("discordapp.com", StringComparison.OrdinalIgnoreCase) ||
+        host.EndsWith(".discordapp.com", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Sends a formatted Discord embed to the configured webhook URL.
     /// </summary>
     public async Task<(bool Success, string Message)> SendWebhookAsync(
@@ -199,8 +226,7 @@ public sealed class DiscordIntegrationService : IDisposable
         string url = (cfg.DiscordWebhookUrl ?? "").Trim();
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) ||
-            (!uri.Host.Contains("discord.com", StringComparison.OrdinalIgnoreCase) &&
-             !uri.Host.Contains("discordapp.com", StringComparison.OrdinalIgnoreCase)))
+            !IsDiscordHost(uri.Host))
         {
             return (false, "Invalid Discord Webhook URL.");
         }
@@ -240,6 +266,7 @@ public sealed class DiscordIntegrationService : IDisposable
         catch (Exception ex)
         {
             LastStatus = $"Discord Webhook error: {ex.Message}";
+            AppDiagnosticsLogger.Warn("Discord", LastStatus);
             StatusChanged?.Invoke();
             return (false, LastStatus);
         }
@@ -265,8 +292,7 @@ public sealed class DiscordIntegrationService : IDisposable
         string url = (cfg.DiscordWebhookUrl ?? "").Trim();
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) ||
-            (!uri.Host.Contains("discord.com", StringComparison.OrdinalIgnoreCase) &&
-             !uri.Host.Contains("discordapp.com", StringComparison.OrdinalIgnoreCase)))
+            !IsDiscordHost(uri.Host))
         {
             return (false, "Invalid Discord Webhook URL.");
         }
@@ -311,6 +337,7 @@ public sealed class DiscordIntegrationService : IDisposable
         catch (Exception ex)
         {
             LastStatus = $"Discord screenshot error: {ex.Message}";
+            AppDiagnosticsLogger.Warn("Discord", LastStatus);
             StatusChanged?.Invoke();
             return (false, LastStatus);
         }

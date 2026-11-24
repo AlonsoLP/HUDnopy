@@ -248,7 +248,7 @@ public sealed partial class AiCopilotService
                         if (mfParts.Length >= 1 && !string.IsNullOrWhiteSpace(mfParts[0]))
                             _configService.Current.MiningTargetMinerals = mfParts[0];
                         if (mfParts.Length == 2 && int.TryParse(mfParts[1].TrimEnd('%'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int minPct))
-                            _configService.Current.MiningMinPercent = Math.Clamp(minPct, 5, 80);
+                            _configService.Current.MiningMinPercent = Math.Clamp(minPct, 1, 100);
                         _configService.Save();
                         actionLogs.Add($"⛏ Filtro minería: {_configService.Current.MiningTargetMinerals} (≥{_configService.Current.MiningMinPercent}%)");
                         break;
@@ -514,6 +514,7 @@ public sealed partial class AiCopilotService
                             }
                             catch (Exception ex)
                             {
+                                AppDiagnosticsLogger.Warn("AI.Inara", $"Failed to launch Inara deep link: {ex.Message}");
                                 actionLogs.Add($"⚠ No se pudo abrir Inara: {ex.Message}");
                             }
                         }
@@ -996,6 +997,7 @@ public sealed partial class AiCopilotService
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("AI.Query", $"Live query '{kind}' failed: {ex.Message}");
             return $"Error en consulta {kind}: {ex.Message}";
         }
     }
@@ -1460,7 +1462,7 @@ public sealed partial class AiCopilotService
         double dy = c2.Value.Y - c1.Value.Y;
         double dz = c2.Value.Z - c1.Value.Z;
         double dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-        return $"3D distance from {fromSys} to {toSys}: {dist:0.2} LY.";
+        return $"3D distance from {fromSys} to {toSys}: {dist:0.00} LY.";
     }
 
     private async Task<(double X, double Y, double Z)?> FetchEdsmCoordsAsync(string systemName)
@@ -1494,7 +1496,7 @@ public sealed partial class AiCopilotService
         if (!_configService.Current.EnableSpanshSystemData)
             return "Spansh integration is disabled in Settings -> Integrations.";
         var st = _fileWatcher.State;
-        var (ok, hops, msg) = await _spanshService.PlotTradeRouteAsync(st.CurrentSystem, st.StationName, st.CargoCapacity, st.Credits, 30, true);
+        var (ok, hops, msg) = await _spanshService.PlotTradeRouteAsync(st.CurrentSystem, st.StationName, st.CargoCapacity, st.Credits, 30, st.CargoCapacity >= 200);
         if (!ok || hops.Count == 0)
             return msg;
         return string.Join(" | ", hops.Take(3).Select(static h => $"Hop {h.Hop}: {h.RouteDisplay} — {h.Commodity} ({h.ProfitDisplay}, {h.DistanceDisplay})"));

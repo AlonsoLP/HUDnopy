@@ -76,6 +76,8 @@ public sealed partial class WhisperSttService : IDisposable
     private Process? _serverProcess;
     private int _serverPort;
     private string _loadedModelId = "";
+    private string? _cachedExePath;
+    private string? _cachedServerExePath;
     private bool _disposed;
 
     [GeneratedRegex(@"\[[^\]]*\]|\([^\)]*\)", RegexOptions.CultureInvariant)]
@@ -94,26 +96,32 @@ public sealed partial class WhisperSttService : IDisposable
 
     public string? FindExecutablePath()
     {
+        if (!string.IsNullOrEmpty(_cachedExePath) && File.Exists(_cachedExePath))
+            return _cachedExePath;
+
         if (!Directory.Exists(_rootDir))
             return null;
         foreach (string exeName in new[] { "whisper-cli.exe", "main.exe" })
         {
             string? match = Directory.EnumerateFiles(_rootDir, exeName, SearchOption.AllDirectories).FirstOrDefault();
             if (match is not null)
-                return match;
+                return _cachedExePath = match;
         }
         return null;
     }
 
     public string? FindServerExecutablePath()
     {
+        if (!string.IsNullOrEmpty(_cachedServerExePath) && File.Exists(_cachedServerExePath))
+            return _cachedServerExePath;
+
         if (!Directory.Exists(_rootDir))
             return null;
         foreach (string exeName in new[] { "whisper-server.exe", "server.exe" })
         {
             string? match = Directory.EnumerateFiles(_rootDir, exeName, SearchOption.AllDirectories).FirstOrDefault();
             if (match is not null)
-                return match;
+                return _cachedServerExePath = match;
         }
         return null;
     }
@@ -356,6 +364,7 @@ public sealed partial class WhisperSttService : IDisposable
             return (false, "Whisper offline executable not found. Click 'Install Whisper' in Settings -> COVAS AI.");
 
         string tempWav = Path.Combine(Path.GetTempPath(), $"hudnopy_stt_{Guid.NewGuid():N}.wav");
+        Process? procRef = null;
         try
         {
             await File.WriteAllBytesAsync(tempWav, wavBytes, ct);
@@ -375,6 +384,7 @@ public sealed partial class WhisperSttService : IDisposable
             using var proc = Process.Start(psi);
             if (proc is null)
                 return (false, "Failed to start whisper-cli.exe.");
+            procRef = proc;
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(25));
@@ -387,10 +397,13 @@ public sealed partial class WhisperSttService : IDisposable
         }
         catch (OperationCanceledException)
         {
+            // Never leave an orphan whisper-cli.exe consuming CPU after a timeout or cancellation.
+            try { if (procRef is { HasExited: false }) procRef.Kill(entireProcessTree: true); } catch { }
             return (false, "Whisper transcription timed out.");
         }
         catch (Exception ex)
         {
+            try { if (procRef is { HasExited: false }) procRef.Kill(entireProcessTree: true); } catch { }
             AppDiagnosticsLogger.Warn("WhisperSttService", $"CLI transcription failed: {ex.Message}");
             return (false, $"Whisper error: {ex.Message}");
         }

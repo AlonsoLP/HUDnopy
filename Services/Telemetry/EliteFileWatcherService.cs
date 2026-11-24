@@ -80,6 +80,8 @@ public partial class EliteFileWatcherService : IDisposable
     private readonly InputSimulatorService _inputSimulator;
     private string _lastEdsmShipyardLookupKey = "";
     private string _lastModuleLocalizationLang = "";
+    private MarketSnapshot? _lastSyncedMarketRef;
+    private ColonisationSnapshot? _lastSyncedColonisationRef;
     private bool _stateDirty = true;
     private DateTime _lastHeartbeatPublishUtc = DateTime.MinValue;
 
@@ -116,7 +118,16 @@ public partial class EliteFileWatcherService : IDisposable
         try
         {
             while (await _pollTimer.WaitForNextTickAsync(_pollCts.Token))
-                RefreshState(forcePublish: false);
+            {
+                try
+                {
+                    RefreshState(forcePublish: false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    AppDiagnosticsLogger.Warn("FileWatcher", $"Poll loop iteration failed: {ex.Message}");
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -273,9 +284,17 @@ public partial class EliteFileWatcherService : IDisposable
             {
                 _ = System.Threading.Tasks.Task.Run(async () =>
                 {
-                    await System.Threading.Tasks.Task.Delay(40).ConfigureAwait(false);
-                    Interlocked.Exchange(ref _watcherRefreshPending, 0);
-                    RefreshState(forcePublish: false);
+                    try
+                    {
+                        await System.Threading.Tasks.Task.Delay(40).ConfigureAwait(false);
+                        Interlocked.Exchange(ref _watcherRefreshPending, 0);
+                        RefreshState(forcePublish: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Interlocked.Exchange(ref _watcherRefreshPending, 0);
+                        AppDiagnosticsLogger.Warn("FileWatcher", $"Error during debounced file refresh: {ex.Message}");
+                    }
                 });
             }
         }
@@ -340,7 +359,6 @@ public partial class EliteFileWatcherService : IDisposable
             bool isGameSessionActive = _journalSessionActive == true;
             if (isGameSessionActive)
             {
-                _state.IsSimulation = false;
                 _state.IsGameDetected = true;
                 ReadStatusJson(Path.Combine(folder, "Status.json"));
                 ReadNavRouteJson(Path.Combine(folder, "NavRoute.json"));
@@ -361,7 +379,6 @@ public partial class EliteFileWatcherService : IDisposable
             }
             else
             {
-                _state.IsSimulation = false;
                 _state.IsGameDetected = false;
             }
 
@@ -494,14 +511,31 @@ public partial class EliteFileWatcherService : IDisposable
             crPerHour = (long)Math.Round(net / hours);
         }
 
+        int visited = _sessionVisitedSystems.Count;
+        double distLy = Math.Round(_sessionDistanceLy, 1);
+        var cur = _state.SessionStats;
+        if (cur is not null &&
+            cur.StartedAtUtc == _sessionStartedUtc &&
+            cur.StartCredits == _sessionStartCredits &&
+            cur.NetCredits == net &&
+            cur.CreditsPerHour == crPerHour &&
+            cur.SystemsVisited == visited &&
+            Math.Abs(cur.TotalDistanceLy - distLy) < 0.01 &&
+            cur.BodiesScanned == _sessionBodiesScanned &&
+            cur.OrganicsAnalysed == _sessionOrganicsAnalysed &&
+            cur.MissionsCompleted == _sessionMissionsCompleted)
+        {
+            return;
+        }
+
         _state.SessionStats = new SessionStatsState
         {
             StartedAtUtc = _sessionStartedUtc,
             StartCredits = _sessionStartCredits,
             NetCredits = net,
             CreditsPerHour = crPerHour,
-            SystemsVisited = _sessionVisitedSystems.Count,
-            TotalDistanceLy = Math.Round(_sessionDistanceLy, 1),
+            SystemsVisited = visited,
+            TotalDistanceLy = distLy,
             BodiesScanned = _sessionBodiesScanned,
             OrganicsAnalysed = _sessionOrganicsAnalysed,
             MissionsCompleted = _sessionMissionsCompleted

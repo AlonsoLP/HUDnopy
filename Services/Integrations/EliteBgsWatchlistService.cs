@@ -59,10 +59,28 @@ public sealed class EliteBgsWatchlistService : IDisposable
         {
             await Task.Delay(2000, _loopCts.Token);
             if (!_disposed && _configService.Current.EnableEliteBgsWatchlist)
-                await RefreshAsync(_loopCts.Token);
+            {
+                try
+                {
+                    await RefreshAsync(_loopCts.Token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    AppDiagnosticsLogger.Warn("EliteBGS", $"Initial BGS watchlist refresh failed: {ex.Message}");
+                }
+            }
 
             while (await _timer.WaitForNextTickAsync(_loopCts.Token))
-                await RefreshAsync(_loopCts.Token);
+            {
+                try
+                {
+                    await RefreshAsync(_loopCts.Token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    AppDiagnosticsLogger.Warn("EliteBGS", $"BGS watchlist loop iteration failed: {ex.Message}");
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -161,6 +179,7 @@ public sealed class EliteBgsWatchlistService : IDisposable
         catch (Exception ex)
         {
             LastStatus = $"EliteBGS error: {ex.Message}";
+            AppDiagnosticsLogger.Warn("EliteBGS", LastStatus);
             return (false, new List<EliteBgsFactionWatchItem>(), LastStatus);
         }
         finally

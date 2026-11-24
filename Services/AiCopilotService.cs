@@ -302,9 +302,9 @@ public sealed partial class AiCopilotService : IDisposable
                 if (ok && !string.IsNullOrWhiteSpace(reply))
                     CopilotMessageAdded?.Invoke("COVAS (Evento)", reply);
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore network error during dynamic commentary
+                AppDiagnosticsLogger.Warn("AI.DynamicEvent", $"Dynamic tactical commentary failed: {ex.Message}");
             }
             finally
             {
@@ -741,6 +741,7 @@ public sealed partial class AiCopilotService : IDisposable
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("AI.Models", $"Failed to fetch available models for provider '{provider}': {ex.Message}");
             return (false, new List<string>(), $"Error al consultar modelos: {ex.Message}");
         }
     }

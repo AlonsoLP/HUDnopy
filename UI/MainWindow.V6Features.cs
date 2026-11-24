@@ -26,6 +26,7 @@ public partial class MainWindow
 {
     private const int OverlayHotKeyId = 0x484F;
     private bool _overlayHotkeyRegistered;
+    private System.Windows.Threading.DispatcherTimer? _radioVolumeSaveTimer;
 
     // =========================================================================
     // Block 1 (#2): Click-Through Tactical Overlay
@@ -55,11 +56,15 @@ public partial class MainWindow
             };
             _overlayWindow.UpdateTelemetry(_fileWatcher.State, _uiLanguage);
             _overlayWindow.Show();
-            RegisterOverlayHotkey();
+            bool hotkeyOk = RegisterOverlayHotkey();
 
             BtnToggleOverlay.SetResourceReference(BackgroundProperty, "HudAccentBrush");
             BtnToggleOverlay.SetResourceReference(ForegroundProperty, "HudBgBrush");
-            TxtStatusBarLeft.Text = $"🪟 Overlay active ({(_overlayWindow.IsClickThrough ? "Click-Through Locked" : "Unlocked/Drag")} · {_configService.Current.OverlayToggleHotkey})";
+            string overlayMode = _overlayWindow.IsClickThrough ? "Click-Through Locked" : "Unlocked/Drag";
+            if (hotkeyOk)
+                TxtStatusBarLeft.Text = $"🪟 Overlay active ({overlayMode} · {_configService.Current.OverlayToggleHotkey})";
+            else
+                SetStatusBarMessage($"⚠ Overlay active ({overlayMode}), but hotkey {_configService.Current.OverlayToggleHotkey} could not be registered (already in use by another app).");
         }
         catch (Exception ex)
         {
@@ -89,24 +94,29 @@ public partial class MainWindow
         }
     }
 
-    private void RegisterOverlayHotkey()
+    private bool RegisterOverlayHotkey()
     {
         try
         {
             var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd == IntPtr.Zero) return;
+            if (hwnd == IntPtr.Zero) return false;
             _hotkeyHwndSource ??= HwndSource.FromHwnd(hwnd);
-            if (_hotkeyHwndSource is null) return;
+            if (_hotkeyHwndSource is null) return false;
             _hotkeyHwndSource.RemoveHook(OverlayHotKeyWndProc);
             _hotkeyHwndSource.AddHook(OverlayHotKeyWndProc);
             if (_overlayHotkeyRegistered)
                 UnregisterHotKey(hwnd, OverlayHotKeyId);
             var (mods, vk) = ParseGlobalHotkey(_configService.Current.OverlayToggleHotkey);
             _overlayHotkeyRegistered = RegisterHotKey(hwnd, OverlayHotKeyId, mods, vk);
+            if (!_overlayHotkeyRegistered)
+                AppDiagnosticsLogger.Warn("Overlay", $"Global hotkey '{_configService.Current.OverlayToggleHotkey}' could not be registered (already in use).");
+            return _overlayHotkeyRegistered;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("Overlay", $"Global hotkey registration failed: {ex.Message}");
             _overlayHotkeyRegistered = false;
+            return false;
         }
     }
 
@@ -280,6 +290,19 @@ public partial class MainWindow
         if (_suppressEvents || _cockpitRadio is null)
             return;
         _cockpitRadio.SetVolumePercent((int)Math.Round(e.NewValue));
+
+        // Persist the volume once the slider settles (debounced) instead of writing config.json on every tick.
+        _radioVolumeSaveTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+        _radioVolumeSaveTimer.Tick -= RadioVolumeSaveTimer_Tick;
+        _radioVolumeSaveTimer.Tick += RadioVolumeSaveTimer_Tick;
+        _radioVolumeSaveTimer.Stop();
+        _radioVolumeSaveTimer.Start();
+    }
+
+    private void RadioVolumeSaveTimer_Tick(object? sender, EventArgs e)
+    {
+        _radioVolumeSaveTimer?.Stop();
+        _configService.Save();
     }
 
     private void ChkRadioAutoDuck_Click(object sender, RoutedEventArgs e)

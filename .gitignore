@@ -13,8 +13,13 @@ installer/Output/
 
 # Local runtime configuration, secrets, and user certificates
 config.json
+config.json.bak
 web-certificate.dat
 frontier_capi.dat
+logs/
+HUDnopy-Support-*.zip
+piper/
+whisper/
 
 # Local development notes
 copilot.txt

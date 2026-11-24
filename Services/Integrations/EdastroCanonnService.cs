@@ -130,9 +130,10 @@ public sealed class EdastroCanonnService : IDisposable
                 _dssaFetchedAtUtc = DateTimeOffset.UtcNow;
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Keep existing cache if transient network error occurs.
+            AppDiagnosticsLogger.Warn("EDAstro", $"DSSA directory fetch failed: {ex.Message}");
         }
         finally
         {
@@ -226,7 +227,7 @@ public sealed class EdastroCanonnService : IDisposable
                 {
                     systemName = state.CurrentSystem,
                     systemAddress = state.SystemAddress,
-                    systemCoordinates = state.StarPos ?? [state.StarPosX, state.StarPosY, state.StarPosZ],
+                    systemCoordinates = state.StarPos ?? [0.0, 0.0, 0.0],
                     bodyName = state.BodyName,
                     clientVersion = $"{HttpClientHeaderDefaults.ProductName} {HttpClientHeaderDefaults.ProductVersion}",
                     isBeta = false,
@@ -246,9 +247,10 @@ public sealed class EdastroCanonnService : IDisposable
                 StatusChanged?.Invoke();
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Ignore transient Canonn API failures.
+            AppDiagnosticsLogger.Warn("Canonn", $"Canonn event upload failed ({gameEvent.EventType}): {ex.Message}");
         }
     }
 

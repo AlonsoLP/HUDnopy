@@ -42,6 +42,9 @@ public sealed record WebNetworkInterfaceOption(string Id, string DisplayName, IP
 public class WebServerService : IDisposable
 {
     private static readonly JsonSerializerOptions CamelCaseJsonOptions = HttpClientHeaderDefaults.CamelCaseJsonOptions;
+    private static readonly object[] StaticEngineeringCatalog = EngineeringWishlistService.Catalog
+        .Select(static b => (object)new { b.Id, b.DisplayName })
+        .ToArray();
     private readonly ConfigService _configService;
     private readonly EliteFileWatcherService _fileWatcher;
     private readonly BindingsService _bindingsService;
@@ -56,6 +59,8 @@ public class WebServerService : IDisposable
     private readonly EdastroCanonnService? _edastroCanonn;
     private readonly CommunitySyncService? _communitySync;
     private readonly AlertSpeechService? _alertSpeech;
+    private readonly FrontierCapiService? _frontierCapi;
+    private readonly DiscordIntegrationService? _discord;
     public CockpitRadioService? CockpitRadio { get; set; }
 
     private sealed class WebSocketClient(WebSocket socket)
@@ -109,6 +114,7 @@ public class WebServerService : IDisposable
     }
 
     private static (PrecompressedAsset Html, PrecompressedAsset Css, PrecompressedAsset Js)? _cachedStaticAssets;
+    private static string? _cachedManifestTemplate;
 
     private static (PrecompressedAsset Html, PrecompressedAsset Css, PrecompressedAsset Js) GetOrLoadPrecompressedAssets() =>
         _cachedStaticAssets ??= (
@@ -124,13 +130,21 @@ public class WebServerService : IDisposable
     private int _broadcastRunning;
     private long _clientErrorWindowMinute;
     private int _clientErrorWindowCount;
-    private (IReadOnlyList<GameBinding>? Source, string Language, DeckBindingView[] Views) _cachedDeckBindings;
     private (SpanshSystemDataState? Source, string Language, SpanshSystemDisplay View) _cachedSpanshView;
     private (CarrierState? Source, string Language, CarrierDisplay View)? _cachedCarrierView;
     private (IReadOnlyList<MarketCommodityItem>? Source, string Language, string[] Flags) _cachedMarketFlags;
     private (IReadOnlyList<ExplorationBodyItem>? Source, string Language, ExplorationBodyView[] Views) _cachedExplorationBodies;
     private (IReadOnlyList<ProfileValueItem>? Source, string Language, ProfileValueView[] Views) _cachedProfile;
     private (IReadOnlyList<JournalEntryItem>? Source, string Language, JournalEntryView[] Views) _cachedJournalEvents;
+    private (IReadOnlyList<ExplorationBodyItem>? Source, string System, object? View) _cachedSystemMap;
+    private (string? LoadoutJson, object? Links) _cachedLoadoutLinks;
+    private (IReadOnlyList<MaterialItem>? Mats, IReadOnlyList<BackpackItem>? Backpack, IReadOnlyList<BackpackItem>? Locker, string BlueprintsKey, IReadOnlyList<WishlistMaterialRow> Rows) _cachedWishlist;
+    private (IReadOnlyList<GalnetArticle>? Source, object[] Views) _cachedGalnetArticles;
+    private (IReadOnlyList<CargoItem>? Source, string Language, string[] States) _cachedCargoStates;
+    private (IReadOnlyList<MissionItem>? Source, string Language, int Minute, object[] Views) _cachedMissionsView;
+    private (IReadOnlyList<PassengerItem>? Source, string Language, string[] Expiries, string[] Types) _cachedPassengersView;
+    private (IReadOnlyList<BackpackItem>? Source, string Language, string[] Types) _cachedBackpackTypes;
+    private (MarketSnapshot? Market, OutfittingSnapshot? Outfitting, ShipyardSnapshot? Shipyard, ColonisationSnapshot? Colonisation, string Language, string MarketStatus, string OutfittingStatus, string ShipyardStatus, string ConstructionStatus, string ConstructionProgress) _cachedSnapshotStatuses;
     private X509Certificate2? _certificate;
     private WebAccessControl? _accessControl;
     private string[] _activeUrls = [];
@@ -178,7 +192,9 @@ public class WebServerService : IDisposable
         ArdentMarketService? ardentMarket = null,
         EdastroCanonnService? edastroCanonn = null,
         CommunitySyncService? communitySync = null,
-        AlertSpeechService? alertSpeech = null)
+        AlertSpeechService? alertSpeech = null,
+        FrontierCapiService? frontierCapi = null,
+        DiscordIntegrationService? discord = null)
     {
         _configService = configService;
         _fileWatcher = fileWatcher;
@@ -194,6 +210,8 @@ public class WebServerService : IDisposable
         _edastroCanonn = edastroCanonn;
         _communitySync = communitySync;
         _alertSpeech = alertSpeech;
+        _frontierCapi = frontierCapi;
+        _discord = discord;
 
         _fileWatcher.StateUpdated += OnShipStateUpdated;
         _bindingsService.BindingsUpdated += OnBindingsUpdated;
@@ -414,11 +432,14 @@ public class WebServerService : IDisposable
             string webDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Web");
             app.MapGet("/manifest.json", async context =>
             {
-                string path = Path.Combine(webDir, "manifest.json");
-                if (!File.Exists(path)) { context.Response.StatusCode = 404; return; }
+                if (_cachedManifestTemplate is null)
+                {
+                    string path = Path.Combine(webDir, "manifest.json");
+                    if (!File.Exists(path)) { context.Response.StatusCode = 404; return; }
+                    _cachedManifestTemplate = await File.ReadAllTextAsync(path, context.RequestAborted);
+                }
                 context.Response.ContentType = "application/manifest+json; charset=utf-8";
-                string text = await File.ReadAllTextAsync(path, context.RequestAborted);
-                text = text.Replace("#FF7100", _configService.Current.ThemeAccentHex ?? "#FF7100", StringComparison.OrdinalIgnoreCase);
+                string text = _cachedManifestTemplate.Replace("#FF7100", _configService.Current.ThemeAccentHex ?? "#FF7100", StringComparison.OrdinalIgnoreCase);
                 await context.Response.WriteAsync(text, context.RequestAborted);
             });
             app.MapGet("/sw.js", async context =>
@@ -647,7 +668,7 @@ public class WebServerService : IDisposable
             app.MapGet("/api/spansh/trade", async (HttpContext context) =>
             {
                 var st = _fileWatcher.State;
-                var (ok, hops, msg) = await _spanshSystemDataService.PlotTradeRouteAsync(st.CurrentSystem, st.StationName, st.CargoCapacity, st.Credits, 30, true);
+                var (ok, hops, msg) = await _spanshSystemDataService.PlotTradeRouteAsync(st.CurrentSystem, st.StationName, st.CargoCapacity, st.Credits, 30, st.CargoCapacity >= 200);
                 await WriteJsonAsync(context, new { success = ok, message = msg, hops }, camelCase: true);
             });
 
@@ -670,7 +691,7 @@ public class WebServerService : IDisposable
                     if (nextRes is not null)
                     {
                         commodity = nextRes.DisplayName;
-                        minSupply = Math.Max(1, nextRes.RequiredAmount - nextRes.ProvidedAmount);
+                        minSupply = Math.Min(Math.Max(1, nextRes.RequiredAmount - nextRes.ProvidedAmount), 500);
                     }
                 }
                 var (ok, results, msg) = await _spanshSystemDataService.SearchCommoditySupplierAsync(commodity, minSupply, true, st.CurrentSystem, st.StarPos);
@@ -878,10 +899,11 @@ public class WebServerService : IDisposable
                             _configService.Current.MiningTargetMinerals = targets.Trim();
                         int? minPct = JsonElementExtensions.GetInt(doc.RootElement, "minPercent");
                         if (minPct is not null)
-                            _configService.Current.MiningMinPercent = Math.Clamp(minPct.Value, 1, 90);
+                            _configService.Current.MiningMinPercent = Math.Clamp(minPct.Value, 1, 100);
                         _configService.Save();
                     }
                 }
+                await BroadcastStateAsync();
                 await WriteJsonAsync(context, new
                 {
                     success = true,
@@ -1209,18 +1231,6 @@ public class WebServerService : IDisposable
         await StartAsync();
     }
 
-    private DeckBindingView[] GetDeckBindings(string language)
-    {
-        var source = _bindingsService.Bindings;
-        var cached = _cachedDeckBindings;
-        if (ReferenceEquals(cached.Source, source) && string.Equals(cached.Language, language, StringComparison.Ordinal))
-            return cached.Views;
-
-        var views = source.Select(binding => DeckTranslations.Present(binding, language)).ToArray();
-        _cachedDeckBindings = (source, language, views);
-        return views;
-    }
-
     private SpanshSystemDisplay GetSpanshView(string language)
     {
         var source = _spanshSystemDataService.State;
@@ -1245,16 +1255,60 @@ public class WebServerService : IDisposable
         return view;
     }
 
+    private object? GetCachedSystemMap(IReadOnlyList<ExplorationBodyItem> bodies, string currentSystem)
+    {
+        var cached = _cachedSystemMap;
+        if (ReferenceEquals(cached.Source, bodies) && string.Equals(cached.System, currentSystem, StringComparison.Ordinal))
+            return cached.View;
+
+        object? view = BuildSystemMapWebView(bodies, currentSystem);
+        _cachedSystemMap = (bodies, currentSystem, view);
+        return view;
+    }
+
+    private object? GetCachedLoadoutLinks(string? loadoutJson)
+    {
+        if (string.IsNullOrWhiteSpace(loadoutJson))
+            return null;
+
+        var cached = _cachedLoadoutLinks;
+        if (string.Equals(cached.LoadoutJson, loadoutJson, StringComparison.Ordinal))
+            return cached.Links;
+
+        object links = new
+        {
+            edsyUrl = ShipLoadoutExportService.BuildEdsyUrl(loadoutJson),
+            coriolisUrl = ShipLoadoutExportService.BuildCoriolisUrl(loadoutJson)
+        };
+        _cachedLoadoutLinks = (loadoutJson, links);
+        return links;
+    }
+
+    private IReadOnlyList<WishlistMaterialRow> GetCachedEngineeringWishlist(IReadOnlyList<string> blueprints, ShipState state)
+    {
+        string key = blueprints.Count == 0 ? "" : string.Join(",", blueprints);
+        var cached = _cachedWishlist;
+        if (cached.Rows is not null &&
+            ReferenceEquals(cached.Mats, state.MaterialsInventory) &&
+            ReferenceEquals(cached.Backpack, state.BackpackInventory) &&
+            ReferenceEquals(cached.Locker, state.ShipLockerInventory) &&
+            string.Equals(cached.BlueprintsKey, key, StringComparison.Ordinal))
+            return cached.Rows;
+
+        var rows = EngineeringWishlistService.Evaluate(blueprints, state);
+        _cachedWishlist = (state.MaterialsInventory, state.BackpackInventory, state.ShipLockerInventory, key, rows);
+        return rows;
+    }
+
     private object BuildFullPayload()
     {
         string language = _configService.Current.InterfaceLanguage;
         var state = _fileWatcher.State;
+        var blueprints = _configService.Current.EngineeringWishlistBlueprints ?? new List<string>();
         return new
         {
             state,
             headerModules = HeaderTelemetry.Present(state, _configService.Current, language),
-            bindings = _bindingsService.Bindings,
-            deckBindings = GetDeckBindings(language),
             deckTranslations = DeckTranslations.ForLanguage(language),
             hideUnassignedBindings = _configService.Current.HideUnassignedBindings,
             hideNavigationMenuText = _configService.Current.HideNavigationMenuText,
@@ -1294,9 +1348,11 @@ public class WebServerService : IDisposable
                 state,
                 _spanshSystemDataService,
                 _communitySync,
+                frontierCapi: _frontierCapi,
                 eliteBgs: _eliteBgsWatchlist,
                 ardent: _ardentMarket,
-                edastroCanonn: _edastroCanonn),
+                edastroCanonn: _edastroCanonn,
+                discord: _discord),
             inaraSystemUrl = _configService.Current.EnableInaraSync && !string.IsNullOrWhiteSpace(state.CurrentSystem) && state.CurrentSystem != "---"
                 ? CommunitySyncService.BuildInaraDeepLink("system", state.CurrentSystem)
                 : "",
@@ -1307,8 +1363,8 @@ public class WebServerService : IDisposable
             deckTabs = DeckLayoutService.BuildResolvedTabs(_configService.Current, _bindingsService, state, language, _configService.Current.HideUnassignedBindings),
             radioStatus = CockpitRadio?.GetStatus(),
             radioStations = CockpitRadio?.GetAllStations(),
-            engineeringCatalog = EngineeringWishlistService.Catalog.Select(static b => new { b.Id, b.DisplayName }).ToArray(),
-            engineeringWishlistBlueprints = _configService.Current.EngineeringWishlistBlueprints ?? new List<string>(),
+            engineeringCatalog = StaticEngineeringCatalog,
+            engineeringWishlistBlueprints = blueprints,
             carrierView = GetCarrierView(state.Carrier, language),
             languageSettings = LanguageSettingsTranslations.ForLanguage(language),
             presetName = _bindingsService.UsingDefaultBindings ? DeckTranslations.ForLanguage(language)["defaultProfile"] : _bindingsService.ActivePresetName,
@@ -1318,23 +1374,29 @@ public class WebServerService : IDisposable
             landingPad = state.AssignedLandingPad is int pad && pad > 0
                 ? BuildLandingPadWebView(pad, state.AssignedLandingStation, state.AssignedLandingStationType, state.CurrentSystem, language)
                 : null,
-            systemMap = BuildSystemMapWebView(state.ExplorationBodies, state.CurrentSystem),
-            loadoutLinks = string.IsNullOrWhiteSpace(state.LastLoadoutJson)
-                ? null
-                : new
-                {
-                    edsyUrl = ShipLoadoutExportService.BuildEdsyUrl(state.LastLoadoutJson),
-                    coriolisUrl = ShipLoadoutExportService.BuildCoriolisUrl(state.LastLoadoutJson)
-                },
-            engineeringWishlist = EngineeringWishlistService.Evaluate(_configService.Current.EngineeringWishlistBlueprints ?? [], state),
-            galnetArticles = _galnetService.Articles.Take(15).Select(static a => new
-            {
-                a.Title,
-                Date = a.DateDisplay,
-                a.Body
-            }).ToArray(),
+            systemMap = GetCachedSystemMap(state.ExplorationBodies, state.CurrentSystem),
+            loadoutLinks = GetCachedLoadoutLinks(state.LastLoadoutJson),
+            engineeringWishlist = GetCachedEngineeringWishlist(blueprints, state),
+            galnetArticles = GetCachedGalnetArticles(),
             appVersion = HttpClientHeaderDefaults.ProductVersion
         };
+    }
+
+    private object[] GetCachedGalnetArticles()
+    {
+        var source = _galnetService.Articles;
+        var cached = _cachedGalnetArticles;
+        if (cached.Views is not null && ReferenceEquals(cached.Source, source))
+            return cached.Views;
+
+        var views = source.Take(15).Select(static a => (object)new
+        {
+            a.Title,
+            Date = a.DateDisplay,
+            a.Body
+        }).ToArray();
+        _cachedGalnetArticles = (source, views);
+        return views;
     }
 
     private static object BuildLandingPadWebView(int pad, string station, string stationType, string currentSystem, string language)
@@ -1384,7 +1446,7 @@ public class WebServerService : IDisposable
                 isLandable = n.IsLandable,
                 isSpanshOnly = n.IsSpanshOnly,
                 shortLabel = n.ShortLabel,
-                badgeText = n.BadgeText,
+                starType = n.Body.StarType,
                 parentIndex = n.ParentIndex,
                 starBandIndex = n.StarBandIndex,
                 indentLevel = n.IndentLevel,
@@ -1443,24 +1505,84 @@ public class WebServerService : IDisposable
             _cachedJournalEvents = journalCache;
         }
 
+        var cargoCache = _cachedCargoStates;
+        if (!ReferenceEquals(cargoCache.Source, state.CargoInventory) ||
+            !string.Equals(cargoCache.Language, language, StringComparison.Ordinal))
+        {
+            cargoCache = (state.CargoInventory, language,
+                state.CargoInventory.Select(item => OperationsTranslations.CargoState(item, language)).ToArray());
+            _cachedCargoStates = cargoCache;
+        }
+
+        int currentMinute = DateTimeOffset.UtcNow.Minute;
+        var missionsCache = _cachedMissionsView;
+        if (!ReferenceEquals(missionsCache.Source, state.ActiveMissions) ||
+            !string.Equals(missionsCache.Language, language, StringComparison.Ordinal) ||
+            (state.ActiveMissions.Count > 0 && missionsCache.Minute != currentMinute))
+        {
+            missionsCache = (state.ActiveMissions, language, currentMinute,
+                state.ActiveMissions.Select(item => (object)new
+                {
+                    name = OperationsTranslations.MissionName(item, language),
+                    expiry = OperationsTranslations.Expiry(item.Expiry, language),
+                    remaining = OperationsTranslations.Remaining(item.Expiry, language)
+                }).ToArray());
+            _cachedMissionsView = missionsCache;
+        }
+
+        var passengersCache = _cachedPassengersView;
+        if (!ReferenceEquals(passengersCache.Source, state.PassengerManifest) ||
+            !string.Equals(passengersCache.Language, language, StringComparison.Ordinal))
+        {
+            passengersCache = (state.PassengerManifest, language,
+                state.PassengerManifest.Select(item => OperationsTranslations.Expiry(item.Expiry, language)).ToArray(),
+                state.PassengerManifest.Select(item => OperationsTranslations.PassengerType(item, language)).ToArray());
+            _cachedPassengersView = passengersCache;
+        }
+
+        var backpackCache = _cachedBackpackTypes;
+        if (!ReferenceEquals(backpackCache.Source, state.BackpackInventory) ||
+            !string.Equals(backpackCache.Language, language, StringComparison.Ordinal))
+        {
+            backpackCache = (state.BackpackInventory, language,
+                state.BackpackInventory.Select(item => OperationsTranslations.BackpackType(item, language)).ToArray());
+            _cachedBackpackTypes = backpackCache;
+        }
+
+        var snapStatuses = _cachedSnapshotStatuses;
+        if (!ReferenceEquals(snapStatuses.Market, state.Market) ||
+            !ReferenceEquals(snapStatuses.Outfitting, state.Outfitting) ||
+            !ReferenceEquals(snapStatuses.Shipyard, state.Shipyard) ||
+            !ReferenceEquals(snapStatuses.Colonisation, state.Colonisation) ||
+            !string.Equals(snapStatuses.Language, language, StringComparison.Ordinal))
+        {
+            snapStatuses = (
+                state.Market,
+                state.Outfitting,
+                state.Shipyard,
+                state.Colonisation,
+                language,
+                OperationsTranslations.Snapshot(state.Market.Timestamp, state.Market.StationName, state.Market.StarSystem, "marketUnavailable", language),
+                OperationsTranslations.Snapshot(state.Outfitting.Timestamp, state.Outfitting.StationName, state.Outfitting.StarSystem, "outfittingUnavailable", language),
+                OperationsTranslations.Snapshot(state.Shipyard.Timestamp, state.Shipyard.StationName, state.Shipyard.StarSystem, "shipyardUnavailable", language),
+                OperationsTranslations.Construction(state.Colonisation, language),
+                string.Format(OperationsTranslations.ForLanguage(language)["progress"], progress));
+            _cachedSnapshotStatuses = snapStatuses;
+        }
+
         return new
         {
-            cargoStates = state.CargoInventory.Select(item => OperationsTranslations.CargoState(item, language)).ToArray(),
-            missions = state.ActiveMissions.Select(item => new
-            {
-                name = OperationsTranslations.MissionName(item, language),
-                expiry = OperationsTranslations.Expiry(item.Expiry, language),
-                remaining = OperationsTranslations.Remaining(item.Expiry, language)
-            }).ToArray(),
-            passengerExpiries = state.PassengerManifest.Select(item => OperationsTranslations.Expiry(item.Expiry, language)).ToArray(),
-            passengerTypes = state.PassengerManifest.Select(item => OperationsTranslations.PassengerType(item, language)).ToArray(),
-            backpackTypes = state.BackpackInventory.Select(item => OperationsTranslations.BackpackType(item, language)).ToArray(),
+            cargoStates = cargoCache.States,
+            missions = missionsCache.Views,
+            passengerExpiries = passengersCache.Expiries,
+            passengerTypes = passengersCache.Types,
+            backpackTypes = backpackCache.Types,
             marketFlags = marketFlagsCache.Flags,
-            marketStatus = OperationsTranslations.Snapshot(state.Market.Timestamp, state.Market.StationName, state.Market.StarSystem, "marketUnavailable", language),
-            outfittingStatus = OperationsTranslations.Snapshot(state.Outfitting.Timestamp, state.Outfitting.StationName, state.Outfitting.StarSystem, "outfittingUnavailable", language),
-            shipyardStatus = OperationsTranslations.Snapshot(state.Shipyard.Timestamp, state.Shipyard.StationName, state.Shipyard.StarSystem, "shipyardUnavailable", language),
-            constructionStatus = OperationsTranslations.Construction(state.Colonisation, language),
-            constructionProgress = string.Format(OperationsTranslations.ForLanguage(language)["progress"], progress),
+            marketStatus = snapStatuses.MarketStatus,
+            outfittingStatus = snapStatuses.OutfittingStatus,
+            shipyardStatus = snapStatuses.ShipyardStatus,
+            constructionStatus = snapStatuses.ConstructionStatus,
+            constructionProgress = snapStatuses.ConstructionProgress,
             explorationBodies = explorationCache.Views,
             profile = profileCache.Views,
             journalEvents = journalCache.Views

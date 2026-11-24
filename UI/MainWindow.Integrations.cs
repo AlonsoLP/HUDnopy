@@ -147,6 +147,7 @@ public partial class MainWindow
         catch (System.Net.NetworkInformation.NetworkInformationException ex)
         {
             CmbWebVpnInterface.ItemsSource = null;
+            AppDiagnosticsLogger.Warn("WebHUD.VPN", $"Failed to enumerate VPN interfaces: {ex.Message}");
             TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["webError"], ex.Message);
         }
         finally
@@ -160,36 +161,37 @@ public partial class MainWindow
         LstWebUrls.Height = urlCount == 0 ? 0 : double.NaN;
     }
 
-    private async void ChkEnableWebServer_Click(object sender, RoutedEventArgs e)
-    {
-        try
+    private async void ChkEnableWebServer_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Toggle Web HUD Server", async () =>
         {
-            _configService.SetWebServerEnabled(ChkEnableWebServer.IsChecked == true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        {
-            ChkEnableWebServer.IsChecked = _configService.Current.AutoStartWebServer;
-            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["webSaveError"], ex.Message);
-            return;
-        }
+            try
+            {
+                _configService.SetWebServerEnabled(ChkEnableWebServer.IsChecked == true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+                ChkEnableWebServer.IsChecked = _configService.Current.AutoStartWebServer;
+                TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["webSaveError"], ex.Message);
+                return;
+            }
 
-        if (_configService.Current.AutoStartWebServer)
-        {
-            string? mode = CmbWebAccessMode.SelectedValue as string;
-            string vpnId = CmbWebVpnInterface.SelectedValue as string ?? "";
-            if (mode != _configService.Current.WebAccessMode ||
-                (mode == "vpn" && (vpnId.Length == 0 || vpnId != _configService.Current.WebVpnInterfaceId)))
-                await ApplyWebSettingsAsync(useEditedPort: false);
+            if (_configService.Current.AutoStartWebServer)
+            {
+                string? mode = CmbWebAccessMode.SelectedValue as string;
+                string vpnId = CmbWebVpnInterface.SelectedValue as string ?? "";
+                if (mode != _configService.Current.WebAccessMode ||
+                    (mode == "vpn" && (vpnId.Length == 0 || vpnId != _configService.Current.WebVpnInterfaceId)))
+                    await ApplyWebSettingsAsync(useEditedPort: false);
+                else
+                    await _webServer.StartAsync();
+            }
             else
-                await _webServer.StartAsync();
-        }
-        else
-        {
-            await _webServer.StopAsync();
-        }
+            {
+                await _webServer.StopAsync();
+            }
 
-        RefreshWebServerUi();
-    }
+            RefreshWebServerUi();
+        });
 
 
     private void ChkEnableEddnUpload_Click(object sender, RoutedEventArgs e)
@@ -307,43 +309,45 @@ public partial class MainWindow
         RefreshServiceHealthUi();
     }
 
-    private async void BtnFrontierAuthorize_Click(object sender, RoutedEventArgs e)
-    {
-        SaveFrontierCapiConfig();
-        BtnFrontierAuthorize.IsEnabled = false;
-        try
+    private async void BtnFrontierAuthorize_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Frontier cAPI Authorize", async () =>
         {
-            var (ok, msg) = await _frontierCapi.AuthorizeAsync();
-            TxtStatusBarLeft.Text = msg;
-            RefreshFrontierCapiUi();
-            if (ok)
+            SaveFrontierCapiConfig();
+            BtnFrontierAuthorize.IsEnabled = false;
+            try
             {
-                var (_, syncSummary) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
-                TxtStatusBarLeft.Text = syncSummary;
+                var (ok, msg) = await _frontierCapi.AuthorizeAsync();
+                TxtStatusBarLeft.Text = msg;
+                RefreshFrontierCapiUi();
+                if (ok)
+                {
+                    var (_, syncSummary) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
+                    TxtStatusBarLeft.Text = syncSummary;
+                    RefreshFrontierCapiUi();
+                }
+            }
+            finally
+            {
+                BtnFrontierAuthorize.IsEnabled = true;
+            }
+        });
+
+    private async void BtnFrontierSyncNow_Click(object sender, RoutedEventArgs e) =>
+        await RunUiAsync("Frontier cAPI Sync", async () =>
+        {
+            SaveFrontierCapiConfig();
+            BtnFrontierSyncNow.IsEnabled = false;
+            try
+            {
+                var (_, summary) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
+                TxtStatusBarLeft.Text = summary;
                 RefreshFrontierCapiUi();
             }
-        }
-        finally
-        {
-            BtnFrontierAuthorize.IsEnabled = true;
-        }
-    }
-
-    private async void BtnFrontierSyncNow_Click(object sender, RoutedEventArgs e)
-    {
-        SaveFrontierCapiConfig();
-        BtnFrontierSyncNow.IsEnabled = false;
-        try
-        {
-            var (_, summary) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
-            TxtStatusBarLeft.Text = summary;
-            RefreshFrontierCapiUi();
-        }
-        finally
-        {
-            BtnFrontierSyncNow.IsEnabled = _frontierCapi.IsConnected;
-        }
-    }
+            finally
+            {
+                BtnFrontierSyncNow.IsEnabled = _frontierCapi.IsConnected;
+            }
+        });
 
     private void BtnFrontierDisconnect_Click(object sender, RoutedEventArgs e)
     {
@@ -552,7 +556,11 @@ public partial class MainWindow
                 UseShellExecute = true
             });
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Warn("Inara", $"Failed to open Inara commander profile URL: {ex.Message}");
+            SetStatusBarMessage($"⚠ {ex.Message}");
+        }
     }
 
     private void BtnOpenInaraSystem_Click(object sender, RoutedEventArgs e)
@@ -570,7 +578,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            TxtStatusBarLeft.Text = ex.Message;
+            AppDiagnosticsLogger.Warn("Inara", $"Failed to open Inara system URL: {ex.Message}");
+            SetStatusBarMessage($"⚠ {ex.Message}");
         }
     }
 

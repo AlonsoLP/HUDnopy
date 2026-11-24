@@ -130,6 +130,8 @@ public static partial class AppDiagnosticsLogger
         if (!string.IsNullOrWhiteSpace(Environment.UserName) && Environment.UserName.Length >= 3)
             redacted = redacted.Replace($"\\{Environment.UserName}\\", "\\[USER]\\", StringComparison.OrdinalIgnoreCase)
                                .Replace($"/{Environment.UserName}/", "/[USER]/", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(Environment.MachineName) && Environment.MachineName.Length >= 3)
+            redacted = redacted.Replace(Environment.MachineName, "[HOST]", StringComparison.OrdinalIgnoreCase);
         return redacted;
     }
 

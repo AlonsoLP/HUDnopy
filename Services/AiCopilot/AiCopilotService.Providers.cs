@@ -132,6 +132,7 @@ public sealed partial class AiCopilotService
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("AI.Whisper", $"Cloud Whisper transcription failed: {ex.Message}");
             return (false, $"Error Whisper: {ex.Message}");
         }
     }
@@ -193,6 +194,7 @@ public sealed partial class AiCopilotService
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("AI.WindowsSpeech", $"Windows Speech recognition failed: {ex.Message}");
             return (false, $"Reconocimiento local no disponible: {ex.Message}");
         }
     }
@@ -326,6 +328,7 @@ public sealed partial class AiCopilotService
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("AI.OpenAI", $"Provider request failed ({baseUrl}): {ex.Message}");
             return (false, $"Error de conexión IA: {ex.Message}");
         }
     }
@@ -442,6 +445,7 @@ public sealed partial class AiCopilotService
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("AI.Gemini", $"{prefix} stream failed: {ex.Message}");
             return (false, $"Error de conexión {prefix}: {ex.Message}");
         }
     }
@@ -501,8 +505,9 @@ public sealed partial class AiCopilotService
                 resized?.Dispose();
             }
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("AI.Vision", $"Primary screen capture failed: {ex.Message}");
             return null;
         }
     }
@@ -597,6 +602,7 @@ public sealed partial class AiCopilotService
         }
         catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("AI.Vision", $"Vision provider request failed: {ex.Message}");
             return (false, $"Error de visión IA: {ex.Message}");
         }
     }
@@ -614,7 +620,6 @@ public sealed partial class AiCopilotService
     {
         private readonly StringBuilder _buffer = new();
         private bool _suppressed;
-        private bool _hitActionTag;
         private bool _sawFirstToken;
         private int _sentenceCount;
 
@@ -627,11 +632,24 @@ public sealed partial class AiCopilotService
                 _sawFirstToken = true;
                 onFirstToken?.Invoke();
             }
-            if (_suppressed || _hitActionTag || string.IsNullOrEmpty(chunk))
+            if (_suppressed || string.IsNullOrEmpty(chunk))
                 return;
 
             _buffer.Append(chunk);
             string current = _buffer.ToString();
+
+            // Strip any completed [[ACTION:...]] tags in-flight so prose after an action tag still streams and speaks
+            if (current.Contains("ACTION", StringComparison.OrdinalIgnoreCase))
+            {
+                string cleaned = ActionTagRegex().Replace(current, "");
+                if (!string.Equals(cleaned, current, StringComparison.Ordinal))
+                {
+                    _buffer.Clear();
+                    _buffer.Append(cleaned);
+                    current = cleaned;
+                }
+            }
+
             string trimmedStart = current.TrimStart();
 
             // Wait until we have enough characters to be sure it isn't a leading control tag
@@ -650,7 +668,7 @@ public sealed partial class AiCopilotService
             int queryIdx = current.IndexOf("[[QUERY", StringComparison.OrdinalIgnoreCase);
             if (queryIdx >= 0)
             {
-                string beforeQuery = current[..queryIdx].Trim();
+                string beforeQuery = StripInternalTags(current[..queryIdx]);
                 if (!string.IsNullOrWhiteSpace(beforeQuery))
                     EmitSentence(beforeQuery);
                 _buffer.Clear();
@@ -658,26 +676,17 @@ public sealed partial class AiCopilotService
                 return;
             }
 
-            int actionIdx = current.IndexOf("[[ACTION", StringComparison.OrdinalIgnoreCase);
-            if (actionIdx >= 0)
-            {
-                string beforeAction = current[..actionIdx].Trim();
-                if (!string.IsNullOrWhiteSpace(beforeAction))
-                    EmitSentence(beforeAction);
-                _buffer.Clear();
-                _hitActionTag = true;
-                return;
-            }
-
-            // Emit completed sentences as soon as a sentence terminator arrives
+            // Emit completed sentences as soon as a sentence terminator arrives, holding back any unclosed '[' tag
             while (true)
             {
                 string buf = _buffer.ToString();
-                int splitIdx = FindSentenceSplitIndex(buf);
+                int openBracketIdx = buf.IndexOf('[');
+                string searchable = openBracketIdx >= 0 ? buf[..openBracketIdx] : buf;
+                int splitIdx = FindSentenceSplitIndex(searchable);
                 if (splitIdx < 0)
                     break;
 
-                string sentence = buf[..(splitIdx + 1)].Trim();
+                string sentence = StripInternalTags(buf[..(splitIdx + 1)]);
                 _buffer.Remove(0, splitIdx + 1);
                 if (!string.IsNullOrWhiteSpace(sentence))
                     EmitSentence(sentence);
@@ -686,12 +695,12 @@ public sealed partial class AiCopilotService
 
         public void FlushRemaining()
         {
-            if (_suppressed || _hitActionTag)
+            if (_suppressed)
                 return;
 
             string rem = _buffer.ToString();
             _buffer.Clear();
-            rem = DoubleBracketTagRegex().Replace(rem, "").Trim();
+            rem = StripInternalTags(rem);
             if (!string.IsNullOrWhiteSpace(rem) &&
                 !rem.Contains("[[IGNORE]]", StringComparison.OrdinalIgnoreCase) &&
                 !rem.Contains("[[SILENCE]]", StringComparison.OrdinalIgnoreCase))
@@ -734,17 +743,38 @@ public sealed partial class AiCopilotService
         }
     }
 
-    private static readonly Regex RxSpeechMarkdown = new(@"[*_`#]+", RegexOptions.Compiled);
-    private static readonly Regex RxSpeechSymbols = new(@"[⚡🛰📝⚠🔍✨📖🧹⏹➤•·—|]", RegexOptions.Compiled);
-    private static readonly Regex RxSpeechThousandsSep = new(@"(?<=\d)[.,](?=\d{3}(?:\b|[^\d]))", RegexOptions.Compiled);
-    private static readonly Regex RxSpeechFractionTons = new(@"(\d+(?:[.,]\d+)?)\s*/\s*(\d+(?:[.,]\d+)?)\s*t\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxSpeechCredits = new(@"(\d+(?:[.,]\d+)?)\s*CR\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxSpeechCreditsPerHour = new(@"(\d+(?:[.,]\d+)?)\s*CR/h\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxSpeechTons = new(@"(\d+(?:[.,]\d+)?)\s*t\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxSpeechLightYears = new(@"(\d+(?:[.,]\d+)?)\s*(?:AL|LY)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxSpeechLightSeconds = new(@"(\d+(?:[.,]\d+)?)\s*LS\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxSpeechCmdr = new(@"\bCMDR\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex RxSpeechMultiSpace = new(@"\s{2,}", RegexOptions.Compiled);
+    [GeneratedRegex(@"[*_`#]+")]
+    private static partial Regex RxSpeechMarkdown();
+
+    [GeneratedRegex(@"[⚡🛰📝⚠🔍✨📖🧹⏹➤•·—|]")]
+    private static partial Regex RxSpeechSymbols();
+
+    [GeneratedRegex(@"(?<=\d)[.,](?=\d{3}(?:\b|[^\d]))")]
+    private static partial Regex RxSpeechThousandsSep();
+
+    [GeneratedRegex(@"(\d+(?:[.,]\d+)?)\s*/\s*(\d+(?:[.,]\d+)?)\s*t\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RxSpeechFractionTons();
+
+    [GeneratedRegex(@"(\d+(?:[.,]\d+)?)\s*CR\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RxSpeechCredits();
+
+    [GeneratedRegex(@"(\d+(?:[.,]\d+)?)\s*CR/h\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RxSpeechCreditsPerHour();
+
+    [GeneratedRegex(@"(\d+(?:[.,]\d+)?)\s*t\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RxSpeechTons();
+
+    [GeneratedRegex(@"(\d+(?:[.,]\d+)?)\s*(?:AL|LY)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RxSpeechLightYears();
+
+    [GeneratedRegex(@"(\d+(?:[.,]\d+)?)\s*LS\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RxSpeechLightSeconds();
+
+    [GeneratedRegex(@"\bCMDR\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RxSpeechCmdr();
+
+    [GeneratedRegex(@"\s{2,}")]
+    private static partial Regex RxSpeechMultiSpace();
 
     internal static string NormalizeTextForSpeech(string text, string language)
     {
@@ -766,17 +796,17 @@ public sealed partial class AiCopilotService
         string cmdrWord = isEs || isPt ? "Comandante" : isFr ? "Commandant" : isDe ? "Kommandant" : isRu ? "Командир" : "Commander";
 
         string s = text;
-        s = RxSpeechMarkdown.Replace(s, "");
-        s = RxSpeechSymbols.Replace(s, " ");
-        s = RxSpeechThousandsSep.Replace(s, "");
-        s = RxSpeechFractionTons.Replace(s, $"$1 {ofWord} $2 {tonsWord}");
-        s = RxSpeechCreditsPerHour.Replace(s, $"$1 {creditsWord} {perHourWord}");
-        s = RxSpeechCredits.Replace(s, $"$1 {creditsWord}");
-        s = RxSpeechTons.Replace(s, $"$1 {tonsWord}");
-        s = RxSpeechLightYears.Replace(s, $"$1 {lyWord}");
-        s = RxSpeechLightSeconds.Replace(s, $"$1 {lsWord}");
-        s = RxSpeechCmdr.Replace(s, cmdrWord);
-        s = RxSpeechMultiSpace.Replace(s, " ").Trim();
+        s = RxSpeechMarkdown().Replace(s, "");
+        s = RxSpeechSymbols().Replace(s, " ");
+        s = RxSpeechThousandsSep().Replace(s, "");
+        s = RxSpeechFractionTons().Replace(s, $"$1 {ofWord} $2 {tonsWord}");
+        s = RxSpeechCreditsPerHour().Replace(s, $"$1 {creditsWord} {perHourWord}");
+        s = RxSpeechCredits().Replace(s, $"$1 {creditsWord}");
+        s = RxSpeechTons().Replace(s, $"$1 {tonsWord}");
+        s = RxSpeechLightYears().Replace(s, $"$1 {lyWord}");
+        s = RxSpeechLightSeconds().Replace(s, $"$1 {lsWord}");
+        s = RxSpeechCmdr().Replace(s, cmdrWord);
+        s = RxSpeechMultiSpace().Replace(s, " ").Trim();
         return s;
     }
 
@@ -799,6 +829,10 @@ public sealed partial class AiCopilotService
             catch (OperationCanceledException)
             {
                 // Application shutting down.
+            }
+            catch (Exception ex)
+            {
+                AppDiagnosticsLogger.Warn("AI.Timer", $"Scheduled COVAS voice timer error: {ex.Message}");
             }
         }, token);
     }

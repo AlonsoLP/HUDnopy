@@ -67,7 +67,7 @@ public sealed class ApplicationServices
         {
             OfflineWhisperStt = WhisperStt
         };
-        WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot, GalaxyStatus, Galnet, EliteBgsWatchlist, ArdentMarket, EdastroCanonn, CommunitySync, AlertSpeech)
+        WebServer = new WebServerService(Configuration, ShipState, Bindings, InputSimulator, Alerts, SpanshSystemData, AiCopilot, GalaxyStatus, Galnet, EliteBgsWatchlist, ArdentMarket, EdastroCanonn, CommunitySync, AlertSpeech, FrontierCapi, Discord)
         {
             CockpitRadio = CockpitRadio
         };
