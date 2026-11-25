@@ -63,15 +63,20 @@ public sealed class HudOverlayWindow : Window
         SizeToContent = SizeToContent.WidthAndHeight;
         Opacity = Math.Clamp(configService.Current.OverlayOpacity, 0.25, 1.0);
 
-        if (configService.Current.OverlayLeft.HasValue && configService.Current.OverlayTop.HasValue)
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        if (configService.Current.OverlayLeft is double savedLeft &&
+            configService.Current.OverlayTop is double savedTop &&
+            double.IsFinite(savedLeft) && double.IsFinite(savedTop) &&
+            savedLeft >= SystemParameters.VirtualScreenLeft - 40 &&
+            savedLeft <= SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - 80 &&
+            savedTop >= SystemParameters.VirtualScreenTop - 20 &&
+            savedTop <= SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - 60)
         {
-            WindowStartupLocation = WindowStartupLocation.Manual;
-            Left = configService.Current.OverlayLeft.Value;
-            Top = configService.Current.OverlayTop.Value;
+            Left = savedLeft;
+            Top = savedTop;
         }
         else
         {
-            WindowStartupLocation = WindowStartupLocation.Manual;
             Left = 24;
             Top = 24;
         }
@@ -196,7 +201,13 @@ public sealed class HudOverlayWindow : Window
         }
         else if (s.NavRoute.Count > 1)
         {
-            context = $"🧭 NEXT: {s.NavRoute[1].StarSystem} ({s.NavRoute.Count - 1} jumps)";
+            int curIdx = s.NavRoute.FindIndex(static w => w.IsCurrentSystem);
+            var nextWp = curIdx >= 0 && curIdx + 1 < s.NavRoute.Count
+                ? s.NavRoute[curIdx + 1]
+                : s.NavRoute.FirstOrDefault(static w => !w.IsCurrentSystem);
+            int remJumps = Math.Max(0, s.NavRoute.Count - 1 - Math.Max(0, curIdx));
+            if (nextWp is not null && remJumps > 0)
+                context = $"🧭 NEXT: {nextWp.StarSystem} ({remJumps} jumps)";
         }
 
         _txtContext.Text = context;

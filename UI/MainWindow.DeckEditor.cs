@@ -176,7 +176,7 @@ public partial class MainWindow
                         _deckConfirmPendingUtc[captured.Id] = now.AddSeconds(2.5);
                         capturedLbl.Text = "⚠ PULSA OTRA VEZ";
                         capturedBtn.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68));
-                        TxtStatusBarLeft.Text = $"⚠ Confirmar acción: pulsa '{captured.Label}' otra vez en 2.5 s.";
+                        SetStatusBarMessage($"⚠ Confirmar acción: pulsa '{captured.Label}' otra vez en 2.5 s.");
                         _ = Task.Delay(2600).ContinueWith(_ => Dispatcher.BeginInvoke(() =>
                         {
                             if (_deckConfirmPendingUtc.TryGetValue(captured.Id, out var exp) && DateTimeOffset.UtcNow > exp)
@@ -191,8 +191,8 @@ public partial class MainWindow
                     capturedLbl.Text = captured.Label;
                 }
 
-                var (_, msg) = await _inputSimulator.ExecuteActionAsync(captured.ActionId);
-                TxtStatusBarLeft.Text = msg;
+                var (ok, msg) = await _inputSimulator.ExecuteActionAsync(captured.ActionId);
+                SetStatusBarMessage(ok ? $"✓ {msg}" : $"⚠ {msg}");
             });
 
             DeckButtonsWrapPanel.Children.Add(btn);

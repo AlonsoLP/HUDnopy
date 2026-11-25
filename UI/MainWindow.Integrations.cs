@@ -148,7 +148,7 @@ public partial class MainWindow
         {
             CmbWebVpnInterface.ItemsSource = null;
             AppDiagnosticsLogger.Warn("WebHUD.VPN", $"Failed to enumerate VPN interfaces: {ex.Message}");
-            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["webError"], ex.Message);
+            SetStatusBarMessage($"⚠ {string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["webError"], ex.Message)}");
         }
         finally
         {
@@ -171,7 +171,7 @@ public partial class MainWindow
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
             {
                 ChkEnableWebServer.IsChecked = _configService.Current.AutoStartWebServer;
-                TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["webSaveError"], ex.Message);
+                SetStatusBarMessage($"⚠ {string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["webSaveError"], ex.Message)}");
                 return;
             }
 
@@ -252,15 +252,15 @@ public partial class MainWindow
         _configService.Current.InaraApiKey = TxtInaraApiKey.Text.Trim();
         _configService.Save();
         RefreshCommunitySyncStatus();
-        TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["communitySyncSaved"];
+        SetStatusBarMessage($"✓ {SettingsTranslations.ForLanguage(_uiLanguage)["communitySyncSaved"]}");
     }
 
     private async void BtnTestCommunitySync_Click(object sender, RoutedEventArgs e) =>
         await RunUiAsync("Community Sync Test", async () =>
         {
             BtnSaveCommunitySync_Click(sender, e);
-            var (_, summary) = await _communitySync.SyncCommanderAsync();
-            TxtStatusBarLeft.Text = summary;
+            var (ok, summary) = await _communitySync.SyncCommanderAsync();
+            SetStatusBarMessage(ok ? $"✓ {summary}" : $"⚠ {summary}");
         });
 
     private void RefreshCommunitySyncStatus()
@@ -317,12 +317,12 @@ public partial class MainWindow
             try
             {
                 var (ok, msg) = await _frontierCapi.AuthorizeAsync();
-                TxtStatusBarLeft.Text = msg;
+                SetStatusBarMessage(ok ? $"✓ {msg}" : $"⚠ {msg}");
                 RefreshFrontierCapiUi();
                 if (ok)
                 {
-                    var (_, syncSummary) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
-                    TxtStatusBarLeft.Text = syncSummary;
+                    var (syncOk, syncSummary) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
+                    SetStatusBarMessage(syncOk ? $"✓ {syncSummary}" : $"⚠ {syncSummary}");
                     RefreshFrontierCapiUi();
                 }
             }
@@ -339,8 +339,8 @@ public partial class MainWindow
             BtnFrontierSyncNow.IsEnabled = false;
             try
             {
-                var (_, summary) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
-                TxtStatusBarLeft.Text = summary;
+                var (ok, summary) = await _frontierCapi.SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked);
+                SetStatusBarMessage(ok ? $"✓ {summary}" : $"⚠ {summary}");
                 RefreshFrontierCapiUi();
             }
             finally
@@ -353,7 +353,7 @@ public partial class MainWindow
     {
         _frontierCapi.Disconnect();
         RefreshFrontierCapiUi();
-        TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["frontierDisconnected"];
+        SetStatusBarMessage(SettingsTranslations.ForLanguage(_uiLanguage)["frontierDisconnected"]);
     }
 
     private void UpdateFrontierCapiDataUi(ShipState s)
@@ -512,17 +512,63 @@ public partial class MainWindow
         _configService.Save();
     }
 
-    private async Task RunUiAsync(string actionName, Func<Task> action)
+    private void RunUi(string actionName, Action action, bool showModalOnError = false)
+    {
+        AppDiagnosticsLogger.RecordBreadcrumb("UI", actionName);
+        try
+        {
+            action();
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal cancellation
+        }
+        catch (Exception ex)
+        {
+            AppDiagnosticsLogger.Error("UI", $"Unhandled error in {actionName}.", ex);
+            SetStatusBarMessage($"⚠ {actionName}: {AppDiagnosticsLogger.SanitizeText(ex.Message)}");
+            if (showModalOnError)
+                App.ShowExceptionDialog(ex, $"UI.{actionName}", _configService?.Current, isFatal: false);
+        }
+    }
+
+    private async Task RunUiAsync(string actionName, Func<Task> action, bool showModalOnError = false)
     {
         AppDiagnosticsLogger.RecordBreadcrumb("UI", actionName);
         try
         {
             await action();
         }
+        catch (OperationCanceledException)
+        {
+            // Normal cancellation
+        }
         catch (Exception ex)
         {
             AppDiagnosticsLogger.Error("UI", $"Unhandled error in {actionName}.", ex);
-            SetStatusBarMessage($"⚠ {actionName}: {ex.Message}");
+            SetStatusBarMessage($"⚠ {actionName}: {AppDiagnosticsLogger.SanitizeText(ex.Message)}");
+            if (showModalOnError)
+                App.ShowExceptionDialog(ex, $"UI.{actionName}", _configService?.Current, isFatal: false);
+        }
+    }
+
+    internal void ObserveBackgroundTask(string actionName, Task task)
+    {
+        _ = ObserveAsync(actionName, task);
+        async Task ObserveAsync(string name, Task t)
+        {
+            try
+            {
+                await t;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                AppDiagnosticsLogger.Error("BackgroundTask", $"Unhandled error in {name}.", ex);
+                _ = Dispatcher.BeginInvoke(() => SetStatusBarMessage($"⚠ {name}: {AppDiagnosticsLogger.SanitizeText(ex.Message)}"));
+            }
         }
     }
 
@@ -598,17 +644,17 @@ public partial class MainWindow
         {
             _configService.Current.EliteBgsWatchedFactions = (TxtEliteBgsFactions.Text ?? "").Trim();
             _configService.Save();
-            var (_, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
+            var (ok, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
             RefreshV3IntegrationsStatus();
-            TxtStatusBarLeft.Text = msg;
+            SetStatusBarMessage(ok ? $"✓ {msg}" : $"⚠ {msg}");
         });
 
     private async void BtnRefreshEliteBgs_Click(object sender, RoutedEventArgs e) =>
         await RunUiAsync("EliteBGS Refresh", async () =>
         {
-            var (_, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
+            var (ok, _, msg) = await _eliteBgsWatchlist.RefreshAsync();
             RefreshV3IntegrationsStatus();
-            TxtStatusBarLeft.Text = msg;
+            SetStatusBarMessage(ok ? $"✓ {msg}" : $"⚠ {msg}");
         });
 
     private void UpdateEliteBgsWatchlistUi(IReadOnlyList<EliteBgsFactionWatchItem> items)
@@ -743,18 +789,18 @@ public partial class MainWindow
     {
         _configService.Current.DiscordWebhookUrl = (TxtDiscordWebhookUrl.Text ?? "").Trim();
         _configService.Save();
-        TxtStatusBarLeft.Text = "Discord Webhook URL saved.";
+        SetStatusBarMessage("✓ Discord Webhook URL saved.");
     }
 
     private async void BtnTestDiscordWebhook_Click(object sender, RoutedEventArgs e) =>
         await RunUiAsync("Discord Webhook Test", async () =>
         {
             BtnSaveDiscordWebhook_Click(sender, e);
-            var (_, msg) = await _discord.SendWebhookAsync(
+            var (ok, msg) = await _discord.SendWebhookAsync(
                 $"🛰 {HttpClientHeaderDefaults.ProductName} v{HttpClientHeaderDefaults.ProductVersion} Test",
                 $"Connected for **{_fileWatcher.State.CommanderName}** in `{_fileWatcher.State.CurrentSystem}`.");
             RefreshV3IntegrationsStatus();
-            TxtStatusBarLeft.Text = msg;
+            SetStatusBarMessage(ok ? $"✓ {msg}" : $"⚠ {msg}");
         });
 
     private void ApplyEdsmDiscoveryIntel(EdsmSystemDiscoveryIntel intel)

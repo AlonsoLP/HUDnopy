@@ -260,10 +260,7 @@ public class InputSimulatorService
 
                     string processName = process.ProcessName;
                     string windowTitle = process.MainWindowTitle;
-                    bool processMatches =
-                        processName.Contains("EliteDangerous", StringComparison.OrdinalIgnoreCase) ||
-                        (processName.Contains("Elite", StringComparison.OrdinalIgnoreCase) &&
-                         processName.Contains("Dangerous", StringComparison.OrdinalIgnoreCase));
+                    bool processMatches = EliteFileWatcherService.IsEliteProcessName(processName);
                     bool titleMatches =
                         windowTitle.Contains("Elite", StringComparison.OrdinalIgnoreCase) &&
                         windowTitle.Contains("Dangerous", StringComparison.OrdinalIgnoreCase);

@@ -933,6 +933,7 @@ public sealed class FrontierCapiService : IDisposable
                     StarSystem = state.CurrentSystem,
                     Items = items
                 };
+                _fileWatcher.SyncMarketColonisationNeeds(force: true);
             }
         });
     }
@@ -984,66 +985,8 @@ public sealed class FrontierCapiService : IDisposable
     }
 
     // =========================================================================
-    // Cifrado DPAPI nativo de Windows (crypt32.dll — sin dependencias NuGet)
+    // Windows CurrentUser DPAPI token protection (System.Security.Cryptography.ProtectedData)
     // =========================================================================
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DATA_BLOB
-    {
-        public int cbData;
-        public IntPtr pbData;
-    }
-
-    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool CryptProtectData(
-        ref DATA_BLOB pDataIn, string? szDataDescr, IntPtr pOptionalEntropy,
-        IntPtr pvReserved, IntPtr pPromptStruct, int dwFlags, out DATA_BLOB pDataOut);
-
-    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool CryptUnprotectData(
-        ref DATA_BLOB pDataIn, IntPtr ppszDataDescr, IntPtr pOptionalEntropy,
-        IntPtr pvReserved, IntPtr pPromptStruct, int dwFlags, out DATA_BLOB pDataOut);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr LocalFree(IntPtr hMem);
-
-    private static byte[] ProtectDpapi(byte[] plain)
-    {
-        var input = new DATA_BLOB { cbData = plain.Length, pbData = Marshal.AllocHGlobal(plain.Length) };
-        try
-        {
-            Marshal.Copy(plain, 0, input.pbData, plain.Length);
-            if (!CryptProtectData(ref input, "HUDnopy Frontier cAPI", IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0, out var output))
-                throw new InvalidOperationException("DPAPI CryptProtectData failed.");
-            try
-            {
-                byte[] encrypted = new byte[output.cbData];
-                Marshal.Copy(output.pbData, encrypted, 0, output.cbData);
-                return encrypted;
-            }
-            finally { LocalFree(output.pbData); }
-        }
-        finally { Marshal.FreeHGlobal(input.pbData); }
-    }
-
-    private static byte[] UnprotectDpapi(byte[] encrypted)
-    {
-        var input = new DATA_BLOB { cbData = encrypted.Length, pbData = Marshal.AllocHGlobal(encrypted.Length) };
-        try
-        {
-            Marshal.Copy(encrypted, 0, input.pbData, encrypted.Length);
-            if (!CryptUnprotectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0, out var output))
-                throw new InvalidOperationException("DPAPI CryptUnprotectData failed.");
-            try
-            {
-                byte[] plain = new byte[output.cbData];
-                Marshal.Copy(output.pbData, plain, 0, output.cbData);
-                return plain;
-            }
-            finally { LocalFree(output.pbData); }
-        }
-        finally { Marshal.FreeHGlobal(input.pbData); }
-    }
 
     private void SaveTokensToDisk()
     {
@@ -1052,11 +995,12 @@ public sealed class FrontierCapiService : IDisposable
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_tokenFilePath)!);
             byte[] plain = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(_tokens));
-            byte[] encrypted = ProtectDpapi(plain);
+            byte[] encrypted = ProtectedData.Protect(plain, optionalEntropy: null, DataProtectionScope.CurrentUser);
             File.WriteAllBytes(_tokenFilePath, encrypted);
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("FrontierCapi", $"Failed to save DPAPI-protected cAPI tokens: {ex.Message}");
         }
     }
 
@@ -1066,11 +1010,12 @@ public sealed class FrontierCapiService : IDisposable
         {
             if (!File.Exists(_tokenFilePath)) return;
             byte[] encrypted = File.ReadAllBytes(_tokenFilePath);
-            byte[] plain = UnprotectDpapi(encrypted);
+            byte[] plain = ProtectedData.Unprotect(encrypted, optionalEntropy: null, DataProtectionScope.CurrentUser);
             _tokens = JsonSerializer.Deserialize<CapiTokenStore>(Encoding.UTF8.GetString(plain));
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnosticsLogger.Warn("FrontierCapi", $"Failed to load DPAPI-protected cAPI tokens: {ex.Message}");
             _tokens = null;
         }
     }

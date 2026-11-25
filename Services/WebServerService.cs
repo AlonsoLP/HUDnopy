@@ -255,20 +255,7 @@ public class WebServerService : IDisposable
         }
     }
 
-    private static bool IsValidHexColor(string? hex)
-    {
-        if (string.IsNullOrWhiteSpace(hex))
-            return false;
-        string trimmed = hex.Trim();
-        if (trimmed[0] != '#' || (trimmed.Length != 7 && trimmed.Length != 9))
-            return false;
-        for (int i = 1; i < trimmed.Length; i++)
-        {
-            if (!Uri.IsHexDigit(trimmed[i]))
-                return false;
-        }
-        return true;
-    }
+    private static bool IsValidHexColor(string? hex) => ConfigService.IsValidHexColor(hex);
 
     public async Task StartAsync()
     {
@@ -726,13 +713,15 @@ public class WebServerService : IDisposable
                     await WriteJsonAsync(context, new { success = false, message = "No active planetary coordinates." });
                     return;
                 }
-                _configService.Current.SurfaceBookmarks.Add(new SurfaceBookmarkItem
+                string fallbackLabel = string.IsNullOrWhiteSpace(st.BodyName) ? st.CurrentSystem : st.BodyName;
+                _configService.Current.SurfaceBookmarks.Insert(0, new SurfaceBookmarkItem
                 {
                     SystemName = st.CurrentSystem,
                     BodyName = st.BodyName,
-                    Label = string.IsNullOrWhiteSpace(label) ? $"Point {DateTime.Now:HH:mm}" : label,
+                    Label = string.IsNullOrWhiteSpace(label) ? fallbackLabel : label,
                     Latitude = Math.Round(st.Latitude, 4),
-                    Longitude = Math.Round(st.Longitude, 4)
+                    Longitude = Math.Round(st.Longitude, 4),
+                    CreatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm")
                 });
                 _configService.Save();
                 await WriteJsonAsync(context, new { success = true, bookmarks = _configService.Current.SurfaceBookmarks }, camelCase: true);
@@ -990,10 +979,12 @@ public class WebServerService : IDisposable
                         string.Equals(b.Id, blueprintId, StringComparison.OrdinalIgnoreCase));
                     if (match is not null)
                     {
-                        _configService.Current.EngineeringWishlistBlueprints.Add(match.Id);
+                        if (!_configService.Current.EngineeringWishlistBlueprints.Contains(match.Id, StringComparer.OrdinalIgnoreCase))
+                            _configService.Current.EngineeringWishlistBlueprints.Add(match.Id);
                         _configService.Save();
                     }
                 }
+                await BroadcastStateAsync();
                 var rows = EngineeringWishlistService.Evaluate(_configService.Current.EngineeringWishlistBlueprints, _fileWatcher.State);
                 await WriteJsonAsync(context, new { success = true, rows }, camelCase: true);
             });

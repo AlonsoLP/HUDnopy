@@ -69,15 +69,7 @@ public partial class MainWindow
     {
         if (GridSpanshServices.SelectedItem is not SpanshServiceStationItem item || string.IsNullOrWhiteSpace(item.SystemName))
             return;
-        try
-        {
-            System.Windows.Clipboard.SetText(item.SystemName);
-            TxtStatusBarLeft.Text = string.Format(FlightTranslations.ForLanguage(_uiLanguage)["systemCopied"], item.SystemName);
-        }
-        catch
-        {
-            // Ignore clipboard access errors when another process holds the clipboard lock.
-        }
+        CopySystemToClipboard(item.SystemName);
     }
 
     private async void BtnRefreshGalnet_Click(object sender, RoutedEventArgs e) =>
@@ -261,7 +253,7 @@ public partial class MainWindow
                 System.Windows.Clipboard.SetText(next.SystemName);
                 string msg = string.Format(FlightTranslations.ForLanguage(_uiLanguage)["spanshRouteNextCopied"], next.SystemName);
                 TxtSpanshRouteStatus.Text = msg;
-                TxtStatusBarLeft.Text = msg;
+                SetStatusBarMessage(msg);
             }
             catch
             {
@@ -399,7 +391,7 @@ public partial class MainWindow
         try
         {
             System.Windows.Clipboard.SetText(systemName);
-            TxtStatusBarLeft.Text = string.Format(FlightTranslations.ForLanguage(_uiLanguage)["systemCopied"], systemName);
+            SetStatusBarMessage(string.Format(FlightTranslations.ForLanguage(_uiLanguage)["systemCopied"], systemName));
         }
         catch
         {
@@ -414,7 +406,13 @@ public partial class MainWindow
     {
         if (CmbSpanshRouteMode is null || TxtSpanshRouteDest is null)
             return;
-        CmbSpanshRouteMode.SelectedValue = mode;
+        var match = CmbSpanshRouteMode.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(i => string.Equals(i.Tag as string, mode, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+            CmbSpanshRouteMode.SelectedItem = match;
+        else
+            CmbSpanshRouteMode.SelectedValue = mode;
         TxtSpanshRouteDest.Text = destination;
         BtnPlotSpanshRoute_Click(this, new RoutedEventArgs());
     }

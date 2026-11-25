@@ -374,7 +374,7 @@ public partial class MainWindow
         if (e.Key == Key.Enter)
         {
             e.Handled = true;
-            _ = SendAiPromptAsync(TxtAiPrompt.Text);
+            ObserveBackgroundTask("COVAS Prompt", SendAiPromptAsync(TxtAiPrompt.Text));
         }
     }
 
@@ -382,36 +382,36 @@ public partial class MainWindow
     {
         string prompt = TxtAiPrompt.Text.Trim();
         TxtAiPrompt.Text = "";
-        _ = RunAiQuickActionAsync(
+        ObserveBackgroundTask("COVAS Screen Vision", RunAiQuickActionAsync(
             string.IsNullOrWhiteSpace(prompt) ? "👁" : $"👁 {prompt}",
             GetCovasSpeakerLabel(),
-            () => _aiCopilot.AskWithScreenVisionAsync(prompt));
+            () => _aiCopilot.AskWithScreenVisionAsync(prompt)));
     }
 
     private void BtnSendAiPrompt_Click(object sender, RoutedEventArgs e)
     {
-        _ = SendAiPromptAsync(TxtAiPrompt.Text);
+        ObserveBackgroundTask("COVAS Prompt", SendAiPromptAsync(TxtAiPrompt.Text));
     }
 
     private void BtnAiQuickStatus_Click(object sender, RoutedEventArgs e)
     {
-        _ = SendAiPromptAsync(OperationsTranslations.ForLanguage(_uiLanguage)["aiQuickStatusPrompt"]);
+        ObserveBackgroundTask("COVAS Quick Status", SendAiPromptAsync(OperationsTranslations.ForLanguage(_uiLanguage)["aiQuickStatusPrompt"]));
     }
 
     private void BtnAiSummarizeGalnet_Click(object sender, RoutedEventArgs e)
     {
-        _ = RunAiQuickActionAsync(
+        ObserveBackgroundTask("COVAS GalNet Summary", RunAiQuickActionAsync(
             OperationsTranslations.ForLanguage(_uiLanguage)["aiSummarizeGalnet"],
             GetCovasSpeakerLabel(),
-            () => _aiCopilot.SummarizeGalnetAsync());
+            () => _aiCopilot.SummarizeGalnetAsync()));
     }
 
     private void BtnAiSummarizeSession_Click(object sender, RoutedEventArgs e)
     {
-        _ = RunAiQuickActionAsync(
+        ObserveBackgroundTask("COVAS Session Summary", RunAiQuickActionAsync(
             OperationsTranslations.ForLanguage(_uiLanguage)["aiSummarizeSession"],
             GetCovasSpeakerLabel(),
-            () => _aiCopilot.SummarizeSessionAsync());
+            () => _aiCopilot.SummarizeSessionAsync()));
     }
 
     private async Task RunAiQuickActionAsync(string? userPromptLabel, string replySpeaker, Func<Task<(bool Success, string Reply)>> action)
@@ -507,7 +507,7 @@ public partial class MainWindow
                 System.Windows.Automation.AutomationProperties.SetName(BtnAiVoiceInput, ops["aiVoiceStopBtn"]);
                 BtnAiVoiceInput.SetResourceReference(BackgroundProperty, "HudDangerBrush");
                 BtnAiVoiceInput.SetResourceReference(ForegroundProperty, "HudBgBrush");
-                TxtStatusBarLeft.Text = ops["aiVoiceListening"];
+                SetStatusBarMessage(ops["aiVoiceListening"]);
             }
             catch (Exception ex)
             {
@@ -550,7 +550,7 @@ public partial class MainWindow
             bool isGeminiVoice = string.Equals(_configService.Current.AiActiveProvider, "gemini", StringComparison.OrdinalIgnoreCase);
             if (isGeminiVoice)
                 AppendAiChatLine("CMDR", "🎤 [Comando de voz]", sentAt);
-            TxtStatusBarLeft.Text = ops["aiVoiceProcessing"];
+            SetStatusBarMessage(ops["aiVoiceProcessing"]);
             var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes);
             if (!isGeminiVoice && !string.IsNullOrWhiteSpace(transcript))
                 AppendAiChatLine("CMDR", transcript, sentAt);
@@ -601,7 +601,7 @@ public partial class MainWindow
             System.Windows.Automation.AutomationProperties.SetName(BtnAiHandsFree, ops["aiHandsFreeListening"]);
             BtnAiHandsFree.SetResourceReference(BackgroundProperty, "HudAccentBrush");
             BtnAiHandsFree.SetResourceReference(ForegroundProperty, "HudBgBrush");
-            TxtStatusBarLeft.Text = ops["aiHandsFreeStatusOn"];
+            SetStatusBarMessage(ops["aiHandsFreeStatusOn"]);
         }
         catch (Exception ex)
         {
@@ -672,7 +672,7 @@ public partial class MainWindow
             try
             {
                 StartVadRecorderInstance();
-                TxtStatusBarLeft.Text = OperationsTranslations.ForLanguage(_uiLanguage)["aiHandsFreeStatusOn"];
+                SetStatusBarMessage(OperationsTranslations.ForLanguage(_uiLanguage)["aiHandsFreeStatusOn"]);
             }
             catch
             {
@@ -871,7 +871,7 @@ public partial class MainWindow
                 && !_configService.Current.AiRequireWakeWord;
             if (showCmdrImmediately)
                 AppendAiChatLine("CMDR", "🎤 [Comando de voz]", sentAt);
-            TxtStatusBarLeft.Text = ops["aiVoiceProcessing"];
+            SetStatusBarMessage(ops["aiVoiceProcessing"]);
             var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes, isHandsFree: true);
             if (!showCmdrImmediately && !string.IsNullOrWhiteSpace(transcript))
                 AppendAiChatLine("CMDR", transcript, sentAt);
@@ -977,7 +977,7 @@ public partial class MainWindow
         string thinkTag = string.Equals(_configService.Current.AiThinkingMode, "auto", StringComparison.OrdinalIgnoreCase)
             ? (_aiCopilot.LastThinkingUsed ? " · 🧠 Thinking" : " · ⚡ Rápido")
             : "";
-        TxtStatusBarLeft.Text = $"COVAS: {_aiCopilot.LastResponseLatencyMs / 1000.0:0.0} s{ttft}{thinkTag} · {_aiCopilot.GetActiveProviderSummary()}";
+        SetStatusBarMessage($"COVAS: {_aiCopilot.LastResponseLatencyMs / 1000.0:0.0} s{ttft}{thinkTag} · {_aiCopilot.GetActiveProviderSummary()}");
     }
 
     private void AppendAiStreamChunk(string chunk)
@@ -1144,14 +1144,20 @@ public partial class MainWindow
 
     private void BtnAiPreFlightCheck_Click(object sender, RoutedEventArgs e)
     {
-        _ = RunAiQuickActionAsync(null, "COVAS (Pre-Flight)", () => _aiCopilot.RunPreFlightCheckAsync());
+        ObserveBackgroundTask("COVAS Pre-Flight Check", RunAiQuickActionAsync(null, "COVAS (Pre-Flight)", () => _aiCopilot.RunPreFlightCheckAsync()));
     }
 
     private void HandleAiSpanshMining(string mineral)
     {
         if (CmbSpanshMiningMineral is null)
             return;
-        CmbSpanshMiningMineral.SelectedValue = mineral;
+        var match = CmbSpanshMiningMineral.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(i => string.Equals(i.Content?.ToString(), mineral, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+            CmbSpanshMiningMineral.SelectedItem = match;
+        else
+            CmbSpanshMiningMineral.SelectedValue = mineral;
         BtnSearchMiningRings_Click(this, new RoutedEventArgs());
     }
 
@@ -1212,7 +1218,7 @@ public partial class MainWindow
         try
         {
             File.WriteAllText(dialog.FileName, "# HUDnopy COVAS Chat Log\n\n" + TxtAiChatHistory.Text, System.Text.Encoding.UTF8);
-            TxtStatusBarLeft.Text = string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName));
+            SetStatusBarMessage($"✓ {string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName))}");
         }
         catch (Exception ex)
         {

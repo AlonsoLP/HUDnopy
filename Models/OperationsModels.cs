@@ -301,6 +301,8 @@ public class OutfittingItem
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string DisplayName { get; set; } = "";
+    [JsonIgnore]
+    public bool HasLocalisedName { get; set; }
     public long BuyPrice { get; set; }
     [JsonIgnore]
     public string BuyPriceDisplay => $"{BuyPrice.ToString("N0", ShipState.EsCulture)} CR";

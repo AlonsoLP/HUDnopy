@@ -32,9 +32,8 @@ public partial class MainWindow
     // Block 1 (#2): Click-Through Tactical Overlay
     // =========================================================================
 
-    private void BtnToggleOverlay_Click(object sender, RoutedEventArgs e)
-    {
-        try
+    private void BtnToggleOverlay_Click(object sender, RoutedEventArgs e) =>
+        RunUi("Toggle Overlay", () =>
         {
             if (_overlayWindow is not null)
             {
@@ -62,16 +61,10 @@ public partial class MainWindow
             BtnToggleOverlay.SetResourceReference(ForegroundProperty, "HudBgBrush");
             string overlayMode = _overlayWindow.IsClickThrough ? "Click-Through Locked" : "Unlocked/Drag";
             if (hotkeyOk)
-                TxtStatusBarLeft.Text = $"🪟 Overlay active ({overlayMode} · {_configService.Current.OverlayToggleHotkey})";
+                SetStatusBarMessage($"🪟 Overlay active ({overlayMode} · {_configService.Current.OverlayToggleHotkey})");
             else
                 SetStatusBarMessage($"⚠ Overlay active ({overlayMode}), but hotkey {_configService.Current.OverlayToggleHotkey} could not be registered (already in use by another app).");
-        }
-        catch (Exception ex)
-        {
-            AppDiagnosticsLogger.Error("Overlay", "Failed to toggle Click-Through Overlay.", ex);
-            App.ShowExceptionDialog(ex, "HUDnopy.Overlay", _configService.Current, isFatal: false);
-        }
-    }
+        });
 
     private void ToggleOverlayClickThroughFromHotkey()
     {
@@ -79,9 +72,9 @@ public partial class MainWindow
             return;
         _overlayWindow.SetClickThrough(!_overlayWindow.IsClickThrough);
         _configService.Save();
-        TxtStatusBarLeft.Text = _overlayWindow.IsClickThrough
+        SetStatusBarMessage(_overlayWindow.IsClickThrough
             ? "🔒 Overlay locked (Click-Through enabled)"
-            : "🔓 Overlay unlocked (Drag to reposition)";
+            : "🔓 Overlay unlocked (Drag to reposition)");
     }
 
     private void CloseOverlayWindow()

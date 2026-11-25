@@ -159,7 +159,7 @@ public partial class MainWindow
             _configService.Current.MiningMinPercent = Math.Clamp(pct, 1, 100);
         TxtMiningMinPercent.Text = _configService.Current.MiningMinPercent.ToString();
         _configService.Save();
-        TxtStatusBarLeft.Text = OperationsTranslations.ForLanguage(_uiLanguage)["miningFilterSaved"];
+        SetStatusBarMessage(OperationsTranslations.ForLanguage(_uiLanguage)["miningFilterSaved"]);
     }
 
     private void BtnResetMiningSession_Click(object sender, RoutedEventArgs e)
@@ -333,7 +333,7 @@ public partial class MainWindow
             UpdateSurfaceGuidance(_fileWatcher.State);
             return;
         }
-        TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["noExoSampleCoords"];
+        SetStatusBarMessage(FlightTranslations.ForLanguage(_uiLanguage)["noExoSampleCoords"]);
     }
 
     private IReadOnlyList<MissionItem>? _lastMissionsGroupedSource;
@@ -403,7 +403,7 @@ public partial class MainWindow
         foreach (var req in requiredByCommodity)
         {
             int carried = s.CargoInventory
-                .Where(c => string.Equals(c.Name?.Trim(), req.Name, StringComparison.OrdinalIgnoreCase))
+                .Where(c => EliteFileWatcherService.CommodityMatches(c.Name, c.DisplayName, req.Name))
                 .Sum(static c => c.Count);
             if (carried < req.Required)
                 missing.Add($"{req.Name} ({carried}/{req.Required} t)");
@@ -468,14 +468,14 @@ public partial class MainWindow
 
             foreach (var cargo in s.CargoInventory)
             {
-                if (cargo.Count <= 0 || string.IsNullOrWhiteSpace(cargo.Name))
+                if (cargo.Count <= 0 || (string.IsNullOrWhiteSpace(cargo.Name) && string.IsNullOrWhiteSpace(cargo.DisplayName)))
                     continue;
                 var mkt = s.Market.Items.FirstOrDefault(m =>
-                    string.Equals(m.DisplayName, cargo.Name, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(m.Name, cargo.Name, StringComparison.OrdinalIgnoreCase));
+                    EliteFileWatcherService.CommodityMatches(m.Name, m.DisplayName, cargo.Name, cargo.DisplayName));
                 if (mkt is null || mkt.SellPrice <= 0)
                     continue;
 
+                string label = string.IsNullOrWhiteSpace(cargo.DisplayName) ? cargo.Name : cargo.DisplayName;
                 long sellVal = mkt.SellPrice * cargo.Count;
                 totalSell += sellVal;
                 long unitProfit = mkt.MeanPrice > 0 ? mkt.SellPrice - mkt.MeanPrice : 0;
@@ -483,7 +483,7 @@ public partial class MainWindow
                 {
                     long p = unitProfit * cargo.Count;
                     totalEstProfit += p;
-                    bestItems.Add((cargo.Name, p));
+                    bestItems.Add((label, p));
                 }
             }
 
@@ -501,8 +501,8 @@ public partial class MainWindow
             var colMatches = s.CargoInventory
                 .Where(c => s.Colonisation.Resources.Any(r =>
                     r.RequiredAmount > r.ProvidedAmount &&
-                    string.Equals(r.DisplayName, c.Name, StringComparison.OrdinalIgnoreCase)))
-                .Select(c => $"{c.Name} ({c.Count} t)")
+                    EliteFileWatcherService.CommodityMatches(r.Name, r.DisplayName, c.Name, c.DisplayName)))
+                .Select(static c => $"{(string.IsNullOrWhiteSpace(c.DisplayName) ? c.Name : c.DisplayName)} ({c.Count} t)")
                 .ToList();
             if (colMatches.Count > 0)
                 notes.Add(string.Format(ops["cargoColonisationMatches"], string.Join(", ", colMatches)));
@@ -571,10 +571,12 @@ public partial class MainWindow
         if (CmbEngineeringBlueprint?.SelectedValue is not string bpId || string.IsNullOrWhiteSpace(bpId))
             return;
         _configService.Current.EngineeringWishlistBlueprints ??= new List<string>();
-        _configService.Current.EngineeringWishlistBlueprints.Add(bpId);
+        if (!_configService.Current.EngineeringWishlistBlueprints.Contains(bpId, StringComparer.OrdinalIgnoreCase))
+            _configService.Current.EngineeringWishlistBlueprints.Add(bpId);
         _configService.Save();
         _lastWishlistSignature = null;
         UpdateEngineeringWishlistUi(_fileWatcher.State);
+        ObserveBackgroundTask("Wishlist Broadcast", _webServer.BroadcastStateAsync());
     }
 
     private void BtnClearWishlist_Click(object sender, RoutedEventArgs e)
@@ -583,6 +585,7 @@ public partial class MainWindow
         _configService.Save();
         _lastWishlistSignature = null;
         UpdateEngineeringWishlistUi(_fileWatcher.State);
+        ObserveBackgroundTask("Wishlist Clear Broadcast", _webServer.BroadcastStateAsync());
     }
 
     private async void BtnWishlistFindTrader_Click(object sender, RoutedEventArgs e) =>
@@ -591,7 +594,7 @@ public partial class MainWindow
             var s = _fileWatcher.State;
             if (s.StarPos is not { Length: 3 })
             {
-                TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
+                SetStatusBarMessage(FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"]);
                 return;
             }
 
@@ -603,11 +606,11 @@ public partial class MainWindow
                 {
                     var best = results[0];
                     CopySystemToClipboard(best.SystemName);
-                    TxtStatusBarLeft.Text = $"Material Trader: {best.SystemName} / {best.StationName} ({best.DistanceDisplay})";
+                    SetStatusBarMessage($"Material Trader: {best.SystemName} / {best.StationName} ({best.DistanceDisplay})");
                 }
                 else
                 {
-                    TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"];
+                    SetStatusBarMessage(FlightTranslations.ForLanguage(_uiLanguage)["spanshServicesEmpty"]);
                 }
             }
             finally
@@ -814,10 +817,7 @@ public partial class MainWindow
             if (sender is FrameworkElement el && el.Tag is string actionId && !string.IsNullOrEmpty(actionId))
             {
                 var (success, message) = await _inputSimulator.ExecuteActionAsync(actionId);
-                TxtStatusBarLeft.Text = $"[{DateTime.Now:HH:mm:ss}] {message}";
-                TxtStatusBarLeft.Foreground = success
-                    ? (System.Windows.Media.Brush)FindResource("HudAccentBrush")
-                    : (System.Windows.Media.Brush)FindResource("HudDangerBrush");
+                SetStatusBarMessage(success ? $"✓ [{DateTime.Now:HH:mm:ss}] {message}" : $"⚠ [{DateTime.Now:HH:mm:ss}] {message}");
             }
         });
 
@@ -1130,7 +1130,7 @@ public partial class MainWindow
     {
         _bindingsService.ReloadBindings();
         _fileWatcher.RefreshState();
-        TxtStatusBarLeft.Text = $"[{DateTime.Now:HH:mm:ss}] {SettingsTranslations.ForLanguage(_uiLanguage)["reloaded"]}";
+        SetStatusBarMessage($"[{DateTime.Now:HH:mm:ss}] {SettingsTranslations.ForLanguage(_uiLanguage)["reloaded"]}");
     }
 
     private void BtnBrowseJournalFolder_Click(object sender, RoutedEventArgs e)
@@ -1204,40 +1204,33 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
-            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaveError"], ex.Message);
+            AppDiagnosticsLogger.Warn("Paths", $"Failed to save game paths: {ex.Message}");
+            SetStatusBarMessage($"⚠ {string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaveError"], ex.Message)}");
             return false;
         }
         if (reloadBindings)
             _bindingsService.ReloadBindings();
-        TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaved"];
+        SetStatusBarMessage($"✓ {SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaved"]}");
         return true;
     }
 
-    private void BtnOpenWeb_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_webServer.IsRunning)
+    private void BtnOpenWeb_Click(object sender, RoutedEventArgs e) =>
+        RunUi("Open Web HUD Browser", () =>
         {
-            var text = SettingsTranslations.ForLanguage(_uiLanguage);
-            SetStatusBarMessage($"⚠ {text["webDisabled"]}: {text["webDisabledMessage"]}");
-            return;
-        }
+            if (!_webServer.IsRunning)
+            {
+                var text = SettingsTranslations.ForLanguage(_uiLanguage);
+                SetStatusBarMessage($"⚠ {text["webDisabled"]}: {text["webDisabledMessage"]}");
+                return;
+            }
 
-        string url = $"https://localhost:{_webServer.CurrentPort}";
-        try
-        {
+            string url = $"https://localhost:{_webServer.CurrentPort}";
             Process.Start(new ProcessStartInfo
             {
                 FileName = url,
                 UseShellExecute = true
             });
-        }
-        catch (Exception ex)
-        {
-            var text = SettingsTranslations.ForLanguage(_uiLanguage);
-            AppDiagnosticsLogger.Error("WebHUD", "Could not open Web HUD browser URL.", ex);
-            App.ShowExceptionDialog(ex, "WebHUD.OpenBrowser", _configService.Current, isFatal: false);
-        }
-    }
+        });
 
     private void BtnCopyWebUrl_Click(object sender, RoutedEventArgs e)
     {
@@ -1247,11 +1240,11 @@ public partial class MainWindow
             try
             {
                 System.Windows.Clipboard.SetText(url);
-                TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["urlCopied"], url);
+                SetStatusBarMessage($"✓ {string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["urlCopied"], url)}");
             }
             catch (System.Runtime.InteropServices.ExternalException ex)
             {
-                TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["clipboardError"], ex.Message);
+                SetStatusBarMessage($"⚠ {string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["clipboardError"], ex.Message)}");
             }
         }
     }
@@ -1268,11 +1261,11 @@ public partial class MainWindow
         try
         {
             System.Windows.Clipboard.SetText(code);
-            TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["sessionCodeCopied"];
+            SetStatusBarMessage($"✓ {SettingsTranslations.ForLanguage(_uiLanguage)["sessionCodeCopied"]}");
         }
         catch (System.Runtime.InteropServices.ExternalException ex)
         {
-            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["clipboardError"], ex.Message);
+            SetStatusBarMessage($"⚠ {string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["clipboardError"], ex.Message)}");
         }
     }
 
@@ -1304,7 +1297,7 @@ public partial class MainWindow
         string vpnInterfaceId = CmbWebVpnInterface.SelectedValue as string ?? "";
         if (mode is not ("local" or "open" or "code" or "vpn"))
         {
-            TxtStatusBarLeft.Text = string.Format(text["webSaveError"], text["webMode"]);
+            SetStatusBarMessage($"⚠ {string.Format(text["webSaveError"], text["webMode"])}");
             return;
         }
 
@@ -1319,7 +1312,7 @@ public partial class MainWindow
             if (mode == "vpn" && vpnInterfaceId.Length == 0)
             {
                 await _webServer.StopAsync();
-                TxtStatusBarLeft.Text = text["vpnRequired"];
+                SetStatusBarMessage($"⚠ {text["vpnRequired"]}");
                 return;
             }
             try
@@ -1331,15 +1324,16 @@ public partial class MainWindow
                 _suppressEvents = true;
                 try { CmbWebAccessMode.SelectedValue = _configService.Current.WebAccessMode; }
                 finally { _suppressEvents = false; }
-                TxtStatusBarLeft.Text = string.Format(text["webSaveError"], ex.Message);
+                AppDiagnosticsLogger.Warn("WebHUD", $"Failed to save web settings: {ex.Message}");
+                SetStatusBarMessage($"⚠ {string.Format(text["webSaveError"], ex.Message)}");
                 return;
             }
             if (_configService.Current.AutoStartWebServer)
                 await _webServer.RestartAsync();
             RefreshWebServerUi();
-            TxtStatusBarLeft.Text = _configService.Current.AutoStartWebServer && !_webServer.IsRunning
-                ? string.Format(text["webError"], _webServer.StatusMessage)
-                : string.Format(text[_webServer.IsRunning ? "webRestarted" : "portSaved"], port);
+            SetStatusBarMessage(_configService.Current.AutoStartWebServer && !_webServer.IsRunning
+                ? $"⚠ {string.Format(text["webError"], _webServer.StatusMessage)}"
+                : $"✓ {string.Format(text[_webServer.IsRunning ? "webRestarted" : "portSaved"], port)}");
         }
         finally
         {
@@ -1735,20 +1729,13 @@ public partial class MainWindow
         }
     }
 
-    private void BtnRunFirstRunWizard_Click(object sender, RoutedEventArgs e)
-    {
-        try
+    private void BtnRunFirstRunWizard_Click(object sender, RoutedEventArgs e) =>
+        RunUi("First-Run Wizard", () =>
         {
             var wizard = new HUDnopy.UI.FirstRunWizardWindow(_configService, this, _webServer);
             wizard.ShowDialog();
             RefreshAfterWizard();
-        }
-        catch (Exception ex)
-        {
-            AppDiagnosticsLogger.Error("Wizard", "Failed to open First-Run Wizard.", ex);
-            App.ShowExceptionDialog(ex, "HUDnopy.FirstRunWizard", _configService.Current, isFatal: false);
-        }
-    }
+        }, showModalOnError: true);
 
     public void RefreshAfterWizard()
     {
@@ -1758,7 +1745,7 @@ public partial class MainWindow
         ApplyAllLocalizedLabels();
         _bindingsService.ReloadBindings();
         _fileWatcher.RefreshState();
-        _ = SyncWebServerAfterWizardAsync();
+        ObserveBackgroundTask("Wizard Web HUD Sync", SyncWebServerAfterWizardAsync());
     }
 
     private async Task SyncWebServerAfterWizardAsync()
@@ -1803,20 +1790,7 @@ public partial class MainWindow
         ApplyCustomAccentHex(primary, secondary);
     }
 
-    private static string? NormalizeCompleteHex(string raw)
-    {
-        string trimmed = (raw ?? "").Trim();
-        if (trimmed.StartsWith('#'))
-            trimmed = trimmed[1..];
-        if (trimmed.Length != 6)
-            return null;
-        foreach (char c in trimmed)
-        {
-            if (c is not ((>= '0' and <= '9') or (>= 'A' and <= 'F') or (>= 'a' and <= 'f')))
-                return null;
-        }
-        return "#" + trimmed.ToUpperInvariant();
-    }
+    private static string? NormalizeCompleteHex(string raw) => ConfigService.NormalizeHex6(raw);
 
     private void BtnOpenExternalUrl_Click(object sender, RoutedEventArgs e)
     {
@@ -1880,7 +1854,7 @@ public partial class MainWindow
             _configService.Save();
             _fileWatcher.RefreshState();
             RenderCockpitSystemCards(_fileWatcher.State);
-            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["colorChanged"], hex);
+            SetStatusBarMessage(string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["colorChanged"], hex));
         }
         catch (Exception ex)
         {
@@ -2082,10 +2056,10 @@ public partial class MainWindow
     {
         int count = _fileWatcher.ScanCurrentFolderForUnhandledMessages();
         RefreshUnhandledMessagesUi();
-        TxtStatusBarLeft.Text = string.Format(
+        SetStatusBarMessage(string.Format(
             UiCulture,
             SettingsTranslations.ForLanguage(_uiLanguage)["unhandledScanned"],
-            count);
+            count));
     }
 
     private void BtnCopyUnhandledJson_Click(object sender, RoutedEventArgs e)
@@ -2122,11 +2096,11 @@ public partial class MainWindow
         try
         {
             System.Windows.Clipboard.SetText(payload);
-            TxtStatusBarLeft.Text = text["unhandledCopied"];
+            SetStatusBarMessage(text["unhandledCopied"]);
         }
         catch (System.Runtime.InteropServices.ExternalException ex)
         {
-            TxtStatusBarLeft.Text = string.Format(text["clipboardError"], ex.Message);
+            SetStatusBarMessage($"⚠ {string.Format(text["clipboardError"], ex.Message)}");
         }
     }
 
@@ -2149,13 +2123,12 @@ public partial class MainWindow
         {
             var text = SettingsTranslations.ForLanguage(_uiLanguage);
             AppDiagnosticsLogger.Warn("UnhandledEvents", $"Failed to open unhandled events file: {ex.Message}");
-            TxtStatusBarLeft.Text = string.Format(text["clipboardError"], ex.Message);
+            SetStatusBarMessage($"⚠ {string.Format(text["clipboardError"], ex.Message)}");
         }
     }
 
-    private void BtnOpenLogsFolder_Click(object sender, RoutedEventArgs e)
-    {
-        try
+    private void BtnOpenLogsFolder_Click(object sender, RoutedEventArgs e) =>
+        RunUi("Open Logs Folder", () =>
         {
             string dir = AppDiagnosticsLogger.LogsDirectory;
             Directory.CreateDirectory(dir);
@@ -2164,17 +2137,10 @@ public partial class MainWindow
                 FileName = dir,
                 UseShellExecute = true
             });
-        }
-        catch (Exception ex)
-        {
-            AppDiagnosticsLogger.Warn("UI", $"Failed to open logs folder: {ex.Message}");
-            TxtStatusBarLeft.Text = ex.Message;
-        }
-    }
+        });
 
-    private void BtnExportSupportBundle_Click(object sender, RoutedEventArgs e)
-    {
-        try
+    private void BtnExportSupportBundle_Click(object sender, RoutedEventArgs e) =>
+        RunUi("Export Support Bundle", () =>
         {
             string zipPath = AppDiagnosticsLogger.ExportSupportBundle(_configService.Current);
             Process.Start(new ProcessStartInfo
@@ -2183,32 +2149,48 @@ public partial class MainWindow
                 Arguments = $"/select,\"{zipPath}\"",
                 UseShellExecute = true
             });
-            TxtStatusBarLeft.Text = $"📦 {Path.GetFileName(zipPath)}";
-        }
-        catch (Exception ex)
-        {
-            AppDiagnosticsLogger.Error("UI", "Failed to export support bundle.", ex);
-            TxtStatusBarLeft.Text = ex.Message;
-        }
-    }
+            SetStatusBarMessage($"✓ 📦 {Path.GetFileName(zipPath)}");
+        });
 
     private void BtnClearUnhandledEvents_Click(object sender, RoutedEventArgs e)
     {
         _fileWatcher.ClearUnhandledMessages();
         RefreshUnhandledMessagesUi();
-        TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["unhandledCleared"];
+        SetStatusBarMessage(SettingsTranslations.ForLanguage(_uiLanguage)["unhandledCleared"]);
     }
 
     private void RefreshDiagnosticIssuesUi()
     {
+        var issues = AppDiagnosticsLogger.GetRecentIssuesSnapshot();
+        int totalOccurrences = issues.Sum(static i => Math.Max(1, i.Occurrences));
+
+        if (BtnStatusBarIssuesPill is not null)
+        {
+            if (issues.Count == 0)
+            {
+                BtnStatusBarIssuesPill.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                bool hasError = issues.Any(static i => string.Equals(i.Level, "ERROR", StringComparison.OrdinalIgnoreCase));
+                string brushKey = hasError ? "HudDangerBrush" : "HudSecondaryBrush";
+                BtnStatusBarIssuesPill.SetResourceReference(BorderBrushProperty, brushKey);
+                BtnStatusBarIssuesPill.SetResourceReference(ForegroundProperty, brushKey);
+                BtnStatusBarIssuesPill.Content = totalOccurrences > issues.Count
+                    ? $"🐛 {issues.Count} ({totalOccurrences})"
+                    : $"🐛 {issues.Count}";
+                BtnStatusBarIssuesPill.ToolTip = $"{issues[0].Level} [{issues[0].Category}]: {issues[0].Message}";
+                BtnStatusBarIssuesPill.Visibility = Visibility.Visible;
+            }
+        }
+
         if (GridDiagnosticIssues is null || TxtDiagnosticIssuesStatus is null)
             return;
 
-        var issues = AppDiagnosticsLogger.GetRecentIssuesSnapshot();
         GridDiagnosticIssues.ItemsSource = issues;
         TxtDiagnosticIssuesStatus.Text = issues.Count == 0
             ? "✓ 0 incidencias registradas en esta sesión."
-            : $"⚠ {issues.Count} incidencia(s) registrada(s) en esta sesión (toca cualquier fila para ver la traza completa).";
+            : $"⚠ {issues.Count} incidencia(s) única(s) ({totalOccurrences} total) en esta sesión (toca cualquier fila para ver la traza completa).";
     }
 
     private void BtnReportLastError_Click(object sender, RoutedEventArgs e)

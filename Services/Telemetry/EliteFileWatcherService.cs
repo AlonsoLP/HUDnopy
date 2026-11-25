@@ -407,7 +407,7 @@ public partial class EliteFileWatcherService : IDisposable
         StateUpdated?.Invoke(snapshot);
     }
 
-    private static bool IsEliteProcessName(string processName) =>
+    internal static bool IsEliteProcessName(string processName) =>
         processName.Contains("EliteDangerous", StringComparison.OrdinalIgnoreCase) ||
         (processName.Contains("Elite", StringComparison.OrdinalIgnoreCase) &&
          processName.Contains("Dangerous", StringComparison.OrdinalIgnoreCase));

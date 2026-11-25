@@ -27,6 +27,42 @@ public class ConfigService
     public AppConfig Current { get; private set; }
     public event Action<AppConfig>? ConfigChanged;
 
+    /// <summary>
+    /// Validates a 6-digit (<c>#RRGGBB</c>) or 8-digit (<c>#AARRGGBB</c>) hexadecimal color string.
+    /// </summary>
+    public static bool IsValidHexColor(string? hex, bool allowAlpha = true)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+            return false;
+        string trimmed = hex.Trim();
+        if (trimmed[0] != '#' || (trimmed.Length != 7 && (!allowAlpha || trimmed.Length != 9)))
+            return false;
+        for (int i = 1; i < trimmed.Length; i++)
+        {
+            if (!Uri.IsHexDigit(trimmed[i]))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Normalizes a 6-digit hex color string (with or without leading <c>#</c>) to uppercase <c>#RRGGBB</c>, or returns <see langword="null"/> if invalid.
+    /// </summary>
+    public static string? NormalizeHex6(string? raw)
+    {
+        string trimmed = (raw ?? "").Trim();
+        if (trimmed.StartsWith('#'))
+            trimmed = trimmed[1..];
+        if (trimmed.Length != 6)
+            return null;
+        foreach (char c in trimmed)
+        {
+            if (!Uri.IsHexDigit(c))
+                return null;
+        }
+        return "#" + trimmed.ToUpperInvariant();
+    }
+
     public static readonly List<HudThemePreset> Presets = new()
     {
         new HudThemePreset { Name = "Naranja HUD (Clásico)", AccentHex = "#FF7100", SecondaryHex = "#FFB300" },

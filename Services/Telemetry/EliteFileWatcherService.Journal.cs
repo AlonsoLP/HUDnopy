@@ -712,6 +712,8 @@ public partial class EliteFileWatcherService
                         _unsoldCartographyByBody.Clear();
                         _unsoldExobiologyKeys.Clear();
                         _activeMissions.Clear();
+                        _shipModulesBySlot.Clear();
+                        _activeExoSampleCoords.Clear();
                         _state = new ShipState
                         {
                             ThemeAccentHex = _state.ThemeAccentHex,
@@ -1362,6 +1364,7 @@ public partial class EliteFileWatcherService
             }
             next.Timestamp = DateTimeOffset.UtcNow;
             _state.Colonisation = next;
+            SyncMarketColonisationNeeds();
         }
         else if (eventType == "ColonisationContribution")
         {

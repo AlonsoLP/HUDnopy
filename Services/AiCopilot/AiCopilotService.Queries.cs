@@ -57,7 +57,9 @@ public sealed partial class AiCopilotService
     private static readonly FrozenSet<string> DangerousHandsFreeBindings = new[]
     {
         "EjectAllCargo",
-        "SilentRunning"
+        "SilentRunning",
+        "ToggleButtonUpInput",
+        "Macro:SilentEscape"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private async Task<string> ProcessEmbeddedActionsAsync(AppConfig cfg, string rawReply, bool isHandsFree = false)
@@ -854,7 +856,8 @@ public sealed partial class AiCopilotService
         if (norm is "saltos" or "cuantos saltos" or "cuantos saltos quedan" or "saltos restantes"
             or "jumps" or "jumps left" or "jumps remaining" or "how many jumps left")
         {
-            int rem = Math.Max(0, s.NavRoute.Count - 1);
+            int curIdx = s.NavRoute.FindIndex(static w => w.IsCurrentSystem);
+            int rem = Math.Max(0, s.NavRoute.Count - 1 - Math.Max(0, curIdx));
             if (rem == 0)
                 return (true, isEs ? "No hay ruta de navegación activa." : "No active navigation route.");
             string fuelNote = s.RouteHasNoFuelStar
@@ -1226,8 +1229,7 @@ public sealed partial class AiCopilotService
             foreach (var c in s.CargoInventory)
             {
                 var m = marketItems.FirstOrDefault(x =>
-                    string.Equals(x.DisplayName, c.Name, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(x.Name, c.Name, StringComparison.OrdinalIgnoreCase));
+                    EliteFileWatcherService.CommodityMatches(x.Name, x.DisplayName, c.Name, c.DisplayName));
                 if (m is not null && m.SellPrice > 0)
                 {
                     totalSell += m.SellPrice * c.Count;
@@ -1247,8 +1249,8 @@ public sealed partial class AiCopilotService
         {
             var matches = s.CargoInventory
                 .Where(c => s.Colonisation.Resources.Any(r => r.RequiredAmount > r.ProvidedAmount &&
-                    string.Equals(r.DisplayName, c.Name, StringComparison.OrdinalIgnoreCase)))
-                .Select(static c => $"{c.Name} ({c.Count} t)")
+                    EliteFileWatcherService.CommodityMatches(r.Name, r.DisplayName, c.Name, c.DisplayName)))
+                .Select(static c => $"{(string.IsNullOrWhiteSpace(c.DisplayName) ? c.Name : c.DisplayName)} ({c.Count} t)")
                 .ToList();
             if (matches.Count > 0)
                 notes.Add($"Útil para colonización activa: {string.Join(", ", matches)}");
@@ -1873,8 +1875,7 @@ public sealed partial class AiCopilotService
                 {
                     int needed = g.Sum(static m => m.Count!.Value);
                     int onBoard = s.CargoInventory
-                        .Where(c => string.Equals(c.Name?.Trim(), g.Key, StringComparison.OrdinalIgnoreCase) ||
-                                    string.Equals(c.DisplayName?.Trim(), g.Key, StringComparison.OrdinalIgnoreCase))
+                        .Where(c => EliteFileWatcherService.CommodityMatches(c.Name, c.DisplayName, g.Key))
                         .Sum(static c => c.Count);
                     int missing = Math.Max(0, needed - onBoard);
                     return $"{g.Key}: necesitas {needed} t, llevas {onBoard} t{(missing > 0 ? $" (FALTAN {missing} t)" : " (OK)")}";

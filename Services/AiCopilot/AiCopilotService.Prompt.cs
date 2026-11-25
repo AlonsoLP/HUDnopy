@@ -194,7 +194,11 @@ public sealed partial class AiCopilotService
         if (!string.IsNullOrWhiteSpace(s.CurrentSystemNote)) root["note"] = s.CurrentSystemNote;
 
         if (s.NavRoute.Count > 0)
-            root["route"] = $"{s.NavRoute.Count} jumps, nextFuel:{(s.RouteHasNoFuelStar ? "NONE" : (s.JumpsToNextFuelStar?.ToString() ?? "?"))}";
+        {
+            int curIdx = s.NavRoute.FindIndex(static w => w.IsCurrentSystem);
+            int remJumps = Math.Max(0, s.NavRoute.Count - 1 - Math.Max(0, curIdx));
+            root["route"] = $"{remJumps} jumps left ({s.NavRoute.Count} waypoints), nextFuel:{(s.RouteHasNoFuelStar ? "NONE" : (s.JumpsToNextFuelStar?.ToString() ?? "?"))}";
+        }
 
         if (s.AssignedLandingPad is int padNum && padNum > 0)
             root["pad"] = LandingPadLocatorService.Resolve(padNum, s.AssignedLandingStationType).FormatGuidance(cfg.InterfaceLanguage);

@@ -1031,10 +1031,9 @@ public sealed class AlertService
     {
         foreach (string propertyName in propertyNames)
         {
-            if (data.TryGetProperty(propertyName, out var value) &&
-                value.ValueKind == System.Text.Json.JsonValueKind.String &&
-                !string.IsNullOrWhiteSpace(value.GetString()))
-                return value.GetString()!.Replace('_', ' ');
+            string? text = JsonElementExtensions.GetStr(data, propertyName);
+            if (!string.IsNullOrWhiteSpace(text))
+                return text.Replace('_', ' ');
         }
 
         return null;
@@ -1056,10 +1055,11 @@ public sealed class AlertService
     {
         foreach (string propertyName in propertyNames)
         {
-            if (data.TryGetProperty(propertyName, out var value) &&
-                value.ValueKind == System.Text.Json.JsonValueKind.Number &&
-                value.TryGetDouble(out number))
+            if (JsonElementExtensions.GetDouble(data, propertyName) is double val)
+            {
+                number = val;
                 return true;
+            }
         }
 
         number = 0;

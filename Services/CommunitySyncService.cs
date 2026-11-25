@@ -507,7 +507,7 @@ public sealed class CommunitySyncService : IDisposable
         if (_edsmDiscardEvents.Contains(gameEvent.EventType))
             return;
 
-        var payload = ConvertElementToDictionary(gameEvent.Data);
+        var payload = SanitizeElementToDictionary(gameEvent.Data, stripEddnForbidden: false);
         if (!string.IsNullOrWhiteSpace(state.CurrentSystem))
             payload["_systemName"] = state.CurrentSystem;
         if (state.StarPos is { Length: 3 })
@@ -1504,49 +1504,34 @@ public sealed class CommunitySyncService : IDisposable
     private static string CleanCommanderName(string configured, string fallback) =>
         HttpClientHeaderDefaults.CleanCommanderName(!string.IsNullOrWhiteSpace(configured) ? configured : fallback);
 
-    internal static Dictionary<string, object?> SanitizeElementToDictionary(JsonElement obj, bool preserveLatLon = false)
+    internal static Dictionary<string, object?> SanitizeElementToDictionary(
+        JsonElement obj,
+        bool preserveLatLon = false,
+        bool stripEddnForbidden = true)
     {
         var dict = new Dictionary<string, object?>();
         if (obj.ValueKind != JsonValueKind.Object)
             return dict;
         foreach (var prop in obj.EnumerateObject())
         {
-            if (prop.Name.EndsWith("_Localised", StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (EddnForbiddenKeys.Contains(prop.Name) &&
-                !(preserveLatLon && (prop.Name.Equals("Latitude", StringComparison.OrdinalIgnoreCase) ||
-                                     prop.Name.Equals("Longitude", StringComparison.OrdinalIgnoreCase))))
-                continue;
-            dict[prop.Name] = SanitizeJsonValue(prop.Value, preserveLatLon);
+            if (stripEddnForbidden)
+            {
+                if (prop.Name.EndsWith("_Localised", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (EddnForbiddenKeys.Contains(prop.Name) &&
+                    !(preserveLatLon && (prop.Name.Equals("Latitude", StringComparison.OrdinalIgnoreCase) ||
+                                         prop.Name.Equals("Longitude", StringComparison.OrdinalIgnoreCase))))
+                    continue;
+            }
+            dict[prop.Name] = SanitizeJsonValue(prop.Value, preserveLatLon, stripEddnForbidden);
         }
         return dict;
     }
 
-    private static object? SanitizeJsonValue(JsonElement el, bool preserveLatLon = false) => el.ValueKind switch
+    private static object? SanitizeJsonValue(JsonElement el, bool preserveLatLon = false, bool stripEddnForbidden = true) => el.ValueKind switch
     {
-        JsonValueKind.Object => SanitizeElementToDictionary(el, preserveLatLon),
-        JsonValueKind.Array => el.EnumerateArray().Select(item => SanitizeJsonValue(item, preserveLatLon)).ToList(),
-        JsonValueKind.String => el.GetString(),
-        JsonValueKind.Number => el.TryGetInt64(out long l) ? l : el.GetDouble(),
-        JsonValueKind.True => true,
-        JsonValueKind.False => false,
-        _ => null
-    };
-
-    private static Dictionary<string, object?> ConvertElementToDictionary(JsonElement obj)
-    {
-        var dict = new Dictionary<string, object?>();
-        if (obj.ValueKind != JsonValueKind.Object)
-            return dict;
-        foreach (var prop in obj.EnumerateObject())
-            dict[prop.Name] = ConvertJsonValue(prop.Value);
-        return dict;
-    }
-
-    private static object? ConvertJsonValue(JsonElement el) => el.ValueKind switch
-    {
-        JsonValueKind.Object => ConvertElementToDictionary(el),
-        JsonValueKind.Array => el.EnumerateArray().Select(ConvertJsonValue).ToList(),
+        JsonValueKind.Object => SanitizeElementToDictionary(el, preserveLatLon, stripEddnForbidden),
+        JsonValueKind.Array => el.EnumerateArray().Select(item => SanitizeJsonValue(item, preserveLatLon, stripEddnForbidden)).ToList(),
         JsonValueKind.String => el.GetString(),
         JsonValueKind.Number => el.TryGetInt64(out long l) ? l : el.GetDouble(),
         JsonValueKind.True => true,

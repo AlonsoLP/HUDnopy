@@ -217,8 +217,10 @@ public partial class MainWindow
         TxtOnFootWeapon.Text = string.IsNullOrWhiteSpace(s.SelectedWeapon) ? "---" : s.SelectedWeapon;
         TxtActiveSuit.Text = $"{flight["suit"]}: {(string.IsNullOrWhiteSpace(s.ActiveSuit) ? "---" : s.ActiveSuit)} · {flight["loadout"]}: {(string.IsNullOrWhiteSpace(s.ActiveSuitLoadout) ? "---" : s.ActiveSuitLoadout)}";
 
+        int curRouteIdx = s.NavRoute.FindIndex(static w => w.IsCurrentSystem);
+        int remRouteJumps = Math.Max(0, s.NavRoute.Count - 1 - Math.Max(0, curRouteIdx));
         string routeSummary = s.NavRoute.Count > 0
-            ? string.Format(culture, flight["remaining"], Math.Max(0, s.NavRoute.Count - 1))
+            ? string.Format(culture, flight["remaining"], remRouteJumps)
             : flight["noRoute"];
         if (s.NavRoute.Count > 1)
         {
@@ -513,7 +515,7 @@ public partial class MainWindow
         _fileWatcher.SyncCurrentSystemNote();
         if (_configService.Current.EnableEdsmSync)
             _ = _communitySync.SetEdsmSystemCommentAsync(sys, note);
-        TxtStatusBarLeft.Text = string.Format(FlightTranslations.ForLanguage(_uiLanguage)["noteSaved"], sys);
+        SetStatusBarMessage(string.Format(FlightTranslations.ForLanguage(_uiLanguage)["noteSaved"], sys));
     }
 
     private async void BtnFetchEdsmIntel_Click(object sender, RoutedEventArgs e) =>
@@ -677,7 +679,7 @@ public partial class MainWindow
                 lines.AddRange(rows.Select(r => $"{Csv(r.Timestamp)},{Csv(r.EventType)},{Csv(r.Summary)}"));
                 File.WriteAllLines(dialog.FileName, lines, System.Text.Encoding.UTF8);
             }
-            TxtStatusBarLeft.Text = string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName));
+            SetStatusBarMessage($"✓ {string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName))}");
         }
         catch (Exception ex)
         {
@@ -895,8 +897,13 @@ public partial class MainWindow
         }
         else if (s.NavRoute.Count > 1)
         {
-            var next = s.NavRoute.FirstOrDefault(static w => !w.IsCurrentSystem) ?? s.NavRoute[1];
-            line = $"🧭 Next: {next.StarSystem} ({next.StarClass}) · {next.StepDistanceLy:0.0} LY · {s.NavRoute.Count - 1} jumps";
+            int curIdx = s.NavRoute.FindIndex(static w => w.IsCurrentSystem);
+            var next = curIdx >= 0 && curIdx + 1 < s.NavRoute.Count
+                ? s.NavRoute[curIdx + 1]
+                : s.NavRoute.FirstOrDefault(static w => !w.IsCurrentSystem);
+            int remJumps = Math.Max(0, s.NavRoute.Count - 1 - Math.Max(0, curIdx));
+            if (next is not null && remJumps > 0)
+                line = $"🧭 Next: {next.StarSystem} ({next.StarClass}) · {next.StepDistanceLy:0.0} LY · {remJumps} jumps";
         }
 
         if (string.IsNullOrWhiteSpace(line))
@@ -965,7 +972,7 @@ public partial class MainWindow
         {
             string md = _lastExpeditionStats.ToMarkdownReport(_fileWatcher.State.CommanderName);
             File.WriteAllText(dialog.FileName, md, System.Text.Encoding.UTF8);
-            TxtStatusBarLeft.Text = string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName));
+            SetStatusBarMessage($"✓ {string.Format(OperationsTranslations.ForLanguage(_uiLanguage)["exportSuccess"], Path.GetFileName(dialog.FileName))}");
         }
         catch (Exception ex)
         {
@@ -978,7 +985,7 @@ public partial class MainWindow
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            TxtStatusBarLeft.Text = FlightTranslations.ForLanguage(_uiLanguage)["loadoutExportUnavailable"];
+            SetStatusBarMessage($"⚠ {FlightTranslations.ForLanguage(_uiLanguage)["loadoutExportUnavailable"]}");
             return;
         }
 

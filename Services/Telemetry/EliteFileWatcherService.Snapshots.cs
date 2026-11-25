@@ -279,8 +279,8 @@ public partial class EliteFileWatcherService
             var snapshot = new MarketSnapshot
             {
                 Timestamp = ReadJsonTimestamp(root, "timestamp") ?? DateTimeOffset.UtcNow,
-                MarketId = ReadJsonInt64(root, "marketId"),
-                StationName = ReadJsonString(root, "stationName"),
+                MarketId = ReadJsonInt64(root, "MarketID") ?? ReadJsonInt64(root, "marketId"),
+                StationName = ReadJsonString(root, "StationName", ReadJsonString(root, "stationName")),
                 StarSystem = ReadJsonString(root, "StarSystem")
             };
 
@@ -331,8 +331,8 @@ public partial class EliteFileWatcherService
             var snapshot = new OutfittingSnapshot
             {
                 Timestamp = ReadJsonTimestamp(root, "timestamp") ?? DateTimeOffset.UtcNow,
-                MarketId = ReadJsonInt64(root, "marketId"),
-                StationName = ReadJsonString(root, "stationName"),
+                MarketId = ReadJsonInt64(root, "MarketID") ?? ReadJsonInt64(root, "marketId"),
+                StationName = ReadJsonString(root, "StationName", ReadJsonString(root, "stationName")),
                 StarSystem = ReadJsonString(root, "StarSystem"),
                 Horizons = ReadJsonNullableBool(root, "Horizons")
             };
@@ -343,11 +343,13 @@ public partial class EliteFileWatcherService
                 {
                     string name = ReadJsonString(item, "Name");
                     string localised = ReadJsonString(item, "Name_Localised");
+                    bool hasLocalised = !string.IsNullOrWhiteSpace(localised);
                     snapshot.Items.Add(new OutfittingItem
                     {
                         Id = ReadJsonIdentifier(item, "id"),
                         Name = name,
-                        DisplayName = !string.IsNullOrWhiteSpace(localised)
+                        HasLocalisedName = hasLocalised,
+                        DisplayName = hasLocalised
                             ? localised
                             : ModuleDisplayCatalog.Format(name, _configService.Current.InterfaceLanguage),
                         BuyPrice = ReadJsonInt64(item, "BuyPrice") ?? 0
@@ -381,7 +383,7 @@ public partial class EliteFileWatcherService
         {
             foreach (var item in _state.Outfitting.Items)
             {
-                if (!string.IsNullOrWhiteSpace(item.Name))
+                if (!string.IsNullOrWhiteSpace(item.Name) && !item.HasLocalisedName)
                     item.DisplayName = ModuleDisplayCatalog.Format(item.Name, lang);
             }
             _state.Outfitting = _state.Outfitting.Snapshot();
@@ -409,8 +411,8 @@ public partial class EliteFileWatcherService
             var snapshot = new ShipyardSnapshot
             {
                 Timestamp = ReadJsonTimestamp(root, "timestamp") ?? DateTimeOffset.UtcNow,
-                MarketId = ReadJsonInt64(root, "marketId"),
-                StationName = ReadJsonString(root, "stationName"),
+                MarketId = ReadJsonInt64(root, "MarketID") ?? ReadJsonInt64(root, "marketId"),
+                StationName = ReadJsonString(root, "StationName", ReadJsonString(root, "stationName")),
                 StarSystem = ReadJsonString(root, "StarSystem"),
                 Horizons = ReadJsonNullableBool(root, "Horizons"),
                 AllowCobraMkIv = ReadJsonNullableBool(root, "allowCobraMkIV")
@@ -792,7 +794,7 @@ public partial class EliteFileWatcherService
         }
     }
 
-    private void SyncMarketColonisationNeeds(bool force = false)
+    internal void SyncMarketColonisationNeeds(bool force = false)
     {
         if (_state.Market.Items.Count == 0)
             return;
@@ -829,12 +831,23 @@ public partial class EliteFileWatcherService
         }
     }
 
-    private static string NormalizeCommodityKey(string raw) =>
-        raw.Trim()
+    internal static string NormalizeCommodityKey(string raw) =>
+        (raw ?? "").Trim()
             .Replace("$", "", StringComparison.Ordinal)
             .Replace("_name;", "", StringComparison.OrdinalIgnoreCase)
             .Replace("_", "", StringComparison.Ordinal)
             .Replace(" ", "", StringComparison.Ordinal)
             .ToLowerInvariant();
+
+    internal static bool CommodityMatches(string? a1, string? a2, string? b1, string? b2 = null)
+    {
+        string ka1 = NormalizeCommodityKey(a1 ?? "");
+        string ka2 = NormalizeCommodityKey(a2 ?? "");
+        string kb1 = NormalizeCommodityKey(b1 ?? "");
+        string kb2 = NormalizeCommodityKey(b2 ?? "");
+
+        return (!string.IsNullOrEmpty(ka1) && (ka1 == kb1 || ka1 == kb2)) ||
+               (!string.IsNullOrEmpty(ka2) && (ka2 == kb1 || ka2 == kb2));
+    }
 
 }

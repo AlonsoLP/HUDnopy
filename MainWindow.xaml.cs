@@ -234,6 +234,13 @@ public partial class MainWindow : Window
 
         _fileWatcher.StateUpdated += OnShipStateUpdated;
         _fileWatcher.UnhandledMessagesUpdated += () => Dispatcher.BeginInvoke(RefreshUnhandledMessagesUi);
+        AppDiagnosticsLogger.TechnicalStateSnapshotProvider = () =>
+        {
+            var st = _fileWatcher.State;
+            string mode = st.OnFoot ? "OnFoot" : st.InSRV ? "SRV" : st.InFighter ? "Fighter" : "Ship";
+            string flight = st.Docked ? "Docked" : st.Landed ? "Landed" : st.Supercruise ? "Supercruise" : "NormalSpace";
+            return $"Game={st.IsGameDetected}, Mode={mode}, Flight={flight}, WebHUD={_webServer.IsRunning}, Overlay={_overlayWindow?.IsVisible == true}";
+        };
         AppDiagnosticsLogger.RecentIssuesChanged += () => Dispatcher.BeginInvoke(RefreshDiagnosticIssuesUi);
         _spanshSystemDataService.StateChanged += OnSpanshDataChanged;
         _alertService.AlertsChanged += () => Dispatcher.BeginInvoke(RefreshAlertsUi);
@@ -245,6 +252,9 @@ public partial class MainWindow : Window
         {
             RefreshHeaderOptions();
             RefreshHeaderModules(_fileWatcher.State);
+            RefreshSurfaceBookmarksUi();
+            _lastWishlistSignature = null;
+            UpdateEngineeringWishlistUi(_fileWatcher.State);
             SyncIntegrationsUiFromConfig();
             if (_webServer.IsRunning)
                 UpdateWebQrCode(_webServer.GetAccessUrls().ToArray());
@@ -284,7 +294,7 @@ public partial class MainWindow : Window
 
             RefreshWebServerUi();
             ApplyDesktopFontScale(_configService.Current.DesktopFontScalePercent / 100d);
-            _ = TriggerStartupIntegrationsSyncAsync();
+            ObserveBackgroundTask("Startup Integrations Sync", TriggerStartupIntegrationsSyncAsync());
             if (_configService.Current.StartMinimizedToTray)
             {
                 MinimizeToTray();
@@ -458,9 +468,9 @@ public partial class MainWindow : Window
 
         if (!LanguageCatalog.TryNormalize(cfg.InterfaceLanguage, out _uiLanguage))
         {
-            TxtStatusBarLeft.Text = string.Format(
+            SetStatusBarMessage($"⚠ {string.Format(
                 SettingsTranslations.ForLanguage("en-GB")["invalidLanguage"],
-                cfg.InterfaceLanguage);
+                cfg.InterfaceLanguage)}");
             _uiLanguage = "en-GB";
         }
         cfg.InterfaceLanguage = _uiLanguage;
@@ -577,7 +587,7 @@ public partial class MainWindow : Window
                 cfg.SpeechRate = speechRate;
                 warning += " " + string.Format(text["voiceRateSaveError"], ex.Message);
             }
-            TxtStatusBarLeft.Text = warning;
+            SetStatusBarMessage($"⚠ {warning}");
         }
         SldSpeechRate.Value = speechRate;
         TxtSpeechRate.Text = speechRate.ToString("+0;-0;0");

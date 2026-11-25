@@ -933,9 +933,12 @@ function renderState(payload) {
   const mktColEl = document.getElementById('webMarketColonisationSummary');
   if (mktColEl) {
     const mktItems = (s.Market && Array.isArray(s.Market.Items)) ? s.Market.Items : [];
-    const colMatches = mktItems.filter(m => m.IsColonisationResource && m.Stock > 0);
+    const colMatches = mktItems
+      .filter(m => (m.ColonisationNeeded > 0 || m.IsColonisationResource) && m.Stock > 0)
+      .sort((a, b) => (b.ColonisationNeeded || 0) - (a.ColonisationNeeded || 0))
+      .slice(0, 6);
     if (colMatches.length > 0) {
-      mktColEl.textContent = `★ Colonisation supplies in stock here (${colMatches.length}): ${colMatches.slice(0, 5).map(m => `${m.DisplayName} (${formatCount(m.Stock)})`).join(', ')}`;
+      mktColEl.textContent = formatText(operationsTranslations.marketColonisationMatch || '★ Colonisation supplies in stock ({0}): {1}', colMatches.length, colMatches.map(m => `${m.DisplayName}: ${formatCount(m.ColonisationNeeded || m.Stock)} t`).join(' · '));
       mktColEl.hidden = false;
     } else {
       mktColEl.hidden = true;
@@ -2061,7 +2064,16 @@ async function postWebJson(url, payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload ?? {})
   });
-  return resp.json();
+  let data = null;
+  try {
+    data = await resp.json();
+  } catch {
+    data = { ok: false, success: false, message: `HTTP ${resp.status}` };
+  }
+  if (!resp.ok) {
+    showToast(`⚠ ${data?.message || ('HTTP ' + resp.status)}`);
+  }
+  return data;
 }
 
 async function sendWebAiVision() {
@@ -2201,6 +2213,12 @@ async function runWebTableQuery(url, statusId, tbodyId, loadingText, itemsKey, r
   try {
     const resp = await fetch(url);
     const data = await resp.json();
+    if (!resp.ok) {
+      const errMsg = data?.message || `HTTP ${resp.status}`;
+      if (status) status.textContent = `⚠ ${errMsg}`;
+      showToast(`⚠ ${errMsg}`);
+      return;
+    }
     if (status) status.textContent = statusFormatter ? statusFormatter(data) : (data.message || '');
     const items = data[itemsKey];
     if (tbody && Array.isArray(items)) {
@@ -2209,7 +2227,8 @@ async function runWebTableQuery(url, statusId, tbodyId, loadingText, itemsKey, r
       if (wrap) wrap.hidden = items.length === 0;
     }
   } catch (err) {
-    if (status) status.textContent = String(err);
+    if (status) status.textContent = `⚠ ${String(err)}`;
+    showToast(`⚠ ${String(err)}`);
   }
 }
 
@@ -2351,7 +2370,7 @@ function updateWebSurfaceGuidance(stateArg) {
   const y = Math.sin(dLon) * Math.cos(lat2);
   const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
   const bearing = ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
-  const radius = s.PlanetRadius > 1000 ? s.PlanetRadius : 1000000;
+  const radius = s.PlanetRadius > 1000 ? s.PlanetRadius : 1500000;
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   const distM = radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
   const distStr = distM >= 1000 ? `${(distM / 1000).toFixed(2)} km` : `${Math.round(distM)} m`;
@@ -2434,7 +2453,7 @@ function renderWebSurfaceBookmarks(bookmarks) {
     const lat = b.latitude ?? b.Latitude ?? 0;
     const lon = b.longitude ?? b.Longitude ?? 0;
     const lbl = b.label ?? b.Label ?? '';
-    return `<tr><td>${escapeHtml(b.systemName ?? b.SystemName ?? '')}</td><td>${escapeHtml(b.bodyName ?? b.BodyName ?? '')}</td><td>${escapeHtml(lbl)}</td><td>${lat.toFixed(3)}, ${lon.toFixed(3)}</td><td><button class="deck-button" style="min-height:38px;min-width:38px;padding:4px 10px;" onclick="event.stopPropagation();navigateWebBookmark(${lat},${lon})">🧭</button> <button class="deck-button" style="min-height:38px;min-width:38px;padding:4px 10px;" onclick="event.stopPropagation();deleteWebSurfaceBookmark('${escapeHtml(lbl).replace(/'/g, '&#39;')}')">🗑</button></td></tr>`;
+    return `<tr><td>${escapeHtml(b.systemName ?? b.SystemName ?? '')}</td><td>${escapeHtml(b.bodyName ?? b.BodyName ?? '')}</td><td>${escapeHtml(lbl)}</td><td>${lat.toFixed(3)}, ${lon.toFixed(3)}</td><td><button class="deck-button" style="min-height:38px;min-width:38px;padding:4px 10px;" onclick="event.stopPropagation();navigateWebBookmark(${lat},${lon})">🧭</button> <button class="deck-button" style="min-height:38px;min-width:38px;padding:4px 10px;" onclick="event.stopPropagation();deleteWebSurfaceBookmark(decodeURIComponent('${encodeURIComponent(lbl).replace(/'/g, '%27')}'))">🗑</button></td></tr>`;
   }).join('');
 }
 

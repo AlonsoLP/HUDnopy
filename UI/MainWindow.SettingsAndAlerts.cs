@@ -524,11 +524,11 @@ public partial class MainWindow
         if (isPiper || CmbAlertVoice.IsEnabled)
         {
             _alertSpeechService.SpeakTest();
-            TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["voiceTestRequested"];
+            SetStatusBarMessage(SettingsTranslations.ForLanguage(_uiLanguage)["voiceTestRequested"]);
         }
         else
         {
-            TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["voicesUnavailable"];
+            SetStatusBarMessage($"⚠ {SettingsTranslations.ForLanguage(_uiLanguage)["voicesUnavailable"]}");
         }
     }
 
@@ -549,12 +549,12 @@ public partial class MainWindow
         bool isPiper = string.Equals(_configService.Current.SpeechEngine, "piper", StringComparison.OrdinalIgnoreCase);
         if (!isPiper && !CmbAlertVoice.IsEnabled)
         {
-            TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["voicesUnavailable"];
+            SetStatusBarMessage($"⚠ {SettingsTranslations.ForLanguage(_uiLanguage)["voicesUnavailable"]}");
             return;
         }
 
         _alertSpeechService.SpeakPreview(definition);
-        TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["voiceTestRequested"];
+        SetStatusBarMessage(SettingsTranslations.ForLanguage(_uiLanguage)["voiceTestRequested"]);
     }
 
     private void SldAlertSoundVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -569,9 +569,9 @@ public partial class MainWindow
 
         _configService.Current.AlertSoundVolumePercent = volume;
         _configService.Save();
-        TxtStatusBarLeft.Text = volume == 0
+        SetStatusBarMessage(volume == 0
             ? SettingsTranslations.ForLanguage(_uiLanguage)["muted"]
-            : string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["volumeChanged"], volume);
+            : string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["volumeChanged"], volume));
     }
 
     private void SldSpeechRate_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -596,7 +596,7 @@ public partial class MainWindow
             TxtSpeechRate.Text = previous.ToString("+0;-0;0");
             _suppressEvents = false;
             AppDiagnosticsLogger.Warn("Speech", $"Failed to save speech rate: {ex.Message}");
-            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["voiceRateSaveError"], ex.Message);
+            SetStatusBarMessage($"⚠ {string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["voiceRateSaveError"], ex.Message)}");
         }
     }
 
@@ -912,7 +912,7 @@ public partial class MainWindow
         {
             RefreshHeaderOptions();
             AppDiagnosticsLogger.Warn("HeaderModules", $"Failed to save header module preferences: {ex.Message}");
-            TxtStatusBarLeft.Text = string.Format(DashboardTranslations.ForLanguage(_uiLanguage)["headerSaveError"], ex.Message);
+            SetStatusBarMessage($"⚠ {string.Format(DashboardTranslations.ForLanguage(_uiLanguage)["headerSaveError"], ex.Message)}");
         }
     }
 
@@ -946,7 +946,7 @@ public partial class MainWindow
             else
                 UpdateBindingsProfileInfo();
             await _webServer.BroadcastStateAsync();
-            TxtStatusBarLeft.Text = SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaved"];
+            SetStatusBarMessage($"✓ {SettingsTranslations.ForLanguage(_uiLanguage)["pathsSaved"]}");
         });
 
     private void ChkFocusGameWindow_Click(object sender, RoutedEventArgs e)
@@ -1009,8 +1009,8 @@ public partial class MainWindow
             cfg.MissionExpiryWarningHours = missionWarningHours;
             cfg.MissionExpiryCriticalHours = missionCriticalHours;
             _configService.Save();
-            TxtStatusBarLeft.Text = string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["thresholdSaved"],
-                lowThreshold, criticalThreshold, hullCriticalThreshold, missionWarningHours, missionCriticalHours);
+            SetStatusBarMessage($"✓ {string.Format(SettingsTranslations.ForLanguage(_uiLanguage)["thresholdSaved"],
+                lowThreshold, criticalThreshold, hullCriticalThreshold, missionWarningHours, missionCriticalHours)}");
             _fileWatcher.RefreshState();
             await _webServer.BroadcastStateAsync();
         });

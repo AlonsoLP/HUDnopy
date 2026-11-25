@@ -66,6 +66,22 @@ public partial class App : System.Windows.Application
         DispatcherUnhandledException += (_, args) =>
         {
             args.Handled = true;
+            if (!IsCorruptedStateException(args.Exception) &&
+                Current?.MainWindow is MainWindow { IsLoaded: true } liveWin)
+            {
+                // Recoverable UI dispatcher exception after startup: keep session alive and notify in status bar
+                AppDiagnosticsLogger.Error("WPF.Dispatcher", "Recovered unhandled UI dispatcher exception.", args.Exception);
+                try
+                {
+                    liveWin.SetStatusBarMessage($"⚠ UI Error ({args.Exception.GetType().Name}): {AppDiagnosticsLogger.SanitizeText(args.Exception.Message)}");
+                }
+                catch
+                {
+                    // Ignore status bar update errors
+                }
+                return;
+            }
+
             HandleFatalException(args.Exception, "WPF.Dispatcher");
             Shutdown(1);
         };
@@ -93,6 +109,9 @@ public partial class App : System.Windows.Application
             // Never fail startup if WPF trace listeners are unavailable
         }
     }
+
+    internal static bool IsCorruptedStateException(Exception ex) =>
+        ex is OutOfMemoryException or StackOverflowException or AccessViolationException;
 
     private sealed class WpfBindingErrorTraceListener : TraceListener
     {
@@ -220,7 +239,8 @@ public partial class App : System.Windows.Application
         System.Windows.Controls.Button MakeBtn(string label, System.Windows.Media.Brush borderBrush) => new()
         {
             Content = label,
-            Margin = new Thickness(6, 0, 0, 0),
+            MinHeight = 38,
+            Margin = new Thickness(6, 4, 0, 0),
             Padding = new Thickness(12, 6, 12, 6),
             Background = panel,
             Foreground = textBrush,
@@ -268,12 +288,29 @@ public partial class App : System.Windows.Application
             catch { }
         };
 
-        var btnClose = MakeBtn("Close", danger);
-        btnClose.Click += (_, _) => dialog.Close();
-
         buttons.Children.Add(btnZipIssue);
         buttons.Children.Add(btnCopy);
         buttons.Children.Add(btnLogs);
+
+        if (isFatal)
+        {
+            var btnRestart = MakeBtn("🔄 Restart HUDnopy", accent);
+            btnRestart.Click += (_, _) =>
+            {
+                try
+                {
+                    string? exePath = Environment.ProcessPath;
+                    if (!string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath))
+                        Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = true });
+                }
+                catch { }
+                dialog.Close();
+            };
+            buttons.Children.Add(btnRestart);
+        }
+
+        var btnClose = MakeBtn(isFatal ? "Exit" : "Continue", danger);
+        btnClose.Click += (_, _) => dialog.Close();
         buttons.Children.Add(btnClose);
         DockPanel.SetDock(buttons, Dock.Bottom);
         root.Children.Add(buttons);

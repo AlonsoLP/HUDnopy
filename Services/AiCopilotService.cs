@@ -409,9 +409,14 @@ public sealed partial class AiCopilotService : IDisposable
                         int bioCount = 0;
                         foreach (var sig in sigs.EnumerateArray())
                         {
-                            string sigType = GetStr(sig, "Type") ?? "";
-                            if (sigType.Contains("Biological", StringComparison.OrdinalIgnoreCase))
+                            string sigType = $"{GetStr(sig, "Type")} {GetStr(sig, "Type_Localised")}";
+                            if (sigType.Contains("Biological", StringComparison.OrdinalIgnoreCase) ||
+                                sigType.Contains("Biológ", StringComparison.OrdinalIgnoreCase) ||
+                                sigType.Contains("Biolog", StringComparison.OrdinalIgnoreCase) ||
+                                sigType.Contains("Биолог", StringComparison.OrdinalIgnoreCase))
+                            {
                                 bioCount += JsonElementExtensions.GetInt(sig, "Count") ?? 0;
+                            }
                         }
                         if (bioCount > 0)
                         {
@@ -890,7 +895,7 @@ public sealed partial class AiCopilotService : IDisposable
         var missingCargo = s.ActiveMissions
             .Where(static m => !string.IsNullOrWhiteSpace(m.Commodity) && m.Count is > 0 && m.PassengerMission != true)
             .GroupBy(static m => m.Commodity.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Where(g => s.CargoInventory.Where(c => string.Equals(c.Name?.Trim(), g.Key, StringComparison.OrdinalIgnoreCase)).Sum(static c => c.Count) < g.Sum(static m => m.Count!.Value))
+            .Where(g => s.CargoInventory.Where(c => EliteFileWatcherService.CommodityMatches(c.Name, c.DisplayName, g.Key)).Sum(static c => c.Count) < g.Sum(static m => m.Count!.Value))
             .Select(static g => g.Key)
             .ToList();
         if (missingCargo.Count > 0)
@@ -1186,8 +1191,13 @@ public sealed partial class AiCopilotService : IDisposable
         }
     }
 
+    private bool _disposed;
+
     public void Dispose()
     {
+        if (_disposed)
+            return;
+        _disposed = true;
         _gameEvents.JournalEventReceived -= OnJournalEventReceived;
         _fileWatcher.StateUpdated -= OnShipStateUpdated;
         if (_eliteBgsWatchlist is not null)

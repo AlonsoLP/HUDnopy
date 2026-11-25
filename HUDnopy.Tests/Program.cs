@@ -501,6 +501,7 @@ internal static partial class Program
             Assert(st.CargoInventory.Any(c => c.Name.Equals("Gold", StringComparison.OrdinalIgnoreCase) && c.Count == 12),
                 "Expected 12t Gold in CargoInventory.");
             Assert(st.Shipyard.Items.Count == 2, $"Expected 2 ships in Shipyard.Items, got {st.Shipyard.Items.Count}.");
+            Assert(st.Shipyard.StationName == "Jameson Memorial", $"Expected Shipyard.StationName='Jameson Memorial', got '{st.Shipyard.StationName}'.");
 
             // Jumping to another system must clear stale AssignedLandingPad
             File.AppendAllText(journalPath,
@@ -835,14 +836,20 @@ internal static partial class Program
                    zipCfgText.Contains("\"OverlayClickThrough\"", StringComparison.Ordinal),
                 "Expected v0.5.0 technical diagnostic fields in config.sanitized.json.");
 
-            // Verify recent diagnostic issues snapshot & reportable exception helper
-            AppDiagnosticsLogger.Warn("TestDiagnostics", "Synthetic non-fatal warning");
+            // Verify recent diagnostic issues snapshot, storm deduplication with Exception & reportable exception helper
+            AppDiagnosticsLogger.ClearRecentIssues();
+            var stormEx = new InvalidOperationException("Repeated transient fault");
+            AppDiagnosticsLogger.Error("TestDiagnostics", "Synthetic storm fault", stormEx);
+            AppDiagnosticsLogger.Error("TestDiagnostics", "Synthetic storm fault", stormEx);
+            AppDiagnosticsLogger.Error("TestDiagnostics", "Synthetic storm fault", stormEx);
             var recentIssues = AppDiagnosticsLogger.GetRecentIssuesSnapshot();
-            Assert(recentIssues.Count >= 1 && recentIssues[0].Category == "TestDiagnostics",
-                "Expected AppDiagnosticsLogger.GetRecentIssuesSnapshot() to record recent session issues.");
+            Assert(recentIssues.Count == 1 && recentIssues[0].Category == "TestDiagnostics" && recentIssues[0].Occurrences == 3,
+                $"Expected storm deduplication to collapse 3 identical Exception logs into 1 entry with Occurrences=3 (got Count={recentIssues.Count}, Occurrences={recentIssues.FirstOrDefault()?.Occurrences}).");
             var (reportEx, reportSrc) = AppDiagnosticsLogger.GetLastReportableException();
             Assert(reportEx is not null && !string.IsNullOrWhiteSpace(reportSrc),
                 "Expected AppDiagnosticsLogger.GetLastReportableException() to return a valid reportable exception.");
+            Assert(!HUDnopy.App.IsCorruptedStateException(stormEx) && HUDnopy.App.IsCorruptedStateException(new OutOfMemoryException()),
+                "Expected App.IsCorruptedStateException to distinguish recoverable exceptions from corrupted process state.");
         }
         finally
         {

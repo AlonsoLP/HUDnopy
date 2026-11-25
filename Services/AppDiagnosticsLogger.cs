@@ -35,7 +35,8 @@ public sealed record DiagnosticIssueEntry(
     string Category,
     string Message,
     string Details,
-    Exception? ExceptionObject);
+    Exception? ExceptionObject,
+    int Occurrences = 1);
 
 /// <summary>
 /// Thread-safe, zero-dependency daily rolling diagnostic logger with secret redaction,
@@ -58,6 +59,12 @@ public static partial class AppDiagnosticsLogger
     private static string _lastDedupKey = "";
     private static DateTimeOffset _lastDedupUtc = DateTimeOffset.MinValue;
     private static int _suppressedDuplicates;
+
+    /// <summary>
+    /// Optional provider returning a privacy-safe one-line technical telemetry state summary
+    /// (zero commander names, star systems, coordinates, or secrets).
+    /// </summary>
+    public static Func<string>? TechnicalStateSnapshotProvider { get; set; }
 
     /// <summary>
     /// Raised whenever a new WARN or ERROR diagnostic issue is recorded.
@@ -147,6 +154,9 @@ public static partial class AppDiagnosticsLogger
         sb.AppendLine($"- **OS:** {Environment.OSVersion} ({RuntimeInformation.ProcessArchitecture})");
         if (cfg is not null)
             sb.AppendLine($"- **Language / Scale:** {cfg.InterfaceLanguage} / {cfg.DesktopFontScalePercent}%");
+        string techState = TryGetTechnicalStateSnapshot();
+        if (!string.IsNullOrWhiteSpace(techState))
+            sb.AppendLine($"- **Telemetry State:** {techState}");
         sb.AppendLine($"- **UTC:** {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
         sb.AppendLine();
         sb.AppendLine("```text");
@@ -206,6 +216,9 @@ public static partial class AppDiagnosticsLogger
         // 1. Environment & recent breadcrumbs
         var envSb = new StringBuilder();
         envSb.AppendLine(BuildEnvironmentSummary(cfg));
+        string techState = TryGetTechnicalStateSnapshot();
+        if (!string.IsNullOrWhiteSpace(techState))
+            envSb.AppendLine($"TelemetryState: {techState}");
         envSb.AppendLine($"WorkingSetMB: {Environment.WorkingSet / (1024 * 1024)}");
         envSb.AppendLine($"ProcessorCount: {Environment.ProcessorCount}");
         envSb.AppendLine($"ExportedUtc: {DateTimeOffset.UtcNow:O}");
@@ -372,6 +385,18 @@ public static partial class AppDiagnosticsLogger
         }
     }
 
+    private static string TryGetTechnicalStateSnapshot()
+    {
+        try
+        {
+            return RedactSecrets(TechnicalStateSnapshotProvider?.Invoke() ?? "");
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
     /// <summary>
     /// Clears the in-memory recent diagnostic issues list.
     /// </summary>
@@ -381,6 +406,8 @@ public static partial class AppDiagnosticsLogger
         {
             RecentIssues.Clear();
             _lastRecordedException = null;
+            _lastDedupKey = "";
+            _suppressedDuplicates = 0;
         }
         try { RecentIssuesChanged?.Invoke(); } catch { }
     }
@@ -395,15 +422,29 @@ public static partial class AppDiagnosticsLogger
             string dir = LogsDirectory;
             string filePath = Path.Combine(dir, $"hudnopy-{todayUtc:yyyy-MM-dd}.log");
             string cleanMessage = RedactSecrets(message);
-            string dedupKey = $"{level}|{category}|{cleanMessage}|{ex?.GetType().Name}";
+            string cleanExMessage = ex is not null ? RedactSecrets(ex.Message) : "";
+            string dedupKey = $"{level}|{category}|{cleanMessage}|{ex?.GetType().FullName}|{cleanExMessage}";
 
             lock (WriteLock)
             {
-                // Suppress identical error/warning storms within a 10-second window
-                if (ex is null && dedupKey == _lastDedupKey && (nowUtc - _lastDedupUtc) < DedupWindow)
+                // Suppress identical error/warning storms within a 10-second window (both with and without Exception)
+                if (dedupKey == _lastDedupKey && (nowUtc - _lastDedupUtc) < DedupWindow)
                 {
                     _suppressedDuplicates++;
-                    return;
+                    if (level is "WARN" or "ERROR" && RecentIssues.Count > 0)
+                    {
+                        var lastIssue = RecentIssues[^1];
+                        int nextOccurrences = lastIssue.Occurrences + 1;
+                        string baseMsg = cleanMessage;
+                        RecentIssues[^1] = lastIssue with
+                        {
+                            TimestampUtc = nowUtc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+                            Message = $"{baseMsg} (×{nextOccurrences})",
+                            Occurrences = nextOccurrences
+                        };
+                        notifyIssuesChanged = true;
+                    }
+                    goto NotifyIfNeeded;
                 }
 
                 var sb = new StringBuilder(256);
@@ -449,7 +490,8 @@ public static partial class AppDiagnosticsLogger
                         category,
                         cleanMessage,
                         sb.ToString().Trim(),
-                        ex));
+                        ex,
+                        Occurrences: 1));
                     notifyIssuesChanged = true;
                 }
 
@@ -461,7 +503,7 @@ public static partial class AppDiagnosticsLogger
                 }
 
                 if (File.Exists(filePath) && new FileInfo(filePath).Length >= MaxFileSizeBytes)
-                    return;
+                    goto NotifyIfNeeded;
 
                 File.AppendAllText(filePath, sb.ToString(), Encoding.UTF8);
             }
@@ -471,6 +513,7 @@ public static partial class AppDiagnosticsLogger
             Trace.TraceError($"AppDiagnosticsLogger failed: {logEx.Message}");
         }
 
+    NotifyIfNeeded:
         if (notifyIssuesChanged)
         {
             try { RecentIssuesChanged?.Invoke(); } catch { }
