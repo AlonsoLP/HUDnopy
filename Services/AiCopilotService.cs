@@ -50,10 +50,12 @@ public sealed partial class AiCopilotService : IDisposable
     private string _announcedPvpWarningSystem = "";
 
     public Func<string>? WebHudStatusProvider { get; set; }
-    private readonly HttpClient _httpClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(45));
+    private readonly HttpClient _httpClient = HttpClientHeaderDefaults.CreateHttpClient(TimeSpan.FromSeconds(75));
     private readonly Lock _historyLock = new();
     private readonly List<(string Role, string Content)> _history = new();
     private readonly SemaphoreSlim _askLock = new(1, 1);
+    private readonly Lock _activeRequestCtsLock = new();
+    private CancellationTokenSource? _activeRequestCts;
     private DateTimeOffset _lastDynamicEventUtc = DateTimeOffset.MinValue;
     private DateTimeOffset _lastRadioChatterUtc = DateTimeOffset.MinValue;
     private readonly HashSet<string> _announcedSignalsInSystem = new(StringComparer.OrdinalIgnoreCase);
@@ -298,7 +300,7 @@ public sealed partial class AiCopilotService : IDisposable
             try
             {
                 string prompt = $"Evento táctico recién ocurrido: {eventCue}. Da un comentario breve de copiloto (1 o 2 frases máximo, tono natural de cabina).";
-                var (ok, reply) = await AskAsync(prompt, speakOverride: true, streamToUi: false);
+                var (ok, reply) = await AskAsync(prompt, speakOverride: true, streamToUi: false, cancelPrevious: false);
                 if (ok && !string.IsNullOrWhiteSpace(reply))
                     CopilotMessageAdded?.Invoke("COVAS (Evento)", reply);
             }
@@ -690,7 +692,14 @@ public sealed partial class AiCopilotService : IDisposable
                         if (rawName.StartsWith("models/", StringComparison.OrdinalIgnoreCase))
                             rawName = rawName["models/".Length..];
                         if (!string.IsNullOrWhiteSpace(rawName) &&
-                            !rawName.Contains("embedding", StringComparison.OrdinalIgnoreCase))
+                            !rawName.Contains("embedding", StringComparison.OrdinalIgnoreCase) &&
+                            !rawName.Contains("tts", StringComparison.OrdinalIgnoreCase) &&
+                            !rawName.Contains("image", StringComparison.OrdinalIgnoreCase) &&
+                            !rawName.Contains("imagen", StringComparison.OrdinalIgnoreCase) &&
+                            !rawName.Contains("veo", StringComparison.OrdinalIgnoreCase) &&
+                            !rawName.Contains("aqa", StringComparison.OrdinalIgnoreCase) &&
+                            !rawName.Contains("robotics", StringComparison.OrdinalIgnoreCase) &&
+                            !rawName.Contains("computer-use", StringComparison.OrdinalIgnoreCase))
                         {
                             models.Add(rawName);
                         }
@@ -699,7 +708,9 @@ public sealed partial class AiCopilotService : IDisposable
 
                 models = models
                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderByDescending(static n => n.Contains("flash", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(static n => n.Contains("flash-lite", StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(static n => n.Contains("2.5-flash", StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(static n => n.Contains("flash", StringComparison.OrdinalIgnoreCase))
                     .ThenByDescending(static n => n, StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 return (true, models, $"Gemini: {models.Count}");
@@ -751,7 +762,30 @@ public sealed partial class AiCopilotService : IDisposable
         }
     }
 
-    public async Task<(bool Success, string Reply)> AskAsync(string userPrompt, bool speakOverride = true, bool streamToUi = true)
+    /// <summary>
+    /// Creates a CancellationTokenSource for a new request and optionally cancels any previous
+    /// in-flight request so user queries never pile up and chain stale answers together.
+    /// </summary>
+    private CancellationTokenSource CreateRequestScope(bool cancelPrevious)
+    {
+        lock (_activeRequestCtsLock)
+        {
+            if (cancelPrevious)
+            {
+                try { _activeRequestCts?.Cancel(); } catch { }
+            }
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(_timerCts.Token);
+            if (cancelPrevious || _activeRequestCts is null)
+                _activeRequestCts = cts;
+            return cts;
+        }
+    }
+
+    public async Task<(bool Success, string Reply)> AskAsync(
+        string userPrompt,
+        bool speakOverride = true,
+        bool streamToUi = true,
+        bool cancelPrevious = true)
     {
         var cfg = _configService.Current;
         if (!cfg.EnableAiCopilot)
@@ -799,9 +833,20 @@ public sealed partial class AiCopilotService : IDisposable
             await _galnetService.RefreshAsync(cfg.InterfaceLanguage);
         }
 
-        await _askLock.WaitAsync();
+        using var reqCts = CreateRequestScope(cancelPrevious);
+        var ct = reqCts.Token;
         try
         {
+            await _askLock.WaitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return (false, "");
+        }
+
+        try
+        {
+            ct.ThrowIfCancellationRequested();
             var sw = System.Diagnostics.Stopwatch.StartNew();
             LastFirstTokenLatencyMs = 0;
             string systemPrompt = BuildSystemPrompt(cfg, _fileWatcher.State, userPrompt);
@@ -824,7 +869,9 @@ public sealed partial class AiCopilotService : IDisposable
                 onTextChunk: streamToUi ? chunk => CopilotStreamChunk?.Invoke(chunk) : null,
                 onFirstToken: () => { if (LastFirstTokenLatencyMs == 0) LastFirstTokenLatencyMs = sw.ElapsedMilliseconds; });
 
-            var (success, rawReply) = await SendProviderRequestAsync(cfg, systemPrompt, messages, thinkingBudget, streamSpeaker);
+            var (success, rawReply) = await SendProviderRequestAsync(cfg, systemPrompt, messages, thinkingBudget, streamSpeaker, ct);
+            if (ct.IsCancellationRequested)
+                return (false, "");
             if (!success)
             {
                 LastResponseLatencyMs = sw.ElapsedMilliseconds;
@@ -839,7 +886,9 @@ public sealed partial class AiCopilotService : IDisposable
                     cfg.InterfaceLanguage,
                     speakEnabled: speakOverride && cfg.AiSpeakReplies,
                     onTextChunk: streamToUi ? chunk => CopilotStreamChunk?.Invoke(chunk) : null);
-                rawReply = await ResolveQueriesAndFollowUpAsync(cfg, systemPrompt, messages, rawReply, streamSpeaker);
+                rawReply = await ResolveQueriesAndFollowUpAsync(cfg, systemPrompt, messages, rawReply, streamSpeaker, ct);
+                if (ct.IsCancellationRequested)
+                    return (false, "");
             }
 
             streamSpeaker.FlushRemaining();
@@ -860,6 +909,10 @@ public sealed partial class AiCopilotService : IDisposable
                 _speechService.SpeakCustomText(NormalizeTextForSpeech(finalReply, cfg.InterfaceLanguage));
 
             return (true, finalReply);
+        }
+        catch (OperationCanceledException)
+        {
+            return (false, "");
         }
         finally
         {
@@ -979,9 +1032,20 @@ public sealed partial class AiCopilotService : IDisposable
         // 1. Gemini: direct multimodal WAV audio with SSE sentence-by-sentence TTS streaming + multi-turn history
         if (cfg.AiActiveProvider == "gemini")
         {
-            await _askLock.WaitAsync();
+            using var reqCts = CreateRequestScope(cancelPrevious: !isHandsFree);
+            var ct = reqCts.Token;
             try
             {
+                await _askLock.WaitAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "", "");
+            }
+
+            try
+            {
+                ct.ThrowIfCancellationRequested();
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 LastFirstTokenLatencyMs = 0;
                 LastThinkingUsed = string.Equals(cfg.AiThinkingMode, "yes", StringComparison.OrdinalIgnoreCase) &&
@@ -998,7 +1062,9 @@ public sealed partial class AiCopilotService : IDisposable
                     onTextChunk: chunk => CopilotStreamChunk?.Invoke(chunk),
                     onFirstToken: () => { if (LastFirstTokenLatencyMs == 0) LastFirstTokenLatencyMs = sw.ElapsedMilliseconds; });
 
-                var (ok, reply) = await SendGeminiAudioAsync(cfg, wavBytes, requireWake ? wakeWord : null, streamSpeaker, recentHistory);
+                var (ok, reply) = await SendGeminiAudioAsync(cfg, wavBytes, requireWake ? wakeWord : null, streamSpeaker, recentHistory, ct);
+                if (ct.IsCancellationRequested)
+                    return (false, "", "");
                 if (!ok)
                 {
                     LastResponseLatencyMs = sw.ElapsedMilliseconds;
@@ -1031,7 +1097,10 @@ public sealed partial class AiCopilotService : IDisposable
                         sysPrompt,
                         queryBase,
                         reply,
-                        streamSpeaker);
+                        streamSpeaker,
+                        ct);
+                    if (ct.IsCancellationRequested)
+                        return (false, "", "");
                 }
 
                 streamSpeaker.FlushRemaining();
@@ -1053,6 +1122,10 @@ public sealed partial class AiCopilotService : IDisposable
                 if (cfg.AiSpeakReplies && !string.IsNullOrWhiteSpace(finalReply) && !streamSpeaker.SpokeAnySentence)
                     _speechService.SpeakCustomText(NormalizeTextForSpeech(finalReply, cfg.InterfaceLanguage));
                 return (true, "🎤 [Comando de voz]", finalReply);
+            }
+            catch (OperationCanceledException)
+            {
+                return (false, "", "");
             }
             finally
             {

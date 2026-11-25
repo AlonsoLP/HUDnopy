@@ -44,6 +44,33 @@ public sealed class CarrierState
     public long? WeeklyUpkeep { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 
+    /// <summary>
+    /// True only when a scheduled Fleet Carrier jump is currently pending in the future.
+    /// </summary>
+    public bool HasActiveJump =>
+        DepartureTime is DateTimeOffset dep &&
+        dep > DateTimeOffset.UtcNow &&
+        (!string.IsNullOrWhiteSpace(Destination) || !string.IsNullOrWhiteSpace(DestinationBody));
+
+    /// <summary>
+    /// Clears stale scheduled jump fields once the departure timestamp has already elapsed.
+    /// </summary>
+    public bool ClearExpiredJump(DateTimeOffset referenceUtc)
+    {
+        if (!DepartureTime.HasValue && string.IsNullOrWhiteSpace(Destination) && string.IsNullOrWhiteSpace(DestinationBody))
+            return false;
+
+        if (!DepartureTime.HasValue || DepartureTime.Value <= referenceUtc)
+        {
+            Destination = "";
+            DestinationBody = "";
+            DepartureTime = null;
+            return true;
+        }
+
+        return false;
+    }
+
     internal CarrierState Snapshot() => (CarrierState)MemberwiseClone();
 }
 
@@ -68,6 +95,19 @@ internal static class CarrierJournal
             ? value.GetBoolean() : null;
 
     public static void Reset() => CarriersById.Clear();
+
+    public static void SyncFromExternal(CarrierState? carrier)
+    {
+        if (carrier is null || carrier.Id <= 0)
+            return;
+        CarriersById[carrier.Id] = carrier.Snapshot();
+    }
+
+    public static CarrierState? GetMostRecent() =>
+        CarriersById.Values
+            .OrderByDescending(static c => c.UpdatedAt ?? DateTimeOffset.MinValue)
+            .FirstOrDefault()
+            ?.Snapshot();
 
     public static void Apply(ShipState state, string type, JsonElement data)
     {
@@ -119,19 +159,43 @@ internal static class CarrierJournal
         {
             carrier.System = Text(data, "StarSystem") ?? Text(data, "Location") ?? carrier.System;
             carrier.Body = Text(data, "Body") ?? "";
+            if (!string.IsNullOrWhiteSpace(carrier.Destination) &&
+                string.Equals(carrier.System, carrier.Destination, StringComparison.OrdinalIgnoreCase))
+            {
+                carrier.Destination = "";
+                carrier.DestinationBody = "";
+                carrier.DepartureTime = null;
+            }
         }
         if (type == "CarrierJumpRequest")
         {
-            carrier.Destination = Text(data, "SystemName") ?? "";
-            carrier.DestinationBody = Text(data, "Body") ?? "";
-            carrier.DepartureTime = DateTimeOffset.TryParse(
-                Text(data, "DepartureTime") ?? Text(data, "JumpTime"), out var departure) ? departure : null;
+            DateTimeOffset? departure = DateTimeOffset.TryParse(
+                Text(data, "DepartureTime") ?? Text(data, "JumpTime"), out var parsedDep) ? parsedDep : null;
+            if (departure.HasValue && departure.Value > DateTimeOffset.UtcNow)
+            {
+                carrier.Destination = Text(data, "SystemName") ?? "";
+                carrier.DestinationBody = Text(data, "Body") ?? "";
+                carrier.DepartureTime = departure;
+            }
+            else
+            {
+                carrier.Destination = "";
+                carrier.DestinationBody = "";
+                carrier.DepartureTime = null;
+            }
         }
         if (type is "CarrierJumpCancelled" or "CarrierJump")
         {
             carrier.Destination = "";
             carrier.DestinationBody = "";
             carrier.DepartureTime = null;
+        }
+        if (carrier.DepartureTime.HasValue)
+        {
+            DateTimeOffset effectiveNow = timestamp != default && timestamp > DateTimeOffset.UtcNow
+                ? timestamp
+                : DateTimeOffset.UtcNow;
+            carrier.ClearExpiredJump(effectiveNow);
         }
         if (type is "CarrierStats" or "CarrierDockingPermission")
         {
@@ -223,8 +287,10 @@ internal static class CarrierTranslations
         var space = new CarrierMetric(T("cargo"), Row("used", Int(used, " t")), Row("free", Int(carrier.FreeSpace, " t")), spacePercent);
         var finance = new CarrierMetric(T("financeTitle"), Row("reserve", Int(carrier.Reserve, " CR")), Row("balance", Int(carrier.Balance, " CR")), financePercent);
         var fuel = new CarrierMetric(T("fuel"), Row("fuel", Int(carrier.Fuel, " t")), Row("capacity", Int(fuelCapacity, " t")), fuelPercent);
-        var jump = new[] { Row("destination", Value(carrier.Destination)), Row("destinationBody", Value(carrier.DestinationBody)), Row("departure", Date(carrier.DepartureTime)) };
-        bool hasJump = !string.IsNullOrWhiteSpace(carrier.Destination) || !string.IsNullOrWhiteSpace(carrier.DestinationBody) || carrier.DepartureTime.HasValue;
+        bool hasJump = carrier.HasActiveJump;
+        var jump = hasJump
+            ? new[] { Row("destination", Value(carrier.Destination)), Row("destinationBody", Value(carrier.DestinationBody)), Row("departure", Date(carrier.DepartureTime)) }
+            : Array.Empty<CarrierRow>();
         var rows = new List<CarrierRow>();
         void Add(string key, string value) => rows.Add(new(T(key), value));
         Add("id", carrier.Id.ToString(culture)); Add("system", Value(carrier.System)); Add("body", Value(carrier.Body));

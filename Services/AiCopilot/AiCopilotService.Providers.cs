@@ -31,7 +31,8 @@ public sealed partial class AiCopilotService
         byte[] wavBytes,
         string? requiredWakeWord = null,
         SentenceStreamSpeaker? streamSpeaker = null,
-        List<(string Role, string Content)>? history = null)
+        List<(string Role, string Content)>? history = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(cfg.AiGeminiApiKey) || string.IsNullOrWhiteSpace(cfg.AiGeminiModel))
             return (false, "Configura tu Gemini API Key y modelo en AJUSTES.");
@@ -40,7 +41,7 @@ public sealed partial class AiCopilotService
         string systemPrompt = BuildSystemPrompt(cfg, _fileWatcher.State, userPrompt: null);
         // Voice audio path defaults to fast thinking budget unless user explicitly forced "yes"
         int thinkingBudget = string.Equals(cfg.AiThinkingMode, "yes", StringComparison.OrdinalIgnoreCase)
-            ? (cfg.AiVerbosity == "detailed" ? 2048 : 1024)
+            ? (cfg.AiVerbosity == "detailed" ? 1024 : 512)
             : 0;
 
         string audioInstruction = string.IsNullOrWhiteSpace(requiredWakeWord)
@@ -76,7 +77,7 @@ public sealed partial class AiCopilotService
             }
         });
 
-        return await StreamGeminiInternalAsync(cfg, model, systemPrompt, contentsList.ToArray(), thinkingBudget, streamSpeaker, isAudio: true);
+        return await StreamGeminiInternalAsync(cfg, model, systemPrompt, contentsList.ToArray(), thinkingBudget, streamSpeaker, isAudio: true, ct: ct);
     }
 
     private async Task<(bool Success, string Transcript)> TranscribeWithWhisperAsync(AppConfig cfg, byte[] wavBytes)
@@ -204,13 +205,14 @@ public sealed partial class AiCopilotService
         string systemPrompt,
         List<(string Role, string Content)> messages,
         int thinkingBudget = 0,
-        SentenceStreamSpeaker? streamSpeaker = null)
+        SentenceStreamSpeaker? streamSpeaker = null,
+        CancellationToken ct = default)
     {
         return cfg.AiActiveProvider switch
         {
-            "gemini" => await SendGeminiAsync(cfg, systemPrompt, messages, thinkingBudget, streamSpeaker),
-            "openai" => await SendOpenAiCompatibleAsync(cfg, cfg.AiOpenAiEndpoint, cfg.AiOpenAiApiKey, cfg.AiOpenAiModel, systemPrompt, messages, isOllama: false, streamSpeaker: streamSpeaker),
-            _ => await SendOpenAiCompatibleAsync(cfg, cfg.AiOllamaEndpoint, "", cfg.AiOllamaModel, systemPrompt, messages, isOllama: true, streamSpeaker: streamSpeaker)
+            "gemini" => await SendGeminiAsync(cfg, systemPrompt, messages, thinkingBudget, streamSpeaker, ct),
+            "openai" => await SendOpenAiCompatibleAsync(cfg, cfg.AiOpenAiEndpoint, cfg.AiOpenAiApiKey, cfg.AiOpenAiModel, systemPrompt, messages, isOllama: false, streamSpeaker: streamSpeaker, ct: ct),
+            _ => await SendOpenAiCompatibleAsync(cfg, cfg.AiOllamaEndpoint, "", cfg.AiOllamaModel, systemPrompt, messages, isOllama: true, streamSpeaker: streamSpeaker, ct: ct)
         };
     }
 
@@ -222,7 +224,8 @@ public sealed partial class AiCopilotService
         string systemPrompt,
         List<(string Role, string Content)> messages,
         bool isOllama,
-        SentenceStreamSpeaker? streamSpeaker = null)
+        SentenceStreamSpeaker? streamSpeaker = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(model))
             return (false, "Configura el endpoint y el modelo del proveedor IA en AJUSTES.");
@@ -257,30 +260,30 @@ public sealed partial class AiCopilotService
                 if (!string.IsNullOrWhiteSpace(apiKey))
                     req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
 
-                resp = await _httpClient.SendAsync(req, useStream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead);
+                resp = await _httpClient.SendAsync(req, useStream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead, ct);
                 if (resp.IsSuccessStatusCode || (attempt == 0 && (int)resp.StatusCode is not (429 or 503)))
                     break;
                 if (attempt == 0 && (int)resp.StatusCode is 429 or 503)
                 {
                     resp.Dispose();
                     resp = null;
-                    await Task.Delay(600);
+                    await Task.Delay(600, ct);
                 }
             }
             using var finalResp = resp!;
             if (!finalResp.IsSuccessStatusCode)
             {
-                string errBody = await finalResp.Content.ReadAsStringAsync();
+                string errBody = await finalResp.Content.ReadAsStringAsync(ct);
                 return (false, $"Error HTTP {(int)finalResp.StatusCode}: {Truncate(errBody, 180)}");
             }
 
             if (useStream)
             {
                 var full = new StringBuilder();
-                using var stream = await finalResp.Content.ReadAsStreamAsync();
+                using var stream = await finalResp.Content.ReadAsStreamAsync(ct);
                 using var reader = new StreamReader(stream, Encoding.UTF8);
                 string? line;
-                while ((line = await reader.ReadLineAsync()) is not null)
+                while ((line = await reader.ReadLineAsync(ct)) is not null)
                 {
                     if (!line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                         continue;
@@ -326,6 +329,10 @@ public sealed partial class AiCopilotService
 
             return (false, "Respuesta vacía del proveedor IA.");
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             AppDiagnosticsLogger.Warn("AI.OpenAI", $"Provider request failed ({baseUrl}): {ex.Message}");
@@ -338,7 +345,8 @@ public sealed partial class AiCopilotService
         string systemPrompt,
         List<(string Role, string Content)> messages,
         int thinkingBudget = 0,
-        SentenceStreamSpeaker? streamSpeaker = null)
+        SentenceStreamSpeaker? streamSpeaker = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(cfg.AiGeminiApiKey) || string.IsNullOrWhiteSpace(cfg.AiGeminiModel))
             return (false, "Configura tu Gemini API Key y modelo en AJUSTES.");
@@ -350,13 +358,13 @@ public sealed partial class AiCopilotService
             parts = new[] { new { text = m.Content } }
         }).ToArray();
 
-        return await StreamGeminiInternalAsync(cfg, model, systemPrompt, contents, thinkingBudget, streamSpeaker, isAudio: false);
+        return await StreamGeminiInternalAsync(cfg, model, systemPrompt, contents, thinkingBudget, streamSpeaker, isAudio: false, ct: ct);
     }
 
     /// <summary>
     /// Streams a Gemini text or audio request via SSE (:streamGenerateContent?alt=sse) so TTS can begin
     /// speaking Sentence 1 immediately while the remaining sentences are still being generated.
-    /// Automatically retries without thinkingConfig if HTTP 400 INVALID_ARGUMENT occurs.
+    /// Automatically retries without thinkingConfig if HTTP 400 INVALID_ARGUMENT or a thinking stall occurs.
     /// </summary>
     private async Task<(bool Success, string Reply)> StreamGeminiInternalAsync(
         AppConfig cfg,
@@ -365,36 +373,41 @@ public sealed partial class AiCopilotService
         object contents,
         int thinkingBudget,
         SentenceStreamSpeaker? streamSpeaker,
-        bool isAudio)
+        bool isAudio,
+        CancellationToken ct = default)
     {
         string url = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model)}:streamGenerateContent?alt=sse&key={Uri.EscapeDataString(cfg.AiGeminiApiKey.Trim())}";
         string prefix = isAudio ? "Gemini Audio" : "Gemini";
 
-        async Task<(bool Ok, int StatusCode, string TextOrErr)> ExecuteOnceAsync(bool includeThinking)
+        async Task<(bool Ok, int StatusCode, string TextOrErr)> ExecuteOnceAsync(bool includeThinking, int currentBudget, TimeSpan attemptTimeout)
         {
+            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            attemptCts.CancelAfter(attemptTimeout);
+            var token = attemptCts.Token;
+
             var payload = new
             {
                 system_instruction = new { parts = new[] { new { text = systemPrompt } } },
                 contents,
-                generationConfig = BuildGeminiGenerationConfig(cfg, model, includeThinking ? thinkingBudget : 0, includeThinking)
+                generationConfig = BuildGeminiGenerationConfig(cfg, model, includeThinking ? currentBudget : 0, includeThinking)
             };
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             };
-            using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+            using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, token);
             if (!resp.IsSuccessStatusCode)
             {
-                string err = await resp.Content.ReadAsStringAsync();
+                string err = await resp.Content.ReadAsStringAsync(token);
                 return (false, (int)resp.StatusCode, err);
             }
 
             var full = new StringBuilder();
-            using var stream = await resp.Content.ReadAsStreamAsync();
+            using var stream = await resp.Content.ReadAsStreamAsync(token);
             using var reader = new StreamReader(stream, Encoding.UTF8);
             string? line;
-            while ((line = await reader.ReadLineAsync()) is not null)
+            while ((line = await reader.ReadLineAsync(token)) is not null)
             {
                 if (!line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -423,25 +436,40 @@ public sealed partial class AiCopilotService
 
         try
         {
-            var (ok, statusCode, textOrErr) = await ExecuteOnceAsync(includeThinking: true);
-            if (!ok && statusCode is 429 or 503)
+            (bool ok, int statusCode, string textOrErr) result;
+            try
             {
-                await Task.Delay(600);
-                (ok, statusCode, textOrErr) = await ExecuteOnceAsync(includeThinking: true);
+                result = await ExecuteOnceAsync(includeThinking: true, currentBudget: thinkingBudget, attemptTimeout: TimeSpan.FromSeconds(24));
             }
-            if (!ok && statusCode == 400 &&
-                textOrErr.Contains("INVALID_ARGUMENT", StringComparison.OrdinalIgnoreCase) &&
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && (streamSpeaker is null || !streamSpeaker.SpokeAnySentence))
+            {
+                // First attempt timed out before speaking: retry once in fast zero-thinking mode
+                AppDiagnosticsLogger.Warn("AI.Gemini", $"{prefix} timed out on first attempt ({model}); retrying with zero thinking budget.");
+                result = await ExecuteOnceAsync(includeThinking: true, currentBudget: 0, attemptTimeout: TimeSpan.FromSeconds(24));
+            }
+
+            if (!result.ok && result.statusCode is 429 or 503)
+            {
+                await Task.Delay(600, ct);
+                result = await ExecuteOnceAsync(includeThinking: true, currentBudget: 0, attemptTimeout: TimeSpan.FromSeconds(24));
+            }
+            if (!result.ok && result.statusCode == 400 &&
+                result.textOrErr.Contains("INVALID_ARGUMENT", StringComparison.OrdinalIgnoreCase) &&
                 SupportsGeminiThinking(model))
             {
-                (ok, statusCode, textOrErr) = await ExecuteOnceAsync(includeThinking: false);
+                result = await ExecuteOnceAsync(includeThinking: false, currentBudget: 0, attemptTimeout: TimeSpan.FromSeconds(24));
             }
 
-            if (!ok)
-                return (false, $"{prefix} HTTP {statusCode}: {Truncate(textOrErr, 180)}");
+            if (!result.ok)
+                return (false, $"{prefix} HTTP {result.statusCode}: {Truncate(result.textOrErr, 180)}");
 
-            return !string.IsNullOrWhiteSpace(textOrErr)
-                ? (true, textOrErr)
+            return !string.IsNullOrWhiteSpace(result.textOrErr)
+                ? (true, result.textOrErr)
                 : (false, $"Respuesta vacía de {prefix}.");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

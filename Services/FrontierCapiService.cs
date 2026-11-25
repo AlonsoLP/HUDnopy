@@ -76,23 +76,6 @@ public sealed class FrontierCapiService : IDisposable
 
         LoadTokensFromDisk();
         _gameEvents.JournalEventReceived += OnJournalEventReceived;
-
-        if (_configService.Current.EnableFrontierCapi && IsConnected && HttpClientHeaderDefaults.TestHttpHandlerFactory is null)
-        {
-            _lastAutoSyncUtc = DateTimeOffset.UtcNow;
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(1200).ConfigureAwait(false);
-                    await SyncAllAsync(includeDockedEndpoints: _fileWatcher.State.Docked).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    AppDiagnosticsLogger.Warn("FrontierCapi", $"Startup auto-sync failed: {ex.Message}");
-                }
-            });
-        }
     }
 
     private void OnJournalEventReceived(GameJournalEvent gameEvent)
@@ -108,7 +91,6 @@ public sealed class FrontierCapiService : IDisposable
         if (gameEvent.EventType is "LoadGame" or "Docked" &&
             DateTimeOffset.UtcNow - _lastAutoSyncUtc >= AutoSyncCooldown)
         {
-            _lastAutoSyncUtc = DateTimeOffset.UtcNow;
             _ = SyncAllAsync(includeDockedEndpoints: gameEvent.EventType == "Docked");
         }
     }
@@ -336,11 +318,12 @@ public sealed class FrontierCapiService : IDisposable
         if (DateTimeOffset.UtcNow < _maintenanceUntilUtc)
             return (false, "Servidores Frontier cAPI en mantenimiento (pausa automática).");
 
-        if (!await _syncLock.WaitAsync(0, ct))
+        if (!await _syncLock.WaitAsync(TimeSpan.FromSeconds(15), ct))
             return (true, LastStatus);
 
         try
         {
+            _lastAutoSyncUtc = DateTimeOffset.UtcNow;
             string? token = await EnsureValidAccessTokenAsync(ct);
             if (string.IsNullOrWhiteSpace(token))
             {
@@ -416,30 +399,48 @@ public sealed class FrontierCapiService : IDisposable
     {
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, CapiBaseUrl + endpoint);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var resp = await _httpClient.SendAsync(req, ct);
-
-            if ((int)resp.StatusCode == 418)
+            string activeToken = token;
+            for (int attempt = 0; attempt < 2; attempt++)
             {
-                _maintenanceUntilUtc = DateTimeOffset.UtcNow.AddMinutes(10);
-                UpdateStatus("Frontier cAPI en mantenimiento (HTTP 418).");
-                return (false, null, "MAINTENANCE");
-            }
-            if ((int)resp.StatusCode == 429)
-            {
-                _maintenanceUntilUtc = DateTimeOffset.UtcNow.AddMinutes(5);
-                UpdateStatus("Frontier cAPI rate-limit (HTTP 429).");
-                return (false, null, "RATELIMIT");
-            }
-            if (!resp.IsSuccessStatusCode)
-                return (false, null, $"HTTP {(int)resp.StatusCode}");
+                using var req = new HttpRequestMessage(HttpMethod.Get, CapiBaseUrl + endpoint);
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", activeToken);
+                using var resp = await _httpClient.SendAsync(req, ct);
 
-            string body = await resp.Content.ReadAsStringAsync(ct);
-            if (string.IsNullOrWhiteSpace(body))
-                return (false, null, "EMPTY");
+                if (resp.StatusCode == HttpStatusCode.Unauthorized && attempt == 0)
+                {
+                    if (_tokens is not null)
+                        _tokens.ExpiresAtUtc = DateTimeOffset.MinValue;
+                    string? refreshed = await EnsureValidAccessTokenAsync(ct);
+                    if (!string.IsNullOrWhiteSpace(refreshed))
+                    {
+                        activeToken = refreshed;
+                        continue;
+                    }
+                }
 
-            return (true, JsonDocument.Parse(body), "");
+                if ((int)resp.StatusCode == 418)
+                {
+                    _maintenanceUntilUtc = DateTimeOffset.UtcNow.AddMinutes(10);
+                    UpdateStatus("Frontier cAPI en mantenimiento (HTTP 418).");
+                    return (false, null, "MAINTENANCE");
+                }
+                if ((int)resp.StatusCode == 429)
+                {
+                    _maintenanceUntilUtc = DateTimeOffset.UtcNow.AddMinutes(5);
+                    UpdateStatus("Frontier cAPI rate-limit (HTTP 429).");
+                    return (false, null, "RATELIMIT");
+                }
+                if (!resp.IsSuccessStatusCode)
+                    return (false, null, $"HTTP {(int)resp.StatusCode}");
+
+                string body = await resp.Content.ReadAsStringAsync(ct);
+                if (string.IsNullOrWhiteSpace(body))
+                    return (false, null, "EMPTY");
+
+                return (true, JsonDocument.Parse(body), "");
+            }
+
+            return (false, null, "HTTP 401");
         }
         catch (Exception ex)
         {
@@ -747,9 +748,11 @@ public sealed class FrontierCapiService : IDisposable
             if (totalCap.HasValue) carrier.Capacity = totalCap;
             if (freeSpace.HasValue) carrier.FreeSpace = freeSpace;
             if (cargoUsed.HasValue) carrier.Cargo = cargoUsed;
+            carrier.ClearExpiredJump(DateTimeOffset.UtcNow);
             carrier.UpdatedAt = DateTimeOffset.UtcNow;
 
             state.Carrier = carrier;
+            CarrierJournal.SyncFromExternal(carrier);
             state.CarrierCargo = cargoItems
                 .GroupBy(static i => i.Commodity, StringComparer.OrdinalIgnoreCase)
                 .Select(static g => new CarrierCargoItem

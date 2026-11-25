@@ -307,6 +307,7 @@ public sealed class CockpitRadioService : IDisposable
                     ? $"♪ {station.Name}"
                     : $"♪ {station.Name} — {station.Genre}";
                 ApplyEffectiveVolumeLocked();
+                output.PlaybackStopped += (_, args) => OnOutputPlaybackStopped(output, station.Name, args.Exception);
                 _output.Play();
             }
 
@@ -404,6 +405,27 @@ public sealed class CockpitRadioService : IDisposable
             _statusMessage = "Standby";
         }
         if (notify)
+            NotifyStatus();
+    }
+
+    private void OnOutputPlaybackStopped(WaveOut sourceOutput, string stationName, Exception? error)
+    {
+        bool shouldNotify = false;
+        lock (_sync)
+        {
+            if (!ReferenceEquals(_output, sourceOutput) || !_isPlaying)
+                return;
+
+            _isPlaying = false;
+            _statusMessage = error is not null
+                ? $"Stream lost: {stationName}"
+                : $"Stream ended: {stationName}";
+            shouldNotify = true;
+        }
+
+        if (error is not null)
+            AppDiagnosticsLogger.Warn("CockpitRadioService", $"Stream playback stopped ({stationName}): {error.Message}");
+        if (shouldNotify)
             NotifyStatus();
     }
 

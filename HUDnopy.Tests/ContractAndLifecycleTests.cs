@@ -213,7 +213,10 @@ internal static partial class Program
             Assert(sw.ElapsedMilliseconds < 500, $"Disabled opt-in calls took too long ({sw.ElapsedMilliseconds} ms), suggesting unexpected network I/O.");
 
             // Double-Dispose idempotency check across all services
-            IDisposable[] disposables = [discord, edastro, ardent, bgs, capi, commSync, spansh, watcher];
+            using var piper = new PiperTtsService();
+            using var whisper = new WhisperSttService();
+            using var radio = new CockpitRadioService(cfgSvc);
+            IDisposable[] disposables = [discord, edastro, ardent, bgs, capi, commSync, spansh, watcher, piper, whisper, radio];
             foreach (var d in disposables)
             {
                 d.Dispose();

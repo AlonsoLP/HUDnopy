@@ -350,13 +350,39 @@ internal static partial class Program
         {
             MaterialsInventory =
             [
-                new MaterialItem { Name = "dataminedwake", DisplayName = "Datamined Wake Exceptions", Count = 3, Category = "Encoded", Grade = 5 }
+                new MaterialItem { Name = "dataminedwake", DisplayName = "Excepciones de estela minadas", Count = 3, Category = "Encoded", Grade = 5 },
+                new MaterialItem { Name = "chemicalmanipulators", DisplayName = "Manipuladores químicos", Count = 4, Category = "Manufactured", Grade = 4 }
             ]
         };
         var rows = EngineeringWishlistService.Evaluate(["fsd_range_g5"], state);
         Assert(rows.Count > 0, "Expected evaluated material rows for fsd_range_g5.");
         var dwe = rows.FirstOrDefault(r => r.MaterialName.Contains("Datamined Wake", StringComparison.OrdinalIgnoreCase));
-        Assert(dwe is not null && dwe.Owned == 3, "Expected Datamined Wake Exceptions owned count to be 3.");
+        Assert(dwe is not null && dwe.Owned == 3, $"Expected Datamined Wake Exceptions owned count to be 3 even with localized ES DisplayName (got {dwe?.Owned}).");
+        var chem = rows.FirstOrDefault(r => r.MaterialName.Contains("Chemical Manipulators", StringComparison.OrdinalIgnoreCase));
+        Assert(chem is not null && chem.Owned == 4, $"Expected Chemical Manipulators owned count to be 4 from internal spaceless key (got {chem?.Owned}).");
+
+        // Verify expired Fleet Carrier jump does not trigger HasJump banner, whereas future jump does
+        var expiredCarrier = new CarrierState
+        {
+            Id = 3700000001,
+            Name = "HMS Yesterday",
+            Callsign = "K1A-001",
+            Destination = "Colonia",
+            DepartureTime = DateTimeOffset.UtcNow.AddDays(-3)
+        };
+        var expiredDisplay = CarrierTranslations.Present(expiredCarrier, "en-GB");
+        Assert(!expiredDisplay.HasJump, "Expired Fleet Carrier jump from days ago must not display as an active jump.");
+
+        var activeCarrier = new CarrierState
+        {
+            Id = 3700000001,
+            Name = "HMS Tomorrow",
+            Callsign = "K1A-001",
+            Destination = "Colonia",
+            DepartureTime = DateTimeOffset.UtcNow.AddMinutes(12)
+        };
+        var activeDisplay = CarrierTranslations.Present(activeCarrier, "en-GB");
+        Assert(activeDisplay.HasJump, "Future Fleet Carrier jump must display as an active jump.");
     }
 
     private static void TestAiCopilotHelpers()

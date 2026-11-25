@@ -881,7 +881,8 @@ public sealed partial class AiCopilotService
         string systemPrompt,
         List<(string Role, string Content)> baseMessages,
         string firstReply,
-        SentenceStreamSpeaker? streamSpeaker = null)
+        SentenceStreamSpeaker? streamSpeaker = null,
+        CancellationToken ct = default)
     {
         var matches = QueryCaptureRegex().Matches(firstReply)
             .Cast<Match>()
@@ -896,6 +897,7 @@ public sealed partial class AiCopilotService
             m.Groups[2].Success ? m.Groups[2].Value.Trim() : "")).ToArray();
 
         string[] results = await Task.WhenAll(tasks);
+        ct.ThrowIfCancellationRequested();
 
         var sb = new StringBuilder();
         sb.AppendLine("[RESULTADOS DE CONSULTA EN VIVO]");
@@ -909,7 +911,7 @@ public sealed partial class AiCopilotService
             ("user", sb.ToString())
         };
 
-        var (ok, secondReply) = await SendProviderRequestAsync(cfg, systemPrompt, followUpMessages, thinkingBudget: 0, streamSpeaker: streamSpeaker);
+        var (ok, secondReply) = await SendProviderRequestAsync(cfg, systemPrompt, followUpMessages, thinkingBudget: 0, streamSpeaker: streamSpeaker, ct: ct);
         if (!ok || string.IsNullOrWhiteSpace(secondReply))
             return string.Join("\n", results);
 

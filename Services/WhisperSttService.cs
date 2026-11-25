@@ -185,10 +185,21 @@ public sealed partial class WhisperSttService : IDisposable
                 string zipUrl = await ResolveWhisperZipUrlAsync(ct);
                 progress?.Report("Downloading Whisper.cpp portable engine...");
                 string zipPath = Path.Combine(_rootDir, "whisper-bin-x64.zip");
-                await DownloadFileAsync(zipUrl, zipPath, progress, "Engine", ct);
-                progress?.Report("Extracting Whisper.cpp...");
-                ZipFile.ExtractToDirectory(zipPath, _rootDir, overwriteFiles: true);
-                try { File.Delete(zipPath); } catch { }
+                string zipPartPath = zipPath + ".part";
+                try
+                {
+                    await DownloadFileAsync(zipUrl, zipPartPath, progress, "Engine", ct);
+                    File.Move(zipPartPath, zipPath, overwrite: true);
+                    progress?.Report("Extracting Whisper.cpp...");
+                    ZipFile.ExtractToDirectory(zipPath, _rootDir, overwriteFiles: true);
+                    _cachedExePath = null;
+                    _cachedServerExePath = null;
+                }
+                finally
+                {
+                    try { if (File.Exists(zipPartPath)) File.Delete(zipPartPath); } catch { }
+                    try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { }
+                }
             }
 
             var model = ResolveModel(modelId);
@@ -197,8 +208,16 @@ public sealed partial class WhisperSttService : IDisposable
             {
                 progress?.Report($"Downloading {model.FileName} (~{model.ApproximateSizeMb} MB)...");
                 string tmpPath = modelPath + ".part";
-                await DownloadFileAsync(model.DownloadUrl, tmpPath, progress, model.FileName, ct);
-                File.Move(tmpPath, modelPath, overwrite: true);
+                try
+                {
+                    await DownloadFileAsync(model.DownloadUrl, tmpPath, progress, model.FileName, ct);
+                    File.Move(tmpPath, modelPath, overwrite: true);
+                }
+                catch
+                {
+                    try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+                    throw;
+                }
             }
 
             if (!IsEngineInstalled() || !IsModelInstalled(model.Id))

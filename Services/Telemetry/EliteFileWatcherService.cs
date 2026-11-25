@@ -325,7 +325,13 @@ public partial class EliteFileWatcherService : IDisposable
             bool prevGameDetected = _state.IsGameDetected;
             bool isGameProcessRunning = IsEliteDangerousProcessRunning();
             if (isGameProcessRunning || _journalSessionActive == true)
+            {
                 ReadLatestJournal(folder);
+            }
+            else if (!_hasCompletedInitialJournalLoad && _state.Carrier is null)
+            {
+                RestoreCarrierHistoryFromRecentJournals(folder, "");
+            }
             if (_lastJournalPosition != prevJournalPos || !string.Equals(_currentJournalFile, prevJournalFile, StringComparison.OrdinalIgnoreCase))
                 _stateDirty = true;
             if (_materialsChanged)
@@ -387,6 +393,11 @@ public partial class EliteFileWatcherService : IDisposable
                 _stateDirty = true;
 
             DateTime nowUtc = DateTime.UtcNow;
+            if (_state.Carrier is not null && _state.Carrier.ClearExpiredJump(nowUtc))
+            {
+                CarrierJournal.SyncFromExternal(_state.Carrier);
+                _stateDirty = true;
+            }
             bool carrierCountdownActive = _state.Carrier?.DepartureTime is DateTimeOffset dep && dep > nowUtc;
             bool heartbeatDue = isGameSessionActive && (nowUtc - _lastHeartbeatPublishUtc).TotalSeconds >= 15;
 

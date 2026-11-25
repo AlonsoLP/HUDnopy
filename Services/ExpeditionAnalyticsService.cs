@@ -71,7 +71,7 @@ public static class ExpeditionAnalyticsService
     // SIMD-accelerated pre-filter to skip ~85% of irrelevant Journal lines without allocating a JsonDocument
     private static readonly SearchValues<string> TrackedEventMarkers = SearchValues.Create(
         [
-            "\"FSDJump\"", "\"Scan\"", "\"ScanOrganic\"", "\"MissionCompleted\"",
+            "\"FSDJump\"", "\"CarrierJump\"", "\"Scan\"", "\"ScanOrganic\"", "\"MissionCompleted\"",
             "\"SellExplorationData\"", "\"MultiSellExplorationData\"", "\"SellOrganicData\"",
             "\"RedeemVoucher\"", "\"Fileheader\"", "\"LoadGame\"", "\"Location\""
         ],
@@ -151,6 +151,15 @@ public static class ExpeditionAnalyticsService
                                     {
                                         string name = ss.GetString() ?? "";
                                         if (!string.IsNullOrWhiteSpace(name)) local.Systems.Add(name);
+                                    }
+                                    break;
+
+                                case "Location":
+                                case "CarrierJump":
+                                    if (root.TryGetProperty("StarSystem", out var locSys) && locSys.ValueKind == JsonValueKind.String)
+                                    {
+                                        string locName = locSys.GetString() ?? "";
+                                        if (!string.IsNullOrWhiteSpace(locName)) local.Systems.Add(locName);
                                     }
                                     break;
 

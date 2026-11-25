@@ -456,8 +456,15 @@ public partial class MainWindow
         {
             AppendAiChatLine("CMDR", trimmed);
             var (_, reply) = await _aiCopilot.AskAsync(trimmed);
-            FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
-            UpdateAiLatencyStatusBar();
+            if (!string.IsNullOrWhiteSpace(reply))
+            {
+                FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
+                UpdateAiLatencyStatusBar();
+            }
+            else if (_aiStreamLineOpen)
+            {
+                CloseAiStreamLine();
+            }
         }
         catch (Exception ex)
         {
@@ -554,8 +561,15 @@ public partial class MainWindow
             var (_, transcript, reply) = await _aiCopilot.AskWithAudioWavAsync(wavBytes);
             if (!isGeminiVoice && !string.IsNullOrWhiteSpace(transcript))
                 AppendAiChatLine("CMDR", transcript, sentAt);
-            FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
-            UpdateAiLatencyStatusBar();
+            if (!string.IsNullOrWhiteSpace(reply))
+            {
+                FinishAiStreamOrAppend(GetCovasSpeakerLabel(), reply);
+                UpdateAiLatencyStatusBar();
+            }
+            else if (_aiStreamLineOpen)
+            {
+                CloseAiStreamLine();
+            }
         }
         catch (Exception ex)
         {

@@ -705,6 +705,20 @@ public partial class EliteFileWatcherService
                         string prevBuild = _state.GameBuild;
                         bool prevOdy = _state.IsOdyssey;
                         bool prevLegacy = _state.IsLegacyGalaxy;
+                        var prevCarrier = _state.Carrier ?? CarrierJournal.GetMostRecent();
+                        var prevCarrierUtc = _state.LastCarrierJournalUtc;
+                        var prevCarrierCargo = _state.CarrierCargo;
+                        var prevCarrierOrders = _state.CarrierMarketOrders;
+                        var prevCarrierServices = _state.CarrierServices;
+                        var prevCarrierMaterials = _state.CarrierMaterials;
+                        string prevCarrierMaterialsStation = _state.CarrierMaterialsStation;
+                        var prevStoredShips = _state.StoredShips;
+                        var prevStoredShipsUtc = _state.LastStoredShipsJournalUtc;
+                        var prevStoredModules = _state.StoredModules;
+                        var prevStoredModulesUtc = _state.LastStoredModulesJournalUtc;
+                        var prevCommunityGoals = _state.CommunityGoals;
+                        var prevInaraProfile = _state.InaraProfile;
+                        var prevWatchedBgs = _state.WatchedBgsFactions;
                         _currentSystemAddress = null;
                         _explorationBodies.Clear();
                         _explorationBodyOrder.Clear();
@@ -722,6 +736,20 @@ public partial class EliteFileWatcherService
                             GameBuild = prevBuild,
                             IsOdyssey = prevOdy,
                             IsLegacyGalaxy = prevLegacy,
+                            Carrier = prevCarrier,
+                            LastCarrierJournalUtc = prevCarrierUtc,
+                            CarrierCargo = prevCarrierCargo,
+                            CarrierMarketOrders = prevCarrierOrders,
+                            CarrierServices = prevCarrierServices,
+                            CarrierMaterials = prevCarrierMaterials,
+                            CarrierMaterialsStation = prevCarrierMaterialsStation,
+                            StoredShips = prevStoredShips,
+                            LastStoredShipsJournalUtc = prevStoredShipsUtc,
+                            StoredModules = prevStoredModules,
+                            LastStoredModulesJournalUtc = prevStoredModulesUtc,
+                            CommunityGoals = prevCommunityGoals,
+                            InaraProfile = prevInaraProfile,
+                            WatchedBgsFactions = prevWatchedBgs,
                             ActiveMissions = _activeMissions.Values
                                 .OrderBy(mission => mission.Expiry ?? DateTimeOffset.MaxValue)
                                 .ToList()
@@ -1153,6 +1181,8 @@ public partial class EliteFileWatcherService
             }
 
             CarrierJournal.Apply(_state, evt, root);
+            if (!isHistorical && evt.StartsWith("Carrier", StringComparison.Ordinal))
+                _state.LastCarrierJournalUtc = eventTimestamp.ToUniversalTime();
             if (_configService.Current.CaptureUnhandledEvents && !IsJournalEventHandled(evt, root))
                 RecordUnhandledMessage("Journal", evt, ts, line, occurrenceKey);
             _gameEvents.Publish(new GameJournalEvent(evt, eventTimestamp, root.Clone(), isHistorical));

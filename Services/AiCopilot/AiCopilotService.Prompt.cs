@@ -149,8 +149,10 @@ public sealed partial class AiCopilotService
     private string BuildCompactTelemetryJson(AppConfig cfg, ShipState s, string? userPrompt)
     {
         string p = (userPrompt ?? "").ToLowerInvariant();
-        // Voice audio path (userPrompt == null) keeps core telemetry ultra-compact so Turn 1 stays fast
-        bool general = !string.IsNullOrWhiteSpace(p) &&
+        // When userPrompt is null (direct multimodal voice audio), include all compact telemetry summaries
+        // (~150 tokens) so Gemini can answer in 1 single turn instead of emitting [[QUERY:...]] for a 2nd turn.
+        bool isDirectAudioTurn = string.IsNullOrWhiteSpace(p);
+        bool general = isDirectAudioTurn ||
             ContainsAny(p, "estado", "resumen", "status", "report", "informe", "chequeo", "pre-vuelo", "preflight", "sesión", "sesion", "todo");
 
         bool mentionsCarrierName = !string.IsNullOrWhiteSpace(s.Carrier?.Name) &&
@@ -664,7 +666,7 @@ public sealed partial class AiCopilotService
     private static int ResolveThinkingBudget(AppConfig cfg, string? userPrompt)
     {
         string mode = (cfg.AiThinkingMode ?? "auto").Trim().ToLowerInvariant();
-        int activeBudget = string.Equals(cfg.AiVerbosity, "detailed", StringComparison.OrdinalIgnoreCase) ? 2048 : 1024;
+        int activeBudget = string.Equals(cfg.AiVerbosity, "detailed", StringComparison.OrdinalIgnoreCase) ? 1024 : 512;
         return mode switch
         {
             "no" => 0,
@@ -728,12 +730,18 @@ public sealed partial class AiCopilotService
             bool isGemini3 = m.Contains("gemini-3");
 
             // Flash-Lite has thinking OFF by default and rejects explicit thinkingBudget=0 with HTTP 400.
-            // Pro and Gemini 3 also reject thinkingBudget=0. Only send thinkingBudget=0 on standard gemini-2.5-flash.
+            // Pro requires thinkingBudget >= 128 (omitting it lets Pro think up to 32k tokens and time out).
+            // Standard 2.5-flash and gemini-flash-latest have thinking ON by default unless thinkingBudget=0 is sent.
             if (thinkingBudget > 0)
             {
                 gen["thinkingConfig"] = new { thinkingBudget };
             }
-            else if (!isFlashLite && !isPro && !isGemini3 && m.Contains("2.5-flash"))
+            else if (isPro)
+            {
+                gen["thinkingConfig"] = new { thinkingBudget = 128 };
+                gen["maxOutputTokens"] = Math.Max(baseMax, 640);
+            }
+            else if (!isFlashLite && !isGemini3 && (m.Contains("2.5-flash") || m.Contains("flash-latest")))
             {
                 gen["thinkingConfig"] = new { thinkingBudget = 0 };
             }

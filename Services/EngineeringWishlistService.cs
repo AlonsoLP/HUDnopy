@@ -192,11 +192,35 @@ public static class EngineeringWishlistService
         return shipOwned + lockerOwned + backpackOwned;
     }
 
+    private static readonly Dictionary<string, string> InternalMaterialAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["dataminedwake"] = "dataminedwakeexceptions",
+        ["disruptedwakeechoes"] = "atypicaldisruptedwakeechoes",
+        ["hyperspacetrajectories"] = "eccentrichyperspacetrajectories",
+        ["securityfirmware"] = "securityfirmwarepatch",
+        ["embeddedfirmware"] = "modifiedembeddedfirmware",
+        ["consumerfirmware"] = "modifiedconsumerfirmware"
+    };
+
     private static bool MatchesName(string? candidate, string target)
     {
-        if (string.IsNullOrWhiteSpace(candidate))
+        if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(target))
             return false;
-        string normCand = candidate.Replace("_", " ", StringComparison.Ordinal).Trim();
-        return string.Equals(normCand, target, StringComparison.OrdinalIgnoreCase);
+
+        string normCand = NormalizeMaterialKey(candidate);
+        string normTarget = NormalizeMaterialKey(target);
+        return string.Equals(normCand, normTarget, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeMaterialKey(string raw)
+    {
+        var sb = new System.Text.StringBuilder(raw.Length);
+        foreach (char c in raw)
+        {
+            if (char.IsLetterOrDigit(c))
+                sb.Append(char.ToLowerInvariant(c));
+        }
+        string key = sb.ToString();
+        return InternalMaterialAliases.TryGetValue(key, out string? mapped) ? mapped : key;
     }
 }

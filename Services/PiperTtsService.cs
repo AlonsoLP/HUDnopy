@@ -607,8 +607,13 @@ public sealed class PiperTtsService : IDisposable
         _daemonKey = "";
     }
 
+    private bool _disposed;
+
     public void Dispose()
     {
+        if (_disposed)
+            return;
+        _disposed = true;
         StopDaemonLocked();
         _httpClient.Dispose();
         _downloadLock.Dispose();
