@@ -328,6 +328,13 @@ internal static partial class Program
             Assert(rJs.Content.Headers.ContentEncoding.Contains("br"),
                 $"Expected Content-Encoding: br on /app.js, got '{string.Join(",", rJs.Content.Headers.ContentEncoding)}'.");
 
+            using var rState = await http.GetAsync($"{baseUrl}/api/state");
+            Assert(rState.StatusCode == HttpStatusCode.OK, $"Expected 200 for /api/state, got {rState.StatusCode}.");
+            string stateJson = await rState.Content.ReadAsStringAsync();
+            using var stateDoc = JsonDocument.Parse(stateJson);
+            Assert(stateDoc.RootElement.ValueKind == JsonValueKind.Object && stateDoc.RootElement.TryGetProperty("state", out _),
+                "Expected /api/state to return a valid JSON object with a 'state' property.");
+
             // 2. POST without same-origin header is rejected with HTTP 403 (CSRF protection)
             using var csrfContent = new StringContent("{}", Encoding.UTF8, "application/json");
             using var rCsrf = await http.PostAsync($"{baseUrl}/api/theme", csrfContent);

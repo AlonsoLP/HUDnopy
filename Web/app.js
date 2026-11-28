@@ -1007,22 +1007,24 @@ function renderState(payload) {
   if (healthCard && healthStrip && Array.isArray(payload.serviceHealth)) {
     const enabledHealth = payload.serviceHealth.filter(h => h.Enabled);
     if (enabledHealth.length > 0) {
-      const ledColor = st => st === 'ok' ? 'var(--hud-ok)' : st === 'error' ? 'var(--hud-danger)' : 'var(--hud-secondary)';
+      const borderColor = st => st === 'ok' ? 'var(--hud-ok)' : st === 'error' ? 'var(--hud-danger)' : 'var(--hud-secondary)';
+      const bgFill = st => st === 'ok'
+        ? 'color-mix(in srgb, var(--hud-ok) 22%, transparent)'
+        : st === 'error'
+          ? 'color-mix(in srgb, var(--hud-danger) 24%, transparent)'
+          : 'color-mix(in srgb, var(--hud-secondary) 22%, transparent)';
       healthStrip.replaceChildren();
       enabledHealth.forEach(h => {
         const pill = document.createElement('span');
         pill.title = `${h.Name}: ${h.Detail}`;
-        pill.style.cssText = `display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid ${ledColor(h.Status)};border-radius:4px;font-size:0.78rem;background:rgba(255,255,255,0.04);`;
-        const dot = document.createElement('span');
-        dot.textContent = '●';
-        dot.style.color = ledColor(h.Status);
+        pill.style.cssText = `display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid ${borderColor(h.Status)};border-radius:4px;font-size:0.78rem;background:${bgFill(h.Status)};color:var(--hud-text);`;
         const lbl = document.createElement('span');
         lbl.textContent = `${h.Name}`;
         lbl.style.fontWeight = '700';
         const det = document.createElement('span');
         det.textContent = h.Detail ? `· ${h.Detail}` : '';
-        det.style.color = 'var(--hud-muted)';
-        pill.append(dot, lbl, det);
+        det.style.opacity = '0.85';
+        pill.append(lbl, det);
         healthStrip.append(pill);
       });
       healthCard.hidden = false;
@@ -2011,7 +2013,11 @@ function connectWs() {
     try {
       const data = JSON.parse(ev.data);
       renderState(data);
-    } catch (e) { console.error('Invalid state update:', e); }
+    } catch (e) {
+      console.error('Invalid state update:', e);
+      reportWebClientError(e && e.message ? e.message : String(e), 'ws.onmessage', e && e.stack ? e.stack : '');
+      document.body.classList.add('localized');
+    }
   };
   ws.onclose = () => {
     connectionKey = 'reconnecting';
@@ -2027,7 +2033,15 @@ function connectWs() {
   };
 }
 
-fetch('/api/state').then(r => r.json()).then(renderState).catch(error => console.error('Unable to load state:', error));
+fetch('/api/state')
+  .then(r => r.json())
+  .then(renderState)
+  .catch(error => {
+    console.error('Unable to load state:', error);
+    reportWebClientError(error && error.message ? error.message : String(error), 'fetch(/api/state)', error && error.stack ? error.stack : '');
+    document.body.classList.add('localized');
+  });
+setTimeout(() => { document.body.classList.add('localized'); }, 4000);
 ['materialSearch', 'materialCategoryFilter', 'materialRarityFilter'].forEach(id => {
   document.getElementById(id).addEventListener(id === 'materialSearch' ? 'input' : 'change', () => {
     if (lastPayload && lastPayload.state)
@@ -2484,6 +2498,7 @@ async function speakWebGalnet(stop) {
 
 let webViewingHistoricalJournal = false;
 let webCurrentJournalEvents = [];
+let webJournalFilesLoaded = false;
 let webLastExpeditionMarkdown = '';
 
 async function toggleSelectedWebMaterialWishlist() {
@@ -2906,7 +2921,7 @@ function renderWebSystemMap(mapData) {
   }
 
   sec.hidden = false;
-  const sig = `${mapData.width}x${mapData.height}|` + nodes.map(n => `${n.shortLabel}:${n.fillHex}:${n.isStar ? 1 : 0}:${n.hasBioHalo ? 1 : 0}:${n.isSpanshOnly ? 1 : 0}`).join('|');
+  const sig = `${mapData.width}x${mapData.height}|` + nodes.map(n => `${n.shortLabel}:${n.fillHex}:${n.isStar ? 1 : 0}:${n.isBarycentre ? 1 : 0}:${n.isAsteroidBelt ? 1 : 0}:${n.stationCount || 0}:${n.hasBioHalo ? 1 : 0}:${n.isSpanshOnly ? 1 : 0}`).join('|');
   if (sig === lastWebSystemMapSig) return;
   lastWebSystemMapSig = sig;
 
@@ -2924,55 +2939,65 @@ function renderWebSystemMap(mapData) {
   const defs = makeEl('defs', {});
   svg.appendChild(defs);
 
-  // Connect root stars vertically on the left, main horizontal bodies per star band,
-  // direct moons vertically below their parent, and sub-moons via L-shaped connectors
-  let prevRootStar = null;
+  // 1. Left-hand orthogonal stellar barycentre tree bus
+  const spineLines = Array.isArray(mapData.spineLines) ? mapData.spineLines : [];
+  for (const sl of spineLines) {
+    svg.appendChild(makeEl('line', {
+      x1: sl.x1, y1: sl.y1, x2: sl.x2, y2: sl.y2,
+      stroke: 'rgba(226,232,240,0.58)', 'stroke-width': 1.4
+    }));
+  }
+
+  // 2. Connect main horizontal bodies per star/barycentre band,
+  //    and primary moons edge-to-edge along each vertical moon column
   const lastHorizByBand = new Map();
+  const lastMoonByParent = new Map();
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
     const band = n.starBandIndex ?? 0;
     const indent = n.indentLevel ?? 0;
-    if (n.isRootStar) {
-      if (prevRootStar) {
-        svg.appendChild(makeEl('line', {
-          x1: prevRootStar.x, y1: prevRootStar.y + prevRootStar.radiusPx + 4,
-          x2: n.x, y2: n.y - n.radiusPx - 4,
-          stroke: 'rgba(255,255,255,0.22)', 'stroke-width': 1.4, 'stroke-dasharray': '3 3'
-        }));
-      }
-      prevRootStar = n;
+    if (n.isRootStar || n.isBarycentre) {
       lastHorizByBand.set(band, n);
     } else if (indent === 0) {
       const prev = lastHorizByBand.get(band);
       if (prev) {
+        const prevPad = prev.isStar ? 4 : (prev.isAsteroidBelt ? -3 : 0);
+        const curPad = n.isStar ? 4 : (n.isAsteroidBelt ? -3 : 0);
         svg.appendChild(makeEl('line', {
-          x1: prev.x + prev.radiusPx + (prev.isStar ? 4 : 0), y1: prev.y,
-          x2: n.x - n.radiusPx - (n.isStar ? 4 : 0), y2: n.y,
-          stroke: 'rgba(255,255,255,0.18)', 'stroke-width': 1.2
+          x1: prev.x + prev.radiusPx + prevPad, y1: prev.y,
+          x2: n.x - n.radiusPx - curPad, y2: n.y,
+          stroke: 'rgba(255,255,255,0.22)', 'stroke-width': 1.2
         }));
       }
       lastHorizByBand.set(band, n);
+      lastMoonByParent.set(i, n);
     } else if (n.parentIndex >= 0 && nodes[n.parentIndex]) {
       const p = nodes[n.parentIndex];
       if (Math.abs(n.x - p.x) < 1) {
+        const prevInCol = lastMoonByParent.get(n.parentIndex) || p;
         svg.appendChild(makeEl('line', {
-          x1: p.x, y1: p.y + p.radiusPx, x2: n.x, y2: n.y - n.radiusPx,
-          stroke: 'rgba(255,255,255,0.18)', 'stroke-width': 1.1
+          x1: prevInCol.x, y1: prevInCol.y + prevInCol.radiusPx, x2: n.x, y2: n.y - n.radiusPx,
+          stroke: 'rgba(255,255,255,0.22)', 'stroke-width': 1.1
         }));
+        lastMoonByParent.set(n.parentIndex, n);
+      } else if (Math.abs(n.y - p.y) < 1) {
+        svg.appendChild(makeEl('line', {
+          x1: p.x + p.radiusPx, y1: p.y, x2: n.x - n.radiusPx, y2: n.y,
+          stroke: 'rgba(255,255,255,0.22)', 'stroke-width': 1.1
+        }));
+        lastMoonByParent.set(n.parentIndex, n);
       } else {
+        const prevSub = lastMoonByParent.get(n.parentIndex) || p;
         svg.appendChild(makeEl('line', {
-          x1: p.x, y1: p.y + p.radiusPx, x2: p.x, y2: n.y,
-          stroke: 'rgba(255,255,255,0.18)', 'stroke-width': 1.1
+          x1: n.x, y1: prevSub.y + prevSub.radiusPx, x2: n.x, y2: n.y - n.radiusPx,
+          stroke: 'rgba(255,255,255,0.22)', 'stroke-width': 1.1
         }));
-        svg.appendChild(makeEl('line', {
-          x1: p.x, y1: n.y, x2: n.x - n.radiusPx, y2: n.y,
-          stroke: 'rgba(255,255,255,0.18)', 'stroke-width': 1.1
-        }));
+        lastMoonByParent.set(n.parentIndex, n);
       }
     }
   }
 
-  // Binary pair top brackets
+  // 3. Binary pair top brackets
   const brackets = Array.isArray(mapData.brackets) ? mapData.brackets : [];
   for (const br of brackets) {
     svg.appendChild(makeEl('polyline', {
@@ -2981,9 +3006,59 @@ function renderWebSystemMap(mapData) {
     }));
   }
 
-  // Nodes
+  // 3b. Binary moon left-side vertical brackets
+  const moonBrackets = Array.isArray(mapData.moonBrackets) ? mapData.moonBrackets : [];
+  for (const mb of moonBrackets) {
+    svg.appendChild(makeEl('polyline', {
+      points: `${mb.anchorX1},${mb.y1} ${mb.leftX},${mb.y1} ${mb.leftX},${mb.y2} ${mb.anchorX2},${mb.y2}`,
+      fill: 'none', stroke: 'rgba(255, 195, 75, 0.72)', 'stroke-width': 1.25
+    }));
+  }
+
+  // 4. Nodes (Barycentres ×, Asteroid Belts, Stars, Planets, Moons, Sub-moons, and Station badges)
   nodes.forEach((n, idx) => {
     const g = makeEl('g', { style: 'cursor:pointer;', opacity: n.isSpanshOnly ? '0.52' : '1' });
+
+    if (n.isBarycentre) {
+      const arm = 5.5;
+      g.appendChild(makeEl('line', {
+        x1: n.x - arm, y1: n.y - arm, x2: n.x + arm, y2: n.y + arm,
+        stroke: '#F1F5F9', 'stroke-width': 1.8
+      }));
+      g.appendChild(makeEl('line', {
+        x1: n.x - arm, y1: n.y + arm, x2: n.x + arm, y2: n.y - arm,
+        stroke: '#F1F5F9', 'stroke-width': 1.8
+      }));
+      const tip = makeEl('title', {});
+      tip.textContent = `${n.bodyName || n.shortLabel || 'Barycentre'}`;
+      g.appendChild(tip);
+      svg.appendChild(g);
+      return;
+    }
+
+    if (n.isAsteroidBelt) {
+      const rocks = [
+        [-2.0, -13.0, 1.8, 0.6],
+        [ 1.2,  -9.0, 2.3, 0.85],
+        [-1.5,  -5.0, 1.9, 0.85],
+        [ 2.2,  -1.5, 2.6, 0.9],
+        [-1.0,   2.5, 2.2, 0.85],
+        [ 1.8,   6.5, 2.4, 0.85],
+        [-1.4,  10.0, 1.9, 0.65],
+        [ 0.8,  13.2, 1.6, 0.55]
+      ];
+      for (const [dx, dy, r, op] of rocks) {
+        g.appendChild(makeEl('circle', {
+          cx: n.x + dx, cy: n.y + dy, r: r,
+          fill: '#CBD5E1', opacity: String(op)
+        }));
+      }
+      const tip = makeEl('title', {});
+      tip.textContent = `${n.bodyName || n.shortLabel || 'Asteroid Belt'} (${n.bodyType || 'Asteroid Belt'})`;
+      g.appendChild(tip);
+      svg.appendChild(g);
+      return;
+    }
 
     let fillAttr = n.fillHex;
     if (n.isStar) {
@@ -3049,9 +3124,28 @@ function renderWebSystemMap(mapData) {
         transform: `rotate(-18 ${n.x} ${n.y})`
       }));
     }
+    if ((n.stationCount || 0) > 0) {
+      const bx = n.x + n.radiusPx * 0.78 + 4.5;
+      const by = n.y - n.radiusPx * 0.78 - 3.5;
+      const hr = 5.4;
+      const hexPts = [];
+      for (let hi = 0; hi < 6; hi++) {
+        const ang = (hi * 60 - 30) * Math.PI / 180.0;
+        hexPts.push(`${(bx + hr * Math.cos(ang)).toFixed(1)},${(by + hr * Math.sin(ang)).toFixed(1)}`);
+      }
+      g.appendChild(makeEl('polygon', {
+        points: hexPts.join(' '),
+        fill: '#0F172A', stroke: '#FBBF24', 'stroke-width': 1.4
+      }));
+      g.appendChild(makeEl('circle', {
+        cx: bx, cy: by, r: 1.8,
+        fill: '#FEF08A'
+      }));
+    }
 
     const tip = makeEl('title', {});
-    tip.textContent = `${n.bodyName || n.shortLabel || ''} (${n.bodyType || ''})`;
+    const stInfo = n.stationsSummary ? ` — ⬡ ${n.stationsSummary}` : '';
+    tip.textContent = `${n.bodyName || n.shortLabel || ''} (${n.bodyType || ''})${stInfo}`;
     g.appendChild(tip);
 
     g.addEventListener('click', () => {

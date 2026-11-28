@@ -849,32 +849,59 @@ public partial class MainWindow
             _edastroCanonn,
             _discord);
 
-        string sig = $"{_desktopFontScale:0.00}|" + string.Join("|", items.Select(static i => $"{i.Id}:{i.Enabled}:{i.Status}:{i.Detail}"));
+        string sig = $"{_desktopFontScale:0.00}|{_configService.Current.ThemeAccentHex}|{_configService.Current.ThemeSecondaryHex}|" +
+                     string.Join("|", items.Select(static i => $"{i.Id}:{i.Enabled}:{i.Status}:{i.Detail}"));
         bool overlayOpen = ServiceHealthOverlay?.Visibility == Visibility.Visible;
         if (!forceOverlay && string.Equals(sig, _lastServiceHealthSignature, StringComparison.Ordinal))
             return;
         _lastServiceHealthSignature = sig;
         double scale = Math.Clamp(_desktopFontScale, 0.5, 2.0);
 
-        System.Windows.Media.Brush LedBrush(string status) => status switch
+        System.Windows.Media.Color StatusBaseColor(string status) => status switch
         {
-            "ok" => (System.Windows.Media.Brush)FindResource("HudOkBrush"),
-            "error" => (System.Windows.Media.Brush)FindResource("HudDangerBrush"),
-            "warn" => (System.Windows.Media.Brush)FindResource("HudSecondaryBrush"),
-            _ => (System.Windows.Media.Brush)FindResource("HudMutedBrush")
+            "ok" => (FindResource("HudOkBrush") as System.Windows.Media.SolidColorBrush)?.Color
+                    ?? System.Windows.Media.Color.FromRgb(0, 230, 118),
+            "error" => (FindResource("HudDangerBrush") as System.Windows.Media.SolidColorBrush)?.Color
+                       ?? System.Windows.Media.Color.FromRgb(255, 46, 76),
+            "warn" => (FindResource("HudSecondaryBrush") as System.Windows.Media.SolidColorBrush)?.Color
+                      ?? System.Windows.Media.Color.FromRgb(255, 179, 0),
+            _ => (FindResource("HudMutedBrush") as System.Windows.Media.SolidColorBrush)?.Color
+                 ?? System.Windows.Media.Color.FromRgb(138, 150, 168)
         };
+
+        System.Windows.Media.Brush StatusBorderBrush(string status)
+        {
+            var c = StatusBaseColor(status);
+            return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, c.R, c.G, c.B));
+        }
+
+        System.Windows.Media.Brush StatusFillBrush(string status, byte alpha)
+        {
+            var c = StatusBaseColor(status);
+            return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(alpha, c.R, c.G, c.B));
+        }
 
         ServiceHealthStrip.Children.Clear();
         var enabled = items.Where(static i => i.Enabled).ToList();
         if (enabled.Count == 0)
         {
-            ServiceHealthStrip.Children.Add(new TextBlock
+            var offPill = new Border
             {
-                Text = "● APIs: OFF",
-                Foreground = (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
-                FontSize = 10.5,
-                VerticalAlignment = VerticalAlignment.Center
-            });
+                Background = StatusFillBrush("off", 34),
+                BorderBrush = StatusBorderBrush("off"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(8, 2, 8, 2),
+                Child = new TextBlock
+                {
+                    Text = "APIs: OFF",
+                    Foreground = (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
+                    FontSize = 10.5,
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+            ServiceHealthStrip.Children.Add(offPill);
         }
         else
         {
@@ -882,31 +909,22 @@ public partial class MainWindow
             {
                 var pill = new Border
                 {
-                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 255, 255)),
-                    BorderBrush = LedBrush(item.Status),
+                    Background = StatusFillBrush(item.Status, 58),
+                    BorderBrush = StatusBorderBrush(item.Status),
                     BorderThickness = new Thickness(1),
-                    CornerRadius = new CornerRadius(3),
-                    Padding = new Thickness(6, 1, 6, 1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(8, 2, 8, 2),
                     Margin = new Thickness(0, 0, 5, 0),
-                    ToolTip = $"{item.Name}: {item.Detail}"
+                    ToolTip = $"{item.Name}: {item.Detail}",
+                    Child = new TextBlock
+                    {
+                        Text = item.Name,
+                        Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"),
+                        FontSize = 10,
+                        FontWeight = FontWeights.Bold,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
                 };
-                var sp = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-                sp.Children.Add(new TextBlock
-                {
-                    Text = "● ",
-                    Foreground = LedBrush(item.Status),
-                    FontSize = 9.5,
-                    VerticalAlignment = VerticalAlignment.Center
-                });
-                sp.Children.Add(new TextBlock
-                {
-                    Text = item.Name,
-                    Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"),
-                    FontSize = 10,
-                    FontWeight = FontWeights.SemiBold,
-                    VerticalAlignment = VerticalAlignment.Center
-                });
-                pill.Child = sp;
                 ServiceHealthStrip.Children.Add(pill);
             }
         }
@@ -916,25 +934,31 @@ public partial class MainWindow
             ServiceHealthCardsGrid.Children.Clear();
             foreach (var item in items)
             {
+                string effStatus = item.Enabled ? item.Status : "off";
                 var card = new Border
                 {
                     Width = 225 * Math.Max(1.0, scale),
-                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(10, 14, 20)),
-                    BorderBrush = item.Enabled ? LedBrush(item.Status) : (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
-                    BorderThickness = new Thickness(1),
-                    Padding = new Thickness(9, 7, 9, 7),
+                    Background = StatusFillBrush(effStatus, item.Enabled ? (byte)48 : (byte)22),
+                    BorderBrush = item.Enabled ? StatusBorderBrush(item.Status) : StatusFillBrush("off", 85),
+                    BorderThickness = new Thickness(1.2),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(10, 8, 10, 8),
                     Margin = new Thickness(4),
-                    Opacity = item.Enabled ? 1.0 : 0.55
+                    Opacity = item.Enabled ? 1.0 : 0.62
                 };
                 var stack = new StackPanel();
-                var header = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-                header.Children.Add(new TextBlock { Text = "● ", Foreground = LedBrush(item.Status), FontSize = 11 * scale, VerticalAlignment = VerticalAlignment.Center });
-                header.Children.Add(new TextBlock { Text = item.Name, Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"), FontWeight = FontWeights.Bold, FontSize = 11.5 * scale });
-                stack.Children.Add(header);
+                stack.Children.Add(new TextBlock
+                {
+                    Text = item.Name,
+                    Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"),
+                    FontWeight = FontWeights.Bold,
+                    FontSize = 11.5 * scale
+                });
                 stack.Children.Add(new TextBlock
                 {
                     Text = item.Detail,
-                    Foreground = (System.Windows.Media.Brush)FindResource("HudMutedBrush"),
+                    Foreground = (System.Windows.Media.Brush)FindResource("HudTextBrush"),
+                    Opacity = 0.85,
                     FontSize = 10.5 * scale,
                     TextWrapping = TextWrapping.Wrap,
                     Margin = new Thickness(0, 3, 0, 0)

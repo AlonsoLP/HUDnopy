@@ -5,7 +5,8 @@
 // Copyright:   Copyright (c) 2026 AlonsoLP
 // License:     GPL-3.0-only (see LICENSE file in the repository root)
 // Description: Interactive 2D schematic orbital System Map rendered on a WPF Canvas
-//              with semantic value coloring and quick body inspection cards.
+//              with semantic value coloring, barycentre tree bus, asteroid belts,
+//              binary moon brackets, structural station icons, and quick inspection cards.
 // -----------------------------------------------------------------------------
 
 using System;
@@ -46,7 +47,7 @@ public sealed class SystemMap2DControl : Border
             Content = _canvas,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            MaxHeight = 250
+            MaxHeight = 280
         };
         root.Children.Add(_scroll);
 
@@ -62,7 +63,7 @@ public sealed class SystemMap2DControl : Border
             return;
         }
 
-        string sig = $"{systemName}|{bodies.Count}|{string.Join(",", System.Linq.Enumerable.Select(System.Linq.Enumerable.Take(bodies, 60), static b => $"{b.Id}:{b.WasMapped}:{b.BiologicalSignalCount}:{b.DataSource}"))}";
+        string sig = $"{systemName}|{bodies.Count}|{string.Join(",", System.Linq.Enumerable.Select(System.Linq.Enumerable.Take(bodies, 60), static b => $"{b.Id}:{b.WasMapped}:{b.BiologicalSignalCount}:{b.DataSource}:{b.Stations.Count}:{b.Rings.Count}"))}";
         if (string.Equals(sig, _lastSignature, StringComparison.Ordinal))
             return;
         _lastSignature = sig;
@@ -73,80 +74,110 @@ public sealed class SystemMap2DControl : Border
         _canvas.Width = layout.CanvasWidth;
         _canvas.Height = layout.CanvasHeight;
 
-        // Connect root stars vertically on the left, main horizontal bodies per star band,
-        // direct moons vertically below their parent, and sub-moons via L-shaped connectors
-        var spineBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(75, 255, 255, 255));
+        var spineBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(85, 255, 255, 255));
+        var leftTreeBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(145, 226, 232, 240));
         var bracketBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(145, 255, 195, 75));
-        int prevRootStarIdx = -1;
+
+        // 1. Left-hand orthogonal stellar barycentre tree bus
+        foreach (var sl in layout.SafeSpineLines)
+        {
+            _canvas.Children.Add(new Line
+            {
+                X1 = sl.X1,
+                Y1 = sl.Y1,
+                X2 = sl.X2,
+                Y2 = sl.Y2,
+                Stroke = leftTreeBrush,
+                StrokeThickness = 1.4,
+                IsHitTestVisible = false
+            });
+        }
+
+        // 2. Connect main horizontal bodies per band, and primary moons edge-to-edge along each vertical moon column
         var lastHorizByBand = new Dictionary<int, int>();
+        var lastMoonByParent = new Dictionary<int, int>();
 
         for (int i = 0; i < nodes.Count; i++)
         {
             var n = nodes[i];
-            if (n.IsRootStar)
+            if (n.IsRootStar || n.IsBarycentre)
             {
-                if (prevRootStarIdx >= 0)
-                {
-                    var prevStar = nodes[prevRootStarIdx];
-                    _canvas.Children.Add(new Line
-                    {
-                        X1 = prevStar.X, Y1 = prevStar.Y + prevStar.RadiusPx + 4,
-                        X2 = n.X, Y2 = n.Y - n.RadiusPx - 4,
-                        Stroke = spineBrush, StrokeThickness = 1.4,
-                        StrokeDashArray = new DoubleCollection { 3, 3 }
-                    });
-                }
-                prevRootStarIdx = i;
                 lastHorizByBand[n.StarBandIndex] = i;
             }
             else if (n.IndentLevel == 0)
             {
-                // Planet or orbiting brown dwarf on the main horizontal axis
                 if (lastHorizByBand.TryGetValue(n.StarBandIndex, out int prevIdx))
                 {
                     var prev = nodes[prevIdx];
+                    double prevPad = prev.IsStar ? 4 : (prev.IsAsteroidBelt ? -3 : 0);
+                    double curPad = n.IsStar ? 4 : (n.IsAsteroidBelt ? -3 : 0);
                     _canvas.Children.Add(new Line
                     {
-                        X1 = prev.X + prev.RadiusPx + (prev.IsStar ? 4 : 0), Y1 = prev.Y,
-                        X2 = n.X - n.RadiusPx - (n.IsStar ? 4 : 0), Y2 = n.Y,
-                        Stroke = spineBrush, StrokeThickness = 1.2
+                        X1 = prev.X + prev.RadiusPx + prevPad,
+                        Y1 = prev.Y,
+                        X2 = n.X - n.RadiusPx - curPad,
+                        Y2 = n.Y,
+                        Stroke = spineBrush,
+                        StrokeThickness = 1.2
                     });
                 }
                 lastHorizByBand[n.StarBandIndex] = i;
+                lastMoonByParent[i] = i;
             }
-            else if (n.ParentIndex >= 0)
+            else if (n.ParentIndex >= 0 && n.ParentIndex < nodes.Count)
             {
                 var parent = nodes[n.ParentIndex];
                 if (Math.Abs(n.X - parent.X) < 1.0)
                 {
-                    // Vertical moon connector
+                    // Edge-to-edge vertical moon connector from the previous body in this column
+                    // so the line never passes through the center/fill of intermediate moons!
+                    int prevInColIdx = lastMoonByParent.GetValueOrDefault(n.ParentIndex, n.ParentIndex);
+                    var prevInCol = nodes[prevInColIdx];
                     _canvas.Children.Add(new Line
                     {
-                        X1 = parent.X, Y1 = parent.Y + parent.RadiusPx,
-                        X2 = n.X, Y2 = n.Y - n.RadiusPx,
-                        Stroke = spineBrush, StrokeThickness = 1.1
+                        X1 = prevInCol.X,
+                        Y1 = prevInCol.Y + prevInCol.RadiusPx,
+                        X2 = n.X,
+                        Y2 = n.Y - n.RadiusPx,
+                        Stroke = spineBrush,
+                        StrokeThickness = 1.1
                     });
+                    lastMoonByParent[n.ParentIndex] = i;
+                }
+                else if (Math.Abs(n.Y - parent.Y) < 1.0)
+                {
+                    // Straight horizontal sub-moon connector to the right of its parent moon (same Y)
+                    _canvas.Children.Add(new Line
+                    {
+                        X1 = parent.X + parent.RadiusPx,
+                        Y1 = parent.Y,
+                        X2 = n.X - n.RadiusPx,
+                        Y2 = n.Y,
+                        Stroke = spineBrush,
+                        StrokeThickness = 1.1
+                    });
+                    lastMoonByParent[n.ParentIndex] = i;
                 }
                 else
                 {
-                    // L-shaped sub-moon connector (down from parent, then right to sub-moon)
+                    // Additional sibling sub-moons (cIdx > 0) hanging vertically below the first sub-moon
+                    int prevSubIdx = lastMoonByParent.GetValueOrDefault(n.ParentIndex, n.ParentIndex);
+                    var prevSub = nodes[prevSubIdx];
                     _canvas.Children.Add(new Line
                     {
-                        X1 = parent.X, Y1 = parent.Y + parent.RadiusPx,
-                        X2 = parent.X, Y2 = n.Y,
-                        Stroke = spineBrush, StrokeThickness = 1.1
+                        X1 = n.X,
+                        Y1 = prevSub.Y + prevSub.RadiusPx,
+                        X2 = n.X,
+                        Y2 = n.Y - n.RadiusPx,
+                        Stroke = spineBrush,
+                        StrokeThickness = 1.1
                     });
-                    _canvas.Children.Add(new Line
-                    {
-                        X1 = parent.X, Y1 = n.Y,
-                        X2 = n.X - n.RadiusPx, Y2 = n.Y,
-                        Stroke = spineBrush, StrokeThickness = 1.1
-                    });
+                    lastMoonByParent[n.ParentIndex] = i;
                 }
             }
         }
 
-        // Binary pair top brackets (┌───┐)
+        // 3. Binary pair top brackets (┌───┐)
         foreach (var br in layout.Brackets)
         {
             _canvas.Children.Add(new Line { X1 = br.X1, Y1 = br.AnchorY1, X2 = br.X1, Y2 = br.TopY, Stroke = bracketBrush, StrokeThickness = 1.3 });
@@ -154,9 +185,29 @@ public sealed class SystemMap2DControl : Border
             _canvas.Children.Add(new Line { X1 = br.X2, Y1 = br.TopY, X2 = br.X2, Y2 = br.AnchorY2, Stroke = bracketBrush, StrokeThickness = 1.3 });
         }
 
-        // Draw body nodes
+        // 3b. Binary moon left-side vertical brackets
+        foreach (var mb in layout.SafeMoonBrackets)
+        {
+            _canvas.Children.Add(new Line { X1 = mb.AnchorX1, Y1 = mb.Y1, X2 = mb.LeftX, Y2 = mb.Y1, Stroke = bracketBrush, StrokeThickness = 1.25 });
+            _canvas.Children.Add(new Line { X1 = mb.LeftX, Y1 = mb.Y1, X2 = mb.LeftX, Y2 = mb.Y2, Stroke = bracketBrush, StrokeThickness = 1.25 });
+            _canvas.Children.Add(new Line { X1 = mb.LeftX, Y1 = mb.Y2, X2 = mb.AnchorX2, Y2 = mb.Y2, Stroke = bracketBrush, StrokeThickness = 1.25 });
+        }
+
+        // 4. Draw nodes (Barycentres ×, Asteroid Belts, Stars, Planets, Moons, Sub-moons, and Station icons)
         foreach (var n in nodes)
         {
+            if (n.IsBarycentre)
+            {
+                DrawBarycentreNode(n);
+                continue;
+            }
+
+            if (n.IsAsteroidBelt)
+            {
+                DrawAsteroidBeltNode(n);
+                continue;
+            }
+
             var fill = ParseBrush(n.FillHex);
             var stroke = ParseBrush(n.StrokeHex);
             double opacity = n.IsSpanshOnly ? 0.58 : 1.0;
@@ -257,6 +308,10 @@ public sealed class SystemMap2DControl : Border
                 };
             }
 
+            string tipText = $"{n.Body.BodyName} ({n.Body.BodyType}) [{n.Body.DataSource}]";
+            if (!string.IsNullOrWhiteSpace(n.StationsSummary))
+                tipText += $"\n⬡ {n.StationsSummary}";
+
             var orb = new Ellipse
             {
                 Width = n.RadiusPx * 2,
@@ -266,7 +321,7 @@ public sealed class SystemMap2DControl : Border
                 StrokeThickness = n.IsStar ? 1.0 : n.IsHighGravity ? 2.4 : 1.3,
                 Opacity = opacity,
                 Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = $"{n.Body.BodyName} ({n.Body.BodyType}) [{n.Body.DataSource}]"
+                ToolTip = tipText
             };
             var captured = n.Body;
             orb.MouseLeftButtonUp += (_, _) => ShowBodyDetail(captured);
@@ -307,7 +362,108 @@ public sealed class SystemMap2DControl : Border
                 Canvas.SetTop(innerRing, n.Y - innerRing.Height / 2);
                 _canvas.Children.Add(innerRing);
             }
+
+            if (n.StationCount > 0)
+            {
+                DrawStationBadge(n, tipText);
+            }
         }
+    }
+
+    private void DrawBarycentreNode(SystemMapNode n)
+    {
+        var crossBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(225, 241, 245, 249));
+        const double arm = 5.5;
+        _canvas.Children.Add(new Line
+        {
+            X1 = n.X - arm,
+            Y1 = n.Y - arm,
+            X2 = n.X + arm,
+            Y2 = n.Y + arm,
+            Stroke = crossBrush,
+            StrokeThickness = 1.8,
+            ToolTip = $"{n.Body.BodyName}"
+        });
+        _canvas.Children.Add(new Line
+        {
+            X1 = n.X - arm,
+            Y1 = n.Y + arm,
+            X2 = n.X + arm,
+            Y2 = n.Y - arm,
+            Stroke = crossBrush,
+            StrokeThickness = 1.8,
+            ToolTip = $"{n.Body.BodyName}"
+        });
+    }
+
+    private void DrawAsteroidBeltNode(SystemMapNode n)
+    {
+        var rockBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(215, 203, 213, 225));
+        var dimRockBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(150, 148, 163, 184));
+        (double dx, double dy, double r, bool bright)[] rocks =
+        [
+            (-2.0, -13.0, 1.8, false),
+            ( 1.2,  -9.0, 2.3, true),
+            (-1.5,  -5.0, 1.9, true),
+            ( 2.2,  -1.5, 2.6, true),
+            (-1.0,   2.5, 2.2, true),
+            ( 1.8,   6.5, 2.4, true),
+            (-1.4,  10.0, 1.9, false),
+            ( 0.8,  13.2, 1.6, false)
+        ];
+
+        foreach (var (dx, dy, r, bright) in rocks)
+        {
+            var dot = new Ellipse
+            {
+                Width = r * 2,
+                Height = r * 2,
+                Fill = bright ? rockBrush : dimRockBrush,
+                ToolTip = $"{n.Body.BodyName} ({n.Body.BodyType})"
+            };
+            Canvas.SetLeft(dot, n.X + dx - r);
+            Canvas.SetTop(dot, n.Y + dy - r);
+            _canvas.Children.Add(dot);
+        }
+    }
+
+    private void DrawStationBadge(SystemMapNode n, string tipText)
+    {
+        // Elite Dangerous-style structural orbital station / planetary settlement hexagon badge (amber/gold)
+        double bx = n.X + n.RadiusPx * 0.78 + 4.5;
+        double by = n.Y - n.RadiusPx * 0.78 - 3.5;
+        const double r = 5.4;
+
+        var hexPoints = new PointCollection(6);
+        for (int i = 0; i < 6; i++)
+        {
+            double angle = (i * 60 - 30) * Math.PI / 180.0;
+            hexPoints.Add(new System.Windows.Point(bx + r * Math.Cos(angle), by + r * Math.Sin(angle)));
+        }
+
+        var hex = new Polygon
+        {
+            Points = hexPoints,
+            Fill = ParseBrush("#0F172A"),
+            Stroke = ParseBrush("#FBBF24"),
+            StrokeThickness = 1.4,
+            ToolTip = tipText,
+            Cursor = System.Windows.Input.Cursors.Hand
+        };
+        var captured = n.Body;
+        hex.MouseLeftButtonUp += (_, _) => ShowBodyDetail(captured);
+        _canvas.Children.Add(hex);
+
+        var coreDot = new Ellipse
+        {
+            Width = 3.6,
+            Height = 3.6,
+            Fill = ParseBrush("#FEF08A"),
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(coreDot, bx - 1.8);
+        Canvas.SetTop(coreDot, by - 1.8);
+        _canvas.Children.Add(coreDot);
     }
 
     private void ShowBodyDetail(ExplorationBodyItem b)

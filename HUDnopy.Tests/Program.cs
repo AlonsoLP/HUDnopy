@@ -1013,9 +1013,10 @@ internal static partial class Program
         };
         var layout = SystemMapLayoutBuilder.Build(bodies, "Exphiay");
         var nodes = layout.Nodes;
-        Assert(nodes.Count == 8, $"Expected 8 map nodes, got {nodes.Count}");
+        Assert(nodes.Count == 9, $"Expected 9 map nodes (including Exphiay A Belt node), got {nodes.Count}");
         Assert(layout.Brackets.Count == 1, $"Expected 1 binary pair bracket (4-5), got {layout.Brackets.Count}");
         var starG = nodes.First(n => n.Body.BodyName == "Exphiay");
+        var beltA = nodes.First(n => n.IsAsteroidBelt && n.Body.BodyName == "Exphiay A Belt");
         var p3 = nodes.First(n => n.Body.BodyName == "Exphiay 3");
         var p4 = nodes.First(n => n.Body.BodyName == "Exphiay 4");
         var p5 = nodes.First(n => n.Body.BodyName == "Exphiay 5");
@@ -1024,16 +1025,148 @@ internal static partial class Program
         var sm7ea = nodes.First(n => n.Body.BodyName == "Exphiay 7 e a");
         var p8 = nodes.First(n => n.Body.BodyName == "Exphiay 8");
         Assert(starG.IsRootStar && !starG.HasRings, "Root Star G must be root star and never render asteroid belts as rings.");
+        Assert(Math.Abs(beltA.Y - starG.Y) < 0.1 && beltA.X > starG.X && p3.X > beltA.X,
+            "Stellar asteroid belt Exphiay A Belt must render as a dedicated belt node between Star G and planet 3.");
         Assert(Math.Abs(p4.Y - starG.Y) < 0.1 && Math.Abs(p5.Y - starG.Y) < 0.1 && p4.X > p3.X && p5.X > p4.X,
             "Binary planets 4 and 5 must stay on main horizontal axis (NOT stacked vertically under 3).");
         Assert(starY.IsStar && !starY.IsRootStar && Math.Abs(starY.Y - starG.Y) < 0.1 && starY.X > p5.X,
             "Orbiting Y-class brown dwarf Exphiay 7 must stay on main horizontal axis.");
         Assert(Math.Abs(m7e.X - starY.X) < 0.1 && m7e.Y > starY.Y && m7e.IsHighGravity && m7e.IsSpanshOnly,
             "Moon 7 e must hang vertically below Exphiay 7.");
-        Assert(sm7ea.X > m7e.X && sm7ea.Y > m7e.Y && sm7ea.IndentLevel == 2,
-            "Sub-moon 7 e a must be indented in L-shape to the right of moon 7 e.");
+        Assert(sm7ea.X > m7e.X && Math.Abs(sm7ea.Y - m7e.Y) < 0.1 && sm7ea.IndentLevel == 2,
+            "Sub-moon 7 e a must branch horizontally to the right of moon 7 e at the same Y (IndentLevel 2).");
         Assert(Math.Abs(p8.Y - starG.Y) < 0.1 && p8.X > sm7ea.X,
             "Independent planet 8 must sit on main horizontal axis to the right of Exphiay 7's sub-moon column.");
+
+        // 3b. Carener multi-star barycentre tree bus, intermediate × AB barycentre for ringed gas giant,
+        //     stellar asteroid belt on Star C, Null-barycentre sub-moon indentation, and station badges
+        var carenerBodies = new List<ExplorationBodyItem>
+        {
+            new()
+            {
+                BodyId = 2, BodyName = "Carener A", SystemName = "Carener", StarType = "K",
+                HierarchyDepth = 2, DirectParentType = "Null", DirectParentBodyId = 1, BarycentreId = 1,
+                Parents = new List<ExplorationParentRef> { new("Null", 1), new("Null", 0) }, DataSource = "Local"
+            },
+            new()
+            {
+                BodyId = 3, BodyName = "Carener B", SystemName = "Carener", StarType = "M",
+                HierarchyDepth = 2, DirectParentType = "Null", DirectParentBodyId = 1, BarycentreId = 1,
+                Parents = new List<ExplorationParentRef> { new("Null", 1), new("Null", 0) }, DataSource = "Local"
+            },
+            new()
+            {
+                BodyId = 4, BodyName = "Carener C", SystemName = "Carener", StarType = "M",
+                HierarchyDepth = 1, DirectParentType = "Null", DirectParentBodyId = 0, BarycentreId = 0,
+                Parents = new List<ExplorationParentRef> { new("Null", 0) },
+                Rings = new List<ExplorationRingItem> { new() { Name = "Carener C A Belt", RingClass = "eRingClass_Rocky" } },
+                DataSource = "Local"
+            },
+            new()
+            {
+                BodyId = 5, BodyName = "Carener AB 1", SystemName = "Carener", PlanetClass = "Sudarsky class I gas giant",
+                HierarchyDepth = 2, DirectParentType = "Null", DirectParentBodyId = 1, BarycentreId = 1,
+                Parents = new List<ExplorationParentRef> { new("Null", 1), new("Null", 0) },
+                Rings = new List<ExplorationRingItem> { new() { Name = "Carener AB 1 A Ring", RingClass = "eRingClass_Icy" } },
+                Stations = new List<string> { "Butcher Terminal (Orbis Starport)" },
+                DataSource = "Local"
+            },
+            new()
+            {
+                BodyId = 7, BodyName = "Carener AB 1 a", SystemName = "Carener", PlanetClass = "Rocky body",
+                HierarchyDepth = 4, DirectParentType = "Null", DirectParentBodyId = 6, BarycentreId = 6, ParentPlanetBodyId = 5,
+                Parents = new List<ExplorationParentRef> { new("Null", 6), new("Planet", 5), new("Null", 1), new("Null", 0) },
+                Stations = new List<string> { "ertzutz Extraction Hub" },
+                DataSource = "Local"
+            },
+            new()
+            {
+                BodyId = 8, BodyName = "Carener AB 1 a a", SystemName = "Carener", PlanetClass = "Rocky body",
+                HierarchyDepth = 4, DirectParentType = "Null", DirectParentBodyId = 6, BarycentreId = 6, ParentPlanetBodyId = 5,
+                Parents = new List<ExplorationParentRef> { new("Null", 6), new("Planet", 5), new("Null", 1), new("Null", 0) },
+                DataSource = "Local"
+            },
+            new()
+            {
+                BodyId = 10, BodyName = "Carener C 1", SystemName = "Carener", PlanetClass = "High metal content body",
+                HierarchyDepth = 2, DirectParentType = "Star", DirectParentBodyId = 4, HostStarBodyId = 4,
+                Parents = new List<ExplorationParentRef> { new("Star", 4), new("Null", 0) },
+                DataSource = "Local"
+            }
+        };
+        var carenerLayout = SystemMapLayoutBuilder.Build(carenerBodies, "Carener");
+        var cStarA = carenerLayout.Nodes.First(n => n.Body.BodyName == "Carener A");
+        var cBaryAB = carenerLayout.Nodes.First(n => n.IsBarycentre && n.ShortLabel == "AB");
+        var cStarB = carenerLayout.Nodes.First(n => n.Body.BodyName == "Carener B");
+        var cStarC = carenerLayout.Nodes.First(n => n.Body.BodyName == "Carener C");
+        var cGasGiant = carenerLayout.Nodes.First(n => n.Body.BodyName == "Carener AB 1");
+        var cMoon1a = carenerLayout.Nodes.First(n => n.Body.BodyName == "Carener AB 1 a");
+        var cSubMoon1aa = carenerLayout.Nodes.First(n => n.Body.BodyName == "Carener AB 1 a a");
+        var cBeltC = carenerLayout.Nodes.First(n => n.IsAsteroidBelt && n.Body.BodyName == "Carener C A Belt");
+        var cPlanetC1 = carenerLayout.Nodes.First(n => n.Body.BodyName == "Carener C 1");
+
+        Assert(cStarA.Y < cStarB.Y && cStarB.Y < cBaryAB.Y && cBaryAB.Y < cStarC.Y,
+            $"Expected Star A and Star B grouped together at top-left with AB barycentre × immediately below Star B (A.Y={cStarA.Y}, B.Y={cStarB.Y}, AB.Y={cBaryAB.Y}, C.Y={cStarC.Y}).");
+        Assert(Math.Abs(cGasGiant.Y - cBaryAB.Y) < 0.1 && cGasGiant.HasRings && cGasGiant.StationCount == 1,
+            "Ringed gas giant Carener AB 1 must hang horizontally from AB barycentre × (NOT from Star A) and show its station badge.");
+        Assert(carenerLayout.SafeSpineLines.Count >= 6,
+            $"Expected left-hand orthogonal barycentre tree bus lines for Carener (got {carenerLayout.SafeSpineLines.Count}).");
+        Assert(Math.Abs(cMoon1a.X - cGasGiant.X) < 0.1 && cMoon1a.Y > cGasGiant.Y && cMoon1a.IndentLevel == 1 && cMoon1a.StationCount == 1,
+            "Moon Carener AB 1 a must hang vertically below gas giant Carener AB 1 at IndentLevel 1.");
+        Assert(cSubMoon1aa.X > cMoon1a.X && Math.Abs(cSubMoon1aa.Y - cMoon1a.Y) < 0.1 && cSubMoon1aa.IndentLevel == 2,
+            "Sub-moon Carener AB 1 a a (even with Null barycentre in Parents) must branch horizontally to the right of Carener AB 1 a at the same Y (IndentLevel 2).");
+        Assert(Math.Abs(cBeltC.Y - cStarC.Y) < 0.1 && cBeltC.X > cStarC.X && cPlanetC1.X > cBeltC.X,
+            "Asteroid belt Carener C A Belt must render between Star C and planet Carener C 1.");
+
+        // 3c. 69 Upsilon Tauri (real Stellar Forge hierarchy):
+        //     - Stars A & B share inner Null 1; Star C joins at outer Null 0; circumbinary bodies are named "ABC 1..6"
+        //     - The "ABC" × barycentre band MUST sit between Star B and Star C (A.Y < B.Y < ABC_X.Y < C.Y)!
+        //     - 6 circumbinary bodies on ABC × row: Bracket 1 (ABC 1 + ABC 2, Null 6), Bracket 2 (ABC 3 + ABC 4, Null 16),
+        //       and independent ABC 5 + ABC 6 (directly under Null 0 -> NO false 3rd bracket!)
+        //     - Binary moons around brown dwarf ABC 5 (ABC 5 a + ABC 5 b sharing local Null 34 -> aligned at same X with left-side moon bracket)
+        //     - Sub-moon ABC 5 i a around water-world moon ABC 5 i -> shifted LEFT (X < ABC 5 i.X) at IndentLevel 2
+        var upsTauriBodies = new List<ExplorationBodyItem>
+        {
+            new() { BodyId = 2, BodyName = "69 Upsilon Tauri A", SystemName = "69 Upsilon Tauri", StarType = "A", DirectParentType = "Null", DirectParentBodyId = 1, BarycentreId = 1, Parents = new List<ExplorationParentRef> { new("Null", 1), new("Null", 0) }, Stations = new List<string> { "Orbital Outpost A" }, DataSource = "Local" },
+            new() { BodyId = 3, BodyName = "69 Upsilon Tauri B", SystemName = "69 Upsilon Tauri", StarType = "G", DirectParentType = "Null", DirectParentBodyId = 1, BarycentreId = 1, Parents = new List<ExplorationParentRef> { new("Null", 1), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 4, BodyName = "69 Upsilon Tauri C", SystemName = "69 Upsilon Tauri", StarType = "G", DirectParentType = "Null", DirectParentBodyId = 0, BarycentreId = 0, Parents = new List<ExplorationParentRef> { new("Null", 0) }, Stations = new List<string> { "Outpost C" }, DataSource = "Local" },
+            new() { BodyId = 5, BodyName = "69 Upsilon Tauri C 1", SystemName = "69 Upsilon Tauri", PlanetClass = "Metal-rich body", DirectParentType = "Star", DirectParentBodyId = 4, HostStarBodyId = 4, Parents = new List<ExplorationParentRef> { new("Star", 4), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 7, BodyName = "69 Upsilon Tauri ABC 1", SystemName = "69 Upsilon Tauri", StarType = "Y", DirectParentType = "Null", DirectParentBodyId = 6, BarycentreId = 6, Parents = new List<ExplorationParentRef> { new("Null", 6), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 11, BodyName = "69 Upsilon Tauri ABC 2", SystemName = "69 Upsilon Tauri", PlanetClass = "Sudarsky class III gas giant", DirectParentType = "Null", DirectParentBodyId = 6, BarycentreId = 6, Parents = new List<ExplorationParentRef> { new("Null", 6), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 17, BodyName = "69 Upsilon Tauri ABC 3", SystemName = "69 Upsilon Tauri", StarType = "T", DirectParentType = "Null", DirectParentBodyId = 16, BarycentreId = 16, Parents = new List<ExplorationParentRef> { new("Null", 16), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 24, BodyName = "69 Upsilon Tauri ABC 4", SystemName = "69 Upsilon Tauri", StarType = "Y", DirectParentType = "Null", DirectParentBodyId = 16, BarycentreId = 16, Parents = new List<ExplorationParentRef> { new("Null", 16), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 31, BodyName = "69 Upsilon Tauri ABC 5", SystemName = "69 Upsilon Tauri", StarType = "Y", DirectParentType = "Null", DirectParentBodyId = 0, BarycentreId = 0, Parents = new List<ExplorationParentRef> { new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 35, BodyName = "69 Upsilon Tauri ABC 5 a", SystemName = "69 Upsilon Tauri", PlanetClass = "Rocky body", DirectParentType = "Null", DirectParentBodyId = 34, BarycentreId = 34, HostStarBodyId = 31, Parents = new List<ExplorationParentRef> { new("Null", 34), new("Star", 31), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 36, BodyName = "69 Upsilon Tauri ABC 5 b", SystemName = "69 Upsilon Tauri", PlanetClass = "Rocky body", DirectParentType = "Null", DirectParentBodyId = 34, BarycentreId = 34, HostStarBodyId = 31, Parents = new List<ExplorationParentRef> { new("Null", 34), new("Star", 31), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 44, BodyName = "69 Upsilon Tauri ABC 5 i", SystemName = "69 Upsilon Tauri", PlanetClass = "Water world", DirectParentType = "Star", DirectParentBodyId = 31, HostStarBodyId = 31, Parents = new List<ExplorationParentRef> { new("Star", 31), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 45, BodyName = "69 Upsilon Tauri ABC 5 i a", SystemName = "69 Upsilon Tauri", PlanetClass = "Rocky body", DirectParentType = "Planet", DirectParentBodyId = 44, ParentPlanetBodyId = 44, HostStarBodyId = 31, Parents = new List<ExplorationParentRef> { new("Planet", 44), new("Star", 31), new("Null", 0) }, DataSource = "Local" },
+            new() { BodyId = 53, BodyName = "69 Upsilon Tauri ABC 6", SystemName = "69 Upsilon Tauri", PlanetClass = "High metal content world", DirectParentType = "Null", DirectParentBodyId = 0, BarycentreId = 0, Parents = new List<ExplorationParentRef> { new("Null", 0) }, DataSource = "Local" }
+        };
+        var upsLayout = SystemMapLayoutBuilder.Build(upsTauriBodies, "69 Upsilon Tauri");
+        var uStarA = upsLayout.Nodes.First(n => n.Body.BodyName == "69 Upsilon Tauri A");
+        var uStarB = upsLayout.Nodes.First(n => n.Body.BodyName == "69 Upsilon Tauri B");
+        var uBaryABC = upsLayout.Nodes.First(n => n.IsBarycentre && n.ShortLabel == "ABC");
+        var uStarC = upsLayout.Nodes.First(n => n.Body.BodyName == "69 Upsilon Tauri C");
+        var uMoon5a = upsLayout.Nodes.First(n => n.Body.BodyName == "69 Upsilon Tauri ABC 5 a");
+        var uMoon5b = upsLayout.Nodes.First(n => n.Body.BodyName == "69 Upsilon Tauri ABC 5 b");
+        var uMoon5i = upsLayout.Nodes.First(n => n.Body.BodyName == "69 Upsilon Tauri ABC 5 i");
+        var uSubMoon5ia = upsLayout.Nodes.First(n => n.Body.BodyName == "69 Upsilon Tauri ABC 5 i a");
+
+        Assert(uStarA.Y < uStarB.Y && uStarB.Y < uBaryABC.Y && uBaryABC.Y < uStarC.Y,
+            $"Expected ABC × barycentre row between Star B and Star C in 69 Upsilon Tauri (A.Y={uStarA.Y}, B.Y={uStarB.Y}, ABC.Y={uBaryABC.Y}, C.Y={uStarC.Y}).");
+        Assert(upsLayout.Brackets.Count == 2,
+            $"Expected exactly 2 top binary brackets in 69 Upsilon Tauri (ABC 1-2 and ABC 3-4; NOT ABC 5-6), got {upsLayout.Brackets.Count}");
+        Assert(upsLayout.SafeMoonBrackets.Count == 1 && Math.Abs(uMoon5a.X - uMoon5b.X) < 0.1,
+            "Binary moons ABC 5 a & ABC 5 b must stay aligned on the main vertical moon axis with 1 left-side binary moon bracket.");
+        Assert(uSubMoon5ia.X > uMoon5i.X && Math.Abs(uSubMoon5ia.Y - uMoon5i.Y) < 0.1 && uSubMoon5ia.IndentLevel == 2,
+            "Sub-moon ABC 5 i a must branch horizontally to the right of water-world moon ABC 5 i at the same Y (IndentLevel 2).");
+        Assert(uStarA.StationCount == 1 && uStarC.StationCount == 1,
+            "Expected station counts on root stars A and C in 69 Upsilon Tauri.");
+        Assert(!SpanshSystemDataService.IsSystemMapDisplayableStationType("Settlement", "Badeaux Cultivations") &&
+               !SpanshSystemDataService.IsSystemMapDisplayableStationType("Planetary Outpost", "Kozlov Survey") &&
+               !SpanshSystemDataService.IsSystemMapDisplayableStationType("", "Henslow Depot") &&
+               SpanshSystemDataService.IsSystemMapDisplayableStationType("Orbis Starport", "Galileo"),
+            "Minor Odyssey surface settlements and surface planetary outposts/depots must be filtered out from 2D System Map orbital station icons.");
 
         // 4. Block D (#6): Update semver comparison & opt-in default
         Assert(UpdateCheckService.IsNewerVersion("0.4.0", "v0.5.0"), "Expected v0.5.0 > 0.4.0");

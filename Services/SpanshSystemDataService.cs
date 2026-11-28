@@ -177,6 +177,7 @@ public sealed class SpanshSystemDataService : IDisposable
                 throw new InvalidDataException("Spansh returned a system dump with a mismatched ID64.");
 
             SpanshSystemSnapshot snapshot = CreateSnapshot(dump.System, id64);
+            await EnrichSnapshotWithEdsmStationsAsync(snapshot, cancellationToken);
             await WriteCacheAsync(snapshot, cancellationToken);
             PublishIfCurrent(id64, request, new(
                 SpanshSystemDataStatus.Ready, snapshot, false));
@@ -233,6 +234,8 @@ public sealed class SpanshSystemDataService : IDisposable
         return true;
     }
 
+    private const int CurrentCacheSchemaVersion = 3;
+
     private async Task<SpanshSystemSnapshot?> ReadCacheAsync(ulong id64, CancellationToken cancellationToken)
     {
         if (!File.Exists(_cachePath))
@@ -245,7 +248,9 @@ public sealed class SpanshSystemDataService : IDisposable
                 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
             SpanshSystemSnapshot? snapshot = await JsonSerializer.DeserializeAsync<SpanshSystemSnapshot>(
                 stream, SharedJsonOptions, cancellationToken);
-            return snapshot?.Id64 == id64 ? snapshot : null;
+            if (snapshot?.Id64 != id64 || snapshot.SchemaVersion < CurrentCacheSchemaVersion)
+                return null;
+            return snapshot;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
@@ -296,14 +301,88 @@ public sealed class SpanshSystemDataService : IDisposable
     private static SpanshSystemSnapshot CreateSnapshot(SpanshApiSystem source, ulong requestedId64)
     {
         List<SpanshApiBody> sourceBodies = source.Bodies ?? new();
-        int stationCount = sourceBodies.Sum(body => body.Stations?.Count ?? 0);
+        string systemName = source.Name ?? "";
+
+        // Build per-body station lists combining body.Stations and system-level source.Stations
+        var allStations = new List<(string BodyName, int? BodyId, SpanshApiStation Station)>();
+        foreach (var body in sourceBodies)
+        {
+            if (body.Stations is null)
+                continue;
+            foreach (var st in body.Stations)
+                allStations.Add((body.Name ?? "", body.BodyId, st));
+        }
+        if (source.Stations is not null)
+        {
+            foreach (var st in source.Stations)
+            {
+                string stBodyName = st.Body?.Name ?? st.BodyName ?? "";
+                int? stBodyId = st.Body?.Id ?? st.BodyId;
+                if (string.IsNullOrWhiteSpace(stBodyName) && stBodyId.HasValue)
+                {
+                    stBodyName = sourceBodies.FirstOrDefault(b => b.BodyId == stBodyId.Value)?.Name ?? "";
+                }
+                if (string.IsNullOrWhiteSpace(stBodyName) && sourceBodies.Count > 0)
+                {
+                    // Root-level orbital starport/installation without explicit body field:
+                    // only match to primary Star A if arrival distance is near arrival (< 100 ls);
+                    // otherwise match to the body with closest DistanceToArrival within 15 ls so outer companion stars (like Star C)
+                    // never receive false-positive station icons!
+                    if (!st.DistanceToArrival.HasValue || st.DistanceToArrival.Value < 100.0)
+                    {
+                        var primaryStar = sourceBodies.FirstOrDefault(b =>
+                            string.Equals(b.Name, $"{systemName} A", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(b.Name, systemName, StringComparison.OrdinalIgnoreCase)) ?? sourceBodies[0];
+                        stBodyName = primaryStar.Name ?? systemName;
+                        stBodyId ??= primaryStar.BodyId;
+                    }
+                    else
+                    {
+                        var closestBody = sourceBodies
+                            .Where(static b => b.DistanceToArrival.HasValue)
+                            .Select(b => (Body: b, Diff: Math.Abs(b.DistanceToArrival!.Value - st.DistanceToArrival.Value)))
+                            .Where(static x => x.Diff <= 15.0)
+                            .OrderBy(static x => x.Diff)
+                            .FirstOrDefault().Body;
+                        if (closestBody is not null)
+                        {
+                            stBodyName = closestBody.Name ?? "";
+                            stBodyId ??= closestBody.BodyId;
+                        }
+                    }
+                }
+                bool isDup = allStations.Any(x =>
+                    string.Equals(x.Station.Name, st.Name, StringComparison.OrdinalIgnoreCase));
+                if (!isDup && !string.IsNullOrWhiteSpace(st.Name))
+                    allStations.Add((stBodyName, stBodyId, st));
+            }
+        }
+
+        List<string> GetStationsForBody(SpanshApiBody body)
+        {
+            var list = new List<string>();
+            foreach (var item in allStations)
+            {
+                bool matches = (body.BodyId.HasValue && item.BodyId.HasValue && body.BodyId.Value == item.BodyId.Value) ||
+                               (!string.IsNullOrWhiteSpace(body.Name) && string.Equals(item.BodyName, body.Name, StringComparison.OrdinalIgnoreCase));
+                if (!matches || !IsSystemMapDisplayableStationType(item.Station.Type, item.Station.Name))
+                    continue;
+                string label = string.IsNullOrWhiteSpace(item.Station.Type)
+                    ? (item.Station.Name ?? "")
+                    : $"{item.Station.Name} ({item.Station.Type})";
+                if (!string.IsNullOrWhiteSpace(label) && !list.Contains(label, StringComparer.OrdinalIgnoreCase))
+                    list.Add(label);
+            }
+            return list;
+        }
 
         return new SpanshSystemSnapshot
         {
+            SchemaVersion = CurrentCacheSchemaVersion,
             Id64 = source.Id64 ?? requestedId64,
-            Name = source.Name ?? "",
+            Name = systemName,
             BodyCount = source.BodyCount ?? sourceBodies.Count,
-            StationCount = stationCount,
+            StationCount = allStations.Count,
             FetchedAtUtc = DateTimeOffset.UtcNow,
             Bodies = sourceBodies
                 .OrderBy(body => body.DistanceToArrival ?? double.MaxValue)
@@ -318,21 +397,123 @@ public sealed class SpanshSystemDataService : IDisposable
                     body.Gravity.HasValue ? body.Gravity.Value * 9.80665 : null,
                     body.SurfaceTemperature,
                     body.AtmosphereType,
-                    HasRings: body.Rings is { Count: > 0 }))
+                    HasRings: body.Rings is { Count: > 0 },
+                    Parents: ExtractSpanshParents(body.Parents),
+                    BeltNames: ExtractSpanshBeltNames(body.Belts, body.Rings),
+                    StationNames: GetStationsForBody(body)))
                 .ToList(),
-            Stations = sourceBodies
-                .SelectMany(body => (body.Stations ?? new()).Select(station => (Body: body.Name ?? "", Station: station)))
+            Stations = allStations
                 .OrderBy(item => item.Station.DistanceToArrival ?? double.MaxValue)
                 .ThenBy(item => item.Station.Name, StringComparer.OrdinalIgnoreCase)
                 .Take(MaxDisplayedRecords)
                 .Select(item => new SpanshStationSummary(
                     item.Station.Name ?? "",
                     item.Station.Type ?? "",
-                    item.Body,
+                    item.BodyName,
                     item.Station.DistanceToArrival,
                     item.Station.ControllingFaction ?? ""))
                 .ToList()
         };
+    }
+
+    /// <summary>
+    /// Queries EDSM /api-system-v1/stations for orbital stations in the system that Spansh's dump
+    /// omitted from per-body station lists (e.g., orbital stations around Star A or outer gas giants).
+    /// </summary>
+    private async Task EnrichSnapshotWithEdsmStationsAsync(SpanshSystemSnapshot snapshot, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(snapshot.Name))
+            return;
+
+        try
+        {
+            string url = $"https://www.edsm.net/api-system-v1/stations?systemName={Uri.EscapeDataString(snapshot.Name)}";
+            using var resp = await _httpClient.GetAsync(url, ct);
+            if (!resp.IsSuccessStatusCode)
+                return;
+
+            await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+                !doc.RootElement.TryGetProperty("stations", out var stArr) ||
+                stArr.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+
+            foreach (var st in stArr.EnumerateArray())
+            {
+                string stName = st.TryGetProperty("name", out var np) && np.ValueKind == JsonValueKind.String ? (np.GetString() ?? "") : "";
+                string stType = st.TryGetProperty("type", out var tp) && tp.ValueKind == JsonValueKind.String ? (tp.GetString() ?? "") : "";
+                if (string.IsNullOrWhiteSpace(stName) || !IsSystemMapDisplayableStationType(stType, stName))
+                    continue;
+
+                string bodyName = "";
+                int? bodyId = null;
+                if (st.TryGetProperty("body", out var bp) && bp.ValueKind == JsonValueKind.Object)
+                {
+                    bodyName = bp.TryGetProperty("name", out var bnp) && bnp.ValueKind == JsonValueKind.String ? (bnp.GetString() ?? "") : "";
+                    if (bp.TryGetProperty("id", out var bip) && bip.ValueKind == JsonValueKind.Number && bip.TryGetInt32(out int parsedId))
+                        bodyId = parsedId;
+                }
+
+                double? distLs = st.TryGetProperty("distanceToArrival", out var dp) && dp.ValueKind == JsonValueKind.Number && dp.TryGetDouble(out double dVal)
+                    ? dVal
+                    : null;
+
+                // Match target body in snapshot.Bodies by BodyId, exact BodyName, or closest arrival distance for orbital starports
+                SpanshBodySummary? targetBody = null;
+                if (bodyId.HasValue)
+                    targetBody = snapshot.Bodies.FirstOrDefault(b => b.BodyId == bodyId.Value);
+                if (targetBody is null && !string.IsNullOrWhiteSpace(bodyName))
+                {
+                    targetBody = snapshot.Bodies.FirstOrDefault(b =>
+                        string.Equals(b.Name, bodyName, StringComparison.OrdinalIgnoreCase) ||
+                        (string.Equals(bodyName, snapshot.Name, StringComparison.OrdinalIgnoreCase) &&
+                         string.Equals(b.Name, $"{snapshot.Name} A", StringComparison.OrdinalIgnoreCase)));
+                }
+                if (targetBody is null && distLs.HasValue && snapshot.Bodies.Count > 0)
+                {
+                    // Fallback for orbital stations without an explicit body object in EDSM:
+                    // if distance is near arrival (< 100 ls), attach to primary Star A; otherwise to the body with closest DistanceToArrival
+                    if (distLs.Value < 100.0)
+                    {
+                        targetBody = snapshot.Bodies.FirstOrDefault(b =>
+                            string.Equals(b.Name, $"{snapshot.Name} A", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(b.Name, snapshot.Name, StringComparison.OrdinalIgnoreCase)) ?? snapshot.Bodies[0];
+                    }
+                    else
+                    {
+                        targetBody = snapshot.Bodies
+                            .Where(static b => b.DistanceToArrival.HasValue)
+                            .Select(b => (Body: b, Diff: Math.Abs(b.DistanceToArrival!.Value - distLs.Value)))
+                            .Where(static x => x.Diff <= 15.0)
+                            .OrderBy(static x => x.Diff)
+                            .FirstOrDefault().Body;
+                    }
+                }
+
+                if (targetBody is not null)
+                {
+                    string formatted = string.IsNullOrWhiteSpace(stType) ? stName : $"{stName} ({stType})";
+                    var list = targetBody.StationNames ?? new List<string>();
+                    if (!list.Any(existing => existing.StartsWith(stName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        list.Add(formatted);
+                        if (targetBody.StationNames is null)
+                        {
+                            int idx = snapshot.Bodies.IndexOf(targetBody);
+                            if (idx >= 0)
+                                snapshot.Bodies[idx] = targetBody with { StationNames = list };
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Non-critical enrichment
+        }
     }
 
     public void Dispose()
@@ -369,6 +550,8 @@ public sealed class SpanshSystemDataService : IDisposable
         public int? BodyCount { get; set; }
         [JsonPropertyName("bodies")]
         public List<SpanshApiBody>? Bodies { get; set; }
+        [JsonPropertyName("stations")]
+        public List<SpanshApiStation>? Stations { get; set; }
     }
 
     private sealed class SpanshApiBody
@@ -393,8 +576,86 @@ public sealed class SpanshSystemDataService : IDisposable
         public string? AtmosphereType { get; set; }
         [JsonPropertyName("rings")]
         public List<JsonElement>? Rings { get; set; }
+        [JsonPropertyName("belts")]
+        public List<JsonElement>? Belts { get; set; }
+        [JsonPropertyName("parents")]
+        public List<JsonElement>? Parents { get; set; }
         [JsonPropertyName("stations")]
         public List<SpanshApiStation>? Stations { get; set; }
+    }
+
+    /// <summary>
+    /// Returns true when a Spansh/EDSM station type represents an orbital starport, orbital outpost,
+    /// megaship, or orbital installation shown on the 2D System Map (excluding surface ports,
+    /// planetary outposts, Odyssey settlements, and Fleet Carriers).
+    /// </summary>
+    internal static bool IsSystemMapDisplayableStationType(string? stationType, string? stationName = null)
+    {
+        string t = (stationType ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(t))
+            return false;
+        if (t.Equals("Settlement", StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("Odyssey Settlement", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("Planetary", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("Surface", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("Crater", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("Fleet Carrier", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("Drake-Class", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return true;
+    }
+
+    private static List<ExplorationParentRef>? ExtractSpanshParents(List<JsonElement>? parents)
+    {
+        if (parents is null || parents.Count == 0)
+            return null;
+        var list = new List<ExplorationParentRef>(parents.Count);
+        foreach (var pObj in parents)
+        {
+            if (pObj.ValueKind != JsonValueKind.Object)
+                continue;
+            foreach (var prop in pObj.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetInt32(out int pId))
+                {
+                    list.Add(new ExplorationParentRef(prop.Name, pId));
+                    break;
+                }
+            }
+        }
+        return list.Count > 0 ? list : null;
+    }
+
+    private static List<string>? ExtractSpanshBeltNames(List<JsonElement>? belts, List<JsonElement>? rings)
+    {
+        var list = new List<string>();
+        static void CollectBelts(List<JsonElement>? source, List<string> target, bool forceBelt)
+        {
+            if (source is null)
+                return;
+            foreach (var el in source)
+            {
+                if (el.ValueKind != JsonValueKind.Object)
+                    continue;
+                string name = el.TryGetProperty("name", out var np) && np.ValueKind == JsonValueKind.String
+                    ? (np.GetString() ?? "")
+                    : "";
+                string type = el.TryGetProperty("type", out var tp) && tp.ValueKind == JsonValueKind.String
+                    ? (tp.GetString() ?? "")
+                    : "";
+                if (forceBelt ||
+                    name.Contains("Belt", StringComparison.OrdinalIgnoreCase) ||
+                    type.Contains("Belt", StringComparison.OrdinalIgnoreCase))
+                {
+                    string beltLabel = !string.IsNullOrWhiteSpace(name) ? name : "Asteroid Belt";
+                    if (!target.Contains(beltLabel, StringComparer.OrdinalIgnoreCase))
+                        target.Add(beltLabel);
+                }
+            }
+        }
+        CollectBelts(belts, list, forceBelt: true);
+        CollectBelts(rings, list, forceBelt: false);
+        return list.Count > 0 ? list : null;
     }
 
     private sealed class SpanshApiStation
@@ -407,6 +668,20 @@ public sealed class SpanshSystemDataService : IDisposable
         public double? DistanceToArrival { get; set; }
         [JsonPropertyName("controllingFaction")]
         public string? ControllingFaction { get; set; }
+        [JsonPropertyName("body")]
+        public SpanshApiStationBodyRef? Body { get; set; }
+        [JsonPropertyName("bodyName")]
+        public string? BodyName { get; set; }
+        [JsonPropertyName("bodyId")]
+        public int? BodyId { get; set; }
+    }
+
+    private sealed class SpanshApiStationBodyRef
+    {
+        [JsonPropertyName("id")]
+        public int? Id { get; set; }
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
     }
 
     public async Task<(bool Success, List<SpanshServiceStationItem> Results, string Message)> SearchNearestServicesAsync(

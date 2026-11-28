@@ -28,6 +28,7 @@ public sealed record SpanshSystemDataState(
 
 public sealed class SpanshSystemSnapshot
 {
+    public int SchemaVersion { get; set; }
     public ulong Id64 { get; set; }
     public string Name { get; set; } = "";
     public int BodyCount { get; set; }
@@ -46,7 +47,10 @@ public sealed record SpanshBodySummary(
     double? SurfaceGravity = null,
     double? SurfaceTemperature = null,
     string? AtmosphereType = null,
-    bool HasRings = false);
+    bool HasRings = false,
+    List<ExplorationParentRef>? Parents = null,
+    List<string>? BeltNames = null,
+    List<string>? StationNames = null);
 
 public sealed record SpanshStationSummary(
     string Name,

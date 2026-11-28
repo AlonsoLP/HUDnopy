@@ -16,6 +16,11 @@ using System.Text.Json.Serialization;
 namespace HUDnopy.Models;
 
 /// <summary>
+/// Represents a single entry in the Elite Dangerous Journal Parents array (e.g., {"Null": 1}, {"Star": 0}, {"Planet": 4}).
+/// </summary>
+public sealed record ExplorationParentRef(string Type, int BodyId);
+
+/// <summary>
 /// Domain models for celestial bodies, exobiology tracking, and surface bookmarks.
 /// </summary>
 public class ExplorationBodyItem
@@ -30,6 +35,8 @@ public class ExplorationBodyItem
         copy.Composition = Composition.Snapshot();
         copy.Rings = Rings.Select(item => item.Snapshot()).ToList();
         copy.Anomalies = Anomalies.ToList();
+        copy.Parents = new List<ExplorationParentRef>(Parents);
+        copy.Stations = new List<string>(Stations);
         return copy;
     }
     public string Id { get; set; } = "";
@@ -40,6 +47,8 @@ public class ExplorationBodyItem
     public int? BarycentreId { get; set; }
     public int? HostStarBodyId { get; set; }
     public int? ParentPlanetBodyId { get; set; }
+    public List<ExplorationParentRef> Parents { get; set; } = new();
+    public List<string> Stations { get; set; } = new();
     public string DataSource { get; set; } = "Local";
     [JsonIgnore]
     public bool IsSpanshOnly => string.Equals(DataSource, "Spansh", StringComparison.OrdinalIgnoreCase);

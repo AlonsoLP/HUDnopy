@@ -56,6 +56,11 @@ public partial class EliteFileWatcherService
             }
         }
 
+        if (eventType is "Location" or "Docked" or "ApproachSettlement" or "SupercruiseExit")
+        {
+            TryRecordLocalBodyStationOrSettlement(eventType, data);
+        }
+
         if (eventType is not ("Scan" or "FSSBodySignals" or "SAASignalsFound" or "SAAScanComplete" or "ScanOrganic"))
             return;
 
@@ -110,6 +115,7 @@ public partial class EliteFileWatcherService
         body.BodyName = bodyName;
         if (TryGetJournalInt(data, eventType == "ScanOrganic" ? "Body" : "BodyID", out int parsedBodyId))
             body.BodyId = parsedBodyId;
+        AttachPendingLocalStations(body, systemAddress);
 
         if (eventType == "Scan")
         {
@@ -117,37 +123,21 @@ public partial class EliteFileWatcherService
                 _sessionBodiesScanned++;
             if (data.TryGetProperty("Parents", out var parentsProp) && parentsProp.ValueKind == JsonValueKind.Array)
             {
-                body.HierarchyDepth = parentsProp.GetArrayLength();
-                body.DirectParentBodyId = null;
-                body.DirectParentType = "";
-                body.BarycentreId = null;
-                body.HostStarBodyId = null;
-                body.ParentPlanetBodyId = null;
-
-                int pIdx = 0;
+                var parsedParents = new List<ExplorationParentRef>();
                 foreach (var pObj in parentsProp.EnumerateArray())
                 {
                     if (pObj.ValueKind != JsonValueKind.Object)
                         continue;
                     foreach (var prop in pObj.EnumerateObject())
                     {
-                        if (prop.Value.ValueKind != JsonValueKind.Number || !prop.Value.TryGetInt32(out int pId))
-                            continue;
-                        if (pIdx == 0)
+                        if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetInt32(out int pId))
                         {
-                            body.DirectParentType = prop.Name;
-                            body.DirectParentBodyId = pId;
-                            if (prop.Name.Equals("Null", StringComparison.OrdinalIgnoreCase))
-                                body.BarycentreId = pId;
+                            parsedParents.Add(new ExplorationParentRef(prop.Name, pId));
+                            break;
                         }
-                        if (body.ParentPlanetBodyId is null && prop.Name.Equals("Planet", StringComparison.OrdinalIgnoreCase))
-                            body.ParentPlanetBodyId = pId;
-                        if (body.HostStarBodyId is null && prop.Name.Equals("Star", StringComparison.OrdinalIgnoreCase))
-                            body.HostStarBodyId = pId;
-                        break;
                     }
-                    pIdx++;
                 }
+                ApplyParentsHierarchy(body, parsedParents);
             }
             body.PlanetClass = GetJournalRawText(data, "PlanetClass") ?? body.PlanetClass;
             body.StarType = GetJournalRawText(data, "StarType") ?? body.StarType;
@@ -234,6 +224,18 @@ public partial class EliteFileWatcherService
                              combinedType.Contains("Geolog", StringComparison.OrdinalIgnoreCase) ||
                              combinedType.Contains("Геолог", StringComparison.OrdinalIgnoreCase))
                         body.GeologicalSignalCount += count;
+                    else if (count > 0 &&
+                             (combinedType.Contains("Station", StringComparison.OrdinalIgnoreCase) ||
+                              combinedType.Contains("Installation", StringComparison.OrdinalIgnoreCase) ||
+                              combinedType.Contains("Outpost", StringComparison.OrdinalIgnoreCase) ||
+                              combinedType.Contains("Megaship", StringComparison.OrdinalIgnoreCase) ||
+                              combinedType.Contains("Instalación", StringComparison.OrdinalIgnoreCase) ||
+                              combinedType.Contains("Estación", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        string sigLabel = !string.IsNullOrWhiteSpace(locType) ? locType : (rawType ?? "Orbital Installation");
+                        if (!body.Stations.Contains(sigLabel, StringComparer.OrdinalIgnoreCase))
+                            body.Stations.Add(sigLabel);
+                    }
                 }
             }
 
@@ -363,6 +365,142 @@ public partial class EliteFileWatcherService
             return true;
 
         return false;
+    }
+
+    private static void ApplyParentsHierarchy(ExplorationBodyItem body, List<ExplorationParentRef> parents)
+    {
+        body.Parents = new List<ExplorationParentRef>(parents);
+        body.HierarchyDepth = parents.Count;
+        body.DirectParentBodyId = null;
+        body.DirectParentType = "";
+        body.BarycentreId = null;
+        body.HostStarBodyId = null;
+        body.ParentPlanetBodyId = null;
+
+        for (int pIdx = 0; pIdx < parents.Count; pIdx++)
+        {
+            var p = parents[pIdx];
+            if (pIdx == 0)
+            {
+                body.DirectParentType = p.Type;
+                body.DirectParentBodyId = p.BodyId;
+                if (p.Type.Equals("Null", StringComparison.OrdinalIgnoreCase))
+                    body.BarycentreId = p.BodyId;
+            }
+            if (body.ParentPlanetBodyId is null && p.Type.Equals("Planet", StringComparison.OrdinalIgnoreCase))
+                body.ParentPlanetBodyId = p.BodyId;
+            if (body.HostStarBodyId is null && p.Type.Equals("Star", StringComparison.OrdinalIgnoreCase))
+                body.HostStarBodyId = p.BodyId;
+        }
+    }
+
+    private readonly Dictionary<string, List<string>> _pendingStationsByBodyKey = new(StringComparer.OrdinalIgnoreCase);
+
+    private void TryRecordLocalBodyStationOrSettlement(string eventType, JsonElement data)
+    {
+        if (eventType == "ApproachSettlement")
+            return;
+
+        if (eventType == "SupercruiseExit")
+        {
+            string? bodyType = GetJournalRawText(data, "BodyType");
+            if (!string.Equals(bodyType, "Station", StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
+        string? stationType = GetJournalRawText(data, "StationType");
+        if (!string.IsNullOrWhiteSpace(stationType) &&
+            (stationType.Contains("FleetCarrier", StringComparison.OrdinalIgnoreCase) ||
+             stationType.Equals("OnFootSettlement", StringComparison.OrdinalIgnoreCase) ||
+             stationType.Contains("Crater", StringComparison.OrdinalIgnoreCase) ||
+             stationType.Contains("Surface", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        string? stationName = eventType == "SupercruiseExit"
+            ? GetJournalText(data, "Body_Localised", "Body")
+            : GetJournalText(data, "StationName_Localised", "StationName");
+        if (string.IsNullOrWhiteSpace(stationName))
+            return;
+
+        string? bodyName = eventType == "SupercruiseExit"
+            ? null
+            : (GetJournalRawText(data, "BodyName") ?? GetJournalRawText(data, "Body"));
+        int? bodyId = TryGetJournalInt(data, "BodyID", out int parsedId) ? parsedId : null;
+        if (string.IsNullOrWhiteSpace(bodyName) && !bodyId.HasValue)
+            return;
+
+        string systemName = GetJournalRawText(data, "StarSystem") ?? _state.CurrentSystem;
+        string systemAddress = GetJournalIdentifier(data, "SystemAddress") ?? _currentSystemAddress ?? systemName;
+
+        // Also store in pending map so if the body's Scan event arrives AFTER Docked/Location, it receives the station!
+        void QueuePending(string pKey)
+        {
+            if (!_pendingStationsByBodyKey.TryGetValue(pKey, out var pList))
+            {
+                pList = new List<string>();
+                _pendingStationsByBodyKey[pKey] = pList;
+            }
+            if (!pList.Contains(stationName, StringComparer.OrdinalIgnoreCase))
+                pList.Add(stationName);
+        }
+        if (bodyId.HasValue)
+            QueuePending($"{systemAddress}:{bodyId.Value}");
+        if (!string.IsNullOrWhiteSpace(bodyName))
+            QueuePending($"{systemName}::{bodyName}");
+
+        ExplorationBodyItem? target = null;
+        if (bodyId.HasValue && _explorationBodies.TryGetValue($"{systemAddress}:{bodyId.Value}", out var byId))
+            target = byId;
+        if (target is null && !string.IsNullOrWhiteSpace(bodyName))
+        {
+            target = _explorationBodies.Values.FirstOrDefault(b =>
+                string.Equals(b.SystemName, systemName, StringComparison.OrdinalIgnoreCase) &&
+                AreEquivalentBodyNames(systemName, b.BodyName, bodyName));
+        }
+
+        if (target is not null && !target.Stations.Contains(stationName, StringComparer.OrdinalIgnoreCase))
+        {
+            target.Stations.Add(stationName);
+            _explorationBodiesChanged = true;
+        }
+    }
+
+    private static bool IsDisplayableStationEntry(string? stationEntry)
+    {
+        if (string.IsNullOrWhiteSpace(stationEntry))
+            return false;
+        // Extract parenthesized type if present: "Name (Type)"
+        int openIdx = stationEntry.LastIndexOf('(');
+        int closeIdx = stationEntry.LastIndexOf(')');
+        if (openIdx < 0 || closeIdx <= openIdx)
+            return false;
+        string typePart = stationEntry[(openIdx + 1)..closeIdx].Trim();
+        return SpanshSystemDataService.IsSystemMapDisplayableStationType(typePart);
+    }
+
+    private void AttachPendingLocalStations(ExplorationBodyItem body, string systemAddress)
+    {
+        void MergeFromKey(string pKey)
+        {
+            if (_pendingStationsByBodyKey.TryGetValue(pKey, out var list))
+            {
+                foreach (string st in list)
+                {
+                    if (!body.Stations.Contains(st, StringComparer.OrdinalIgnoreCase))
+                        body.Stations.Add(st);
+                }
+            }
+        }
+        if (body.BodyId.HasValue)
+            MergeFromKey($"{systemAddress}:{body.BodyId.Value}");
+        if (!string.IsNullOrWhiteSpace(body.BodyName))
+        {
+            MergeFromKey($"{body.SystemName}::{body.BodyName}");
+            if (string.Equals(body.BodyName, $"{body.SystemName} A", StringComparison.OrdinalIgnoreCase))
+                MergeFromKey($"{body.SystemName}::{body.SystemName}");
+        }
     }
 
     /// <summary>
@@ -518,6 +656,30 @@ public partial class EliteFileWatcherService
                 if (string.IsNullOrWhiteSpace(sb.Name) || IsNonCelestialBody(sb.Name, sb.Type))
                     continue;
 
+                var bodyStations = new List<string>();
+                if (sb.StationNames is { Count: > 0 })
+                {
+                    foreach (string rawSt in sb.StationNames)
+                    {
+                        if (IsDisplayableStationEntry(rawSt))
+                            bodyStations.Add(rawSt);
+                    }
+                }
+                if (bodyStations.Count == 0 && snapshot.Stations is { Count: > 0 })
+                {
+                    foreach (var st in snapshot.Stations)
+                    {
+                        if (!string.IsNullOrWhiteSpace(st.Name) &&
+                            SpanshSystemDataService.IsSystemMapDisplayableStationType(st.Type, st.Name) &&
+                            AreEquivalentBodyNames(sysName, st.BodyName, sb.Name))
+                        {
+                            string formatted = string.IsNullOrWhiteSpace(st.Type) ? st.Name : $"{st.Name} ({st.Type})";
+                            if (!bodyStations.Contains(formatted, StringComparer.OrdinalIgnoreCase))
+                                bodyStations.Add(formatted);
+                        }
+                    }
+                }
+
                 // Match existing body by BodyId or equivalent BodyName within this system
                 ExplorationBodyItem? existing = null;
                 if (sb.BodyId.HasValue && _explorationBodies.TryGetValue($"{sysAddr}:{sb.BodyId.Value}", out var byId))
@@ -552,12 +714,39 @@ public partial class EliteFileWatcherService
                     existing.SurfaceTemperatureKelvin ??= sb.SurfaceTemperature;
                     if (string.IsNullOrWhiteSpace(existing.AtmosphereType) && !string.IsNullOrWhiteSpace(sb.AtmosphereType))
                         existing.AtmosphereType = sb.AtmosphereType;
-                    if (sb.HasRings && existing.Rings.Count == 0)
+                    if (existing.Parents.Count == 0 && sb.Parents is { Count: > 0 })
+                        ApplyParentsHierarchy(existing, sb.Parents);
+                    if (sb.BeltNames is { Count: > 0 })
+                    {
+                        foreach (string beltName in sb.BeltNames)
+                        {
+                            if (!existing.Rings.Any(r => string.Equals(r.Name, beltName, StringComparison.OrdinalIgnoreCase)))
+                                existing.Rings.Add(new ExplorationRingItem { Name = beltName, RingClass = "Belt" });
+                        }
+                    }
+                    if (sb.HasRings && !existing.Rings.Any(static r => !r.Name.Contains("Belt", StringComparison.OrdinalIgnoreCase)))
                         existing.Rings.Add(new ExplorationRingItem { Name = "Ring" });
+                    if (bodyStations.Count > 0)
+                    {
+                        foreach (string stName in bodyStations)
+                        {
+                            if (!existing.Stations.Contains(stName, StringComparer.OrdinalIgnoreCase))
+                                existing.Stations.Add(stName);
+                        }
+                    }
                 }
                 else
                 {
                     string key = sb.BodyId.HasValue ? $"{sysAddr}:{sb.BodyId.Value}" : $"{sysAddr}:spansh:{sb.Name}";
+                    var ringsList = new List<ExplorationRingItem>();
+                    if (sb.BeltNames is { Count: > 0 })
+                    {
+                        foreach (string beltName in sb.BeltNames)
+                            ringsList.Add(new ExplorationRingItem { Name = beltName, RingClass = "Belt" });
+                    }
+                    if (sb.HasRings)
+                        ringsList.Add(new ExplorationRingItem { Name = "Ring" });
+
                     var item = new ExplorationBodyItem
                     {
                         Id = key,
@@ -572,8 +761,12 @@ public partial class EliteFileWatcherService
                         SurfaceGravity = sb.SurfaceGravity,
                         SurfaceTemperatureKelvin = sb.SurfaceTemperature,
                         AtmosphereType = sb.AtmosphereType ?? "",
-                        Rings = sb.HasRings ? new List<ExplorationRingItem> { new() { Name = "Ring" } } : new List<ExplorationRingItem>()
+                        Rings = ringsList,
+                        Stations = bodyStations
                     };
+                    if (sb.Parents is { Count: > 0 })
+                        ApplyParentsHierarchy(item, sb.Parents);
+                    AttachPendingLocalStations(item, sysAddr);
                     _explorationBodies[key] = item;
                     _explorationBodyOrder.Enqueue(key);
                     while (_explorationBodyOrder.Count > 2000)
@@ -631,7 +824,7 @@ public partial class EliteFileWatcherService
 
                         string eventType = eventProperty.GetString() ?? "";
                         if (eventType is "Scan" or "FSSBodySignals" or "SAASignalsFound" or
-                            "SAAScanComplete" or "ScanOrganic")
+                            "SAAScanComplete" or "ScanOrganic" or "Location" or "Docked" or "ApproachSettlement" or "SupercruiseExit")
                             UpdateExplorationBodyState(eventType, data, isHistoryRestore: true);
                     }
                     catch (JsonException)

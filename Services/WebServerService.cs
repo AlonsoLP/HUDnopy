@@ -1412,6 +1412,13 @@ public class WebServerService : IDisposable
         {
             width = layout.CanvasWidth,
             height = layout.CanvasHeight,
+            spineLines = layout.SafeSpineLines.Select(static s => new
+            {
+                x1 = s.X1,
+                y1 = s.Y1,
+                x2 = s.X2,
+                y2 = s.Y2
+            }).ToArray(),
             brackets = layout.Brackets.Select(static b => new
             {
                 x1 = b.X1,
@@ -1419,6 +1426,14 @@ public class WebServerService : IDisposable
                 topY = b.TopY,
                 anchorY1 = b.AnchorY1,
                 anchorY2 = b.AnchorY2
+            }).ToArray(),
+            moonBrackets = layout.SafeMoonBrackets.Select(static mb => new
+            {
+                leftX = mb.LeftX,
+                anchorX1 = mb.AnchorX1,
+                y1 = mb.Y1,
+                anchorX2 = mb.AnchorX2,
+                y2 = mb.Y2
             }).ToArray(),
             nodes = layout.Nodes.Select(static n => new
             {
@@ -1431,6 +1446,10 @@ public class WebServerService : IDisposable
                 isEarthLike = n.IsEarthLike,
                 isStar = n.IsStar,
                 isRootStar = n.IsRootStar,
+                isBarycentre = n.IsBarycentre,
+                isAsteroidBelt = n.IsAsteroidBelt,
+                stationCount = n.StationCount,
+                stationsSummary = n.StationsSummary,
                 hasRings = n.HasRings,
                 hasBioHalo = n.HasBioHalo,
                 isHighGravity = n.IsHighGravity,
